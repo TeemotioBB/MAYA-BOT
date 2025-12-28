@@ -135,7 +135,6 @@ class GrokCerebro:
                     if r.status != 200:
                         logger.error(f"❌ ERRO GROK: {r.status}")
                         logger.error(f"Resposta: {text[:200]}")
-                        # Retorna None para que o handler de mensagem trate o erro
                         return None
                     
                     data = await r.json()
@@ -147,7 +146,6 @@ class GrokCerebro:
                     resposta = data["choices"][0]["message"]["content"]
                     logger.info(f"✅ Grok respondeu: {resposta[:100]}...")
                     
-                    # Salva no histórico
                     hist.append({"role": "user", "content": mensagem})
                     hist.append({"role": "assistant", "content": resposta})
                     
@@ -155,7 +153,6 @@ class GrokCerebro:
                         hist = hist[-20:]
                         self.historico[user_id] = hist
                     
-                    # Log no banco de dados
                     try:
                         cur = db.cursor()
                         cur.execute("""
@@ -187,27 +184,31 @@ datas = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    contador[user.id] = 0
-    datas[user.id] = date.today()
+    user_id = user.id
+    
+    if user_id not in contador:
+        contador[user_id] = 0
+        datas[user_id] = date.today()
 
     mensagem = f"""
 Oi {user.first_name}! 💖
 
 Eu sou a Sophia, sua namorada virtual! Vamos conversar? 😊
 
-{'💎 **Você é VIP** - Conversa ilimitada!' if is_vip(user.id) else f'✨ **Modo Gratuito** - Você tem {LIMITE_DIARIO} mensagens por dia'}
+{'💎 **Você é VIP** - Conversa ilimitada!' if is_vip(user_id) else f'✨ **Modo Gratuito** - Você tem {LIMITE_DIARIO} mensagens por dia'}
 
 Comando VIP: /vip
     """
     
-    logger.info(f"👋 Usuário {user.id} iniciou conversa")
+    logger.info(f"👋 Usuário {user_id} iniciou conversa")
     await update.message.reply_text(mensagem)
 
 async def vip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    logger.info(f"💎 Comando VIP solicitado por {user.id}")
+    user_id = user.id
+    logger.info(f"💎 Comando VIP solicitado por {user_id}")
     
-    if is_vip(user.id):
+    if is_vip(user_id):
         await update.message.reply_text("💎 Você já é VIP! Aproveite nossa conversa ilimitada! 😘")
     else:
         await update.message.reply_text(
@@ -223,9 +224,14 @@ async def vip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def pode_falar(user_id):
     hoje = date.today()
-    if datas.get(user_id) != hoje:
+    
+    if user_id not in datas:
         datas[user_id] = hoje
-        contador[user.id] = 0
+        contador[user_id] = 0
+    
+    if datas[user_id] != hoje:
+        datas[user_id] = hoje
+        contador[user_id] = 0
     
     if is_vip(user_id):
         return True
@@ -235,16 +241,17 @@ def pode_falar(user_id):
 
 async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    user_id = user.id
     texto = update.message.text.strip()
     
-    logger.info(f"💬 Mensagem de {user.id}: {texto[:50]}...")
+    logger.info(f"💬 Mensagem de {user_id}: {texto[:50]}...")
     
     if not texto:
         return
 
-    if not is_vip(user.id):
-        if not pode_falar(user.id):
-            logger.warning(f"🚫 Limite excedido para usuário {user.id}")
+    if not is_vip(user_id):
+        if not pode_falar(user_id):
+            logger.warning(f"🚫 Limite excedido para usuário {user_id}")
             await update.message.reply_text(
                 f"💔 Hoje você já usou {LIMITE_DIARIO} mensagens!\n\n"
                 f"⏳ **Limite diário atingido**\n"
@@ -256,9 +263,9 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        restante = LIMITE_DIARIO - contador[user.id]
+        restante = LIMITE_DIARIO - contador[user_id]
         if restante <= 3:
-            logger.info(f"⚠️  Usuário {user.id} tem apenas {restante} mensagens restantes")
+            logger.info(f"⚠️  Usuário {user_id} tem apenas {restante} mensagens restantes")
             await update.message.reply_text(
                 f"⚠️ Você tem apenas {restante} mensagens restantes hoje!\n"
                 f"Considere o /vip para conversar sem limites! 💎"
@@ -266,10 +273,9 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_chat_action(update.effective_chat.id, "typing")
     
-    resposta = await grok.perguntar(texto, user.id)
+    resposta = await grok.perguntar(texto, user_id)
     
     if resposta is None:
-        # Se o Grok falhar, envia mensagem de erro genérica
         import random
         erros = [
             "Hmm, não consegui pensar direito agora... 😅",
