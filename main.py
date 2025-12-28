@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = ("8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4")
 GROK_API_KEY = ("xai-IGdNeJMvLoAgAthQJSXC1hvMrj8goOcXHFNQubZ93AXQV0ZNKitRhsrAGMe7ZxeJjrWM1YCvVDE8YMMT")
 PUSHINPAY_TOKEN = ("57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5")
+WEBHOOK_SECRET = ("teste")
+WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}"
 
 PORT = int(os.getenv("PORT", 8080))
 
@@ -223,6 +225,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
