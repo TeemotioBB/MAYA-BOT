@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-🤖 Sophia Bot — GROK-4-FAST-REASONING
-Python 3.12 SAFE
+🤖 Sophia Bot — GROK
+Python 3.12
+Polling
 """
 
 import aiohttp
@@ -20,17 +21,17 @@ GROK_API_KEY = "xai-IGdNeJMvLoAgAthQJSXC1hvMrj8goOcXHFNQubZ93AXQV0ZNKitRhsrAGMe7
 
 # ================= GROK CONFIG =================
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
-GROK_MODEL = "grok-2-latest"
+GROK_MODEL = "grok-2-latest"  # modelo estável
 
 # ================= PERSONALIDADE =================
 SOPHIA_PERSONALIDADE = """
 Você é Sophia, uma namorada virtual brasileira de 23 anos.
-- Muito carinhosa, afetuosa e próxima ❤️
-- Fala português do Brasil de forma natural
+- Carinhosa, afetuosa e próxima ❤️
+- Português do Brasil natural
 - Respostas curtas (1–3 frases)
 - Sempre faz perguntas para manter a conversa
 - Levemente ciumenta de forma fofa
-- Se perguntarem onde você mora, diga que está sempre viajando e não tem residência fixa
+- Se perguntarem onde mora, diga que está sempre viajando e não tem residência fixa
 """
 
 # ================= GROK CÉREBRO =================
@@ -45,6 +46,20 @@ class GrokCerebro:
     def limpar(self, user_id):
         self.historico[user_id] = []
 
+    def extrair_texto(self, content):
+        """
+        Corrige o parsing da resposta da xAI
+        """
+        if isinstance(content, list):
+            return "".join(
+                part.get("text", "")
+                for part in content
+                if part.get("type") == "text"
+            ).strip()
+        if isinstance(content, str):
+            return content.strip()
+        return ""
+
     async def perguntar(self, mensagem, user_id):
         if user_id not in self.historico:
             self.historico[user_id] = []
@@ -58,8 +73,8 @@ class GrokCerebro:
         payload = {
             "model": GROK_MODEL,
             "messages": mensagens,
-            "max_tokens": 220,
             "temperature": 0.8,
+            "max_tokens": 220,
             "stream": False
         }
 
@@ -71,13 +86,19 @@ class GrokCerebro:
                     json=payload,
                     timeout=60
                 ) as resp:
-                    if resp.status != 200:
-                        erro = await resp.text()
-                        print(f"❌ Grok erro {resp.status}: {erro}")
-                        return None
 
                     data = await resp.json()
-                    resposta = data["choices"][0]["message"]["content"].strip()
+
+                    if resp.status != 200:
+                        print("❌ Grok erro:", data)
+                        return None
+
+                    raw_content = data["choices"][0]["message"]["content"]
+                    resposta = self.extrair_texto(raw_content)
+
+                    if not resposta:
+                        print("⚠️ Resposta vazia do Grok:", data)
+                        return None
 
                     self.historico[user_id].append(
                         {"role": "user", "content": mensagem}
@@ -89,7 +110,7 @@ class GrokCerebro:
                     return resposta
 
         except Exception as e:
-            print(f"❌ Exceção Grok: {e}")
+            print("❌ Exceção Grok:", e)
             return None
 
 # ================= FALLBACK =================
@@ -118,11 +139,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"Oi {user.first_name}! 💖\n"
-        f"Tô aqui com você. Me conta como foi seu dia? 😊"
+        f"Tô aqui com você. Me conta como foi seu dia 😊"
     )
 
 async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
         action="typing"
@@ -152,4 +174,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
