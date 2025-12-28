@@ -227,14 +227,14 @@ def home():
     return "🤖 Sophia Bot online"
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
-async def telegram_webhook():
+def telegram_webhook():
     """Processa updates do Telegram via webhook"""
     try:
         update = Update.de_json(request.json, application.bot)
         logger.info(f"Webhook recebido: {update.update_id}")
         
-        # Processa o update de forma assíncrona
-        await application.process_update(update)
+        # Processa o update de forma assíncrona usando asyncio.run
+        asyncio.run(application.process_update(update))
         
         return "ok", 200
     except Exception as e:
