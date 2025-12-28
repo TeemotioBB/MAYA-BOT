@@ -19,16 +19,18 @@ from telegram.ext import (
     filters
 )
 
-# ================= ENV =================
-TELEGRAM_TOKEN = ("8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4")
-GROK_API_KEY = ("xai-WhzRhOWLna2aUD3A3Sv3siXwqVCTpIP9j5X1KNe1m8N7QB89Dzh20edMiTZbhB9tSaX4aMRKmCwsdpnD")
-PUSHINPAY_TOKEN = ("57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5")
-WEBHOOK_SECRET = ("teste")
+# ================= TOKENS (TEMPORÁRIO — depois mover para env) =================
+TELEGRAM_TOKEN = "8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4"
+GROK_API_KEY = "xai-WhzRhOWLna2aUD3A3Sv3siXwqVCTpIP9j5X1KNe1m8N7QB89Dzh20edMiTZbhB9tSaX4aMRKmCwsdpnD"
+PUSHINPAY_TOKEN = "57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5"
+WEBHOOK_SECRET = "teste"
+
 PORT = int(os.getenv("PORT", 8080))
 
 # ================= CONFIG =================
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
-GROK_MODEL = "grok-4-fast-reasoning"
+PRIMARY_MODEL = "grok-4-fast-reasoning"
+FALLBACK_MODEL = "grok-beta"
 
 VIP_PRICE_CENTS = 1499
 LIMITE_DIARIO = 15
@@ -77,15 +79,10 @@ class GrokCerebro:
         }
         self.historico = {}
 
-    async def perguntar(self, mensagem, user_id):
-        hist = self.historico.setdefault(user_id, [])
+    async def _chamar_grok(self, modelo, mensagens):
         payload = {
-            "model": GROK_MODEL,
-            "messages": [
-                {"role": "system", "content": SOPHIA_PERSONALIDADE},
-                *hist[-10:],
-                {"role": "user", "content": mensagem}
-            ],
+            "model": modelo,
+            "messages": mensagens,
             "max_tokens": 220,
             "temperature": 0.8
         }
@@ -97,13 +94,39 @@ class GrokCerebro:
                 json=payload,
                 timeout=20
             ) as r:
+                text = await r.text()
                 if r.status != 200:
+                    print(f"❌ ERRO GROK ({modelo}):", r.status, text)
                     return None
                 data = await r.json()
-                resp = data["choices"][0]["message"]["content"]
-                hist.append({"role": "user", "content": mensagem})
-                hist.append({"role": "assistant", "content": resp})
-                return resp
+                return data["choices"][0]["message"]["content"]
+
+    async def perguntar(self, mensagem, user_id):
+        hist = self.historico.setdefault(user_id, [])
+
+        mensagens = [
+            {"role": "system", "content": SOPHIA_PERSONALIDADE},
+            *hist[-10:],
+            {"role": "user", "content": mensagem}
+        ]
+
+        print(f"🧠 Chamando Grok ({PRIMARY_MODEL}): {mensagem}")
+
+        # 1️⃣ Tenta modelo principal
+        resposta = await self._chamar_grok(PRIMARY_MODEL, mensagens)
+
+        # 2️⃣ Fallback automático
+        if not resposta:
+            print("🔁 Tentando fallback para grok-beta")
+            resposta = await self._chamar_grok(FALLBACK_MODEL, mensagens)
+
+        if resposta:
+            print("✅ Grok respondeu com sucesso")
+            hist.append({"role": "user", "content": mensagem})
+            hist.append({"role": "assistant", "content": resposta})
+            return resposta
+
+        return None
 
 grok = GrokCerebro()
 
@@ -131,6 +154,7 @@ def pode_falar(user_id):
 
 async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    texto = update.message.text
 
     if not is_vip(user.id):
         if not pode_falar(user.id):
@@ -142,9 +166,12 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     await context.bot.send_chat_action(update.effective_chat.id, "typing")
-    resposta = await grok.perguntar(update.message.text, user.id)
+
+    resposta = await grok.perguntar(texto, user.id)
+
     if not resposta:
-        resposta = "Tô aqui com você ❤️ Me conta mais…"
+        resposta = "Hmm… tive um probleminha agora 😕 Me fala de novo, amor?"
+
     await update.message.reply_text(resposta)
 
 # ================= FLASK WEBHOOK =================
@@ -188,10 +215,8 @@ def main():
     from threading import Thread
     Thread(target=lambda: app.run(host="0.0.0.0", port=PORT)).start()
 
+    print("🤖 Sophia Bot iniciado")
     telegram_app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
-
-
-
