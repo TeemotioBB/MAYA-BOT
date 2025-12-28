@@ -20,7 +20,7 @@ GROK_API_KEY = "xai-IGdNeJMvLoAgAthQJSXC1hvMrj8goOcXHFNQubZ93AXQV0ZNKitRhsrAGMe7
 
 # ================= GROK CONFIG =================
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
-GROK_MODEL = "grok-4-fast-reasoning"
+GROK_MODEL = "grok-2-latest"
 
 # ================= PERSONALIDADE =================
 SOPHIA_PERSONALIDADE = """
@@ -152,3 +152,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
