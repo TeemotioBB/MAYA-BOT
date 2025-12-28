@@ -37,8 +37,7 @@ PORT = int(os.getenv("PORT", 8080))
 
 # ================= CONFIG =================
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
-PRIMARY_MODEL = "grok-2-latest"  # Modelo mais confiável
-FALLBACK_MODEL = "grok-beta"
+PRIMARY_MODEL = "grok-4-fast-reasoning"  # Modelo mais confiável
 
 VIP_PRICE_CENTS = 1499
 LIMITE_DIARIO = 15
@@ -380,3 +379,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
