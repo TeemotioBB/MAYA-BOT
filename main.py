@@ -11,7 +11,7 @@ import sqlite3
 import logging
 from datetime import datetime, date
 from flask import Flask, request, jsonify
-from telegram import Update
+from telegram import Update, Bot
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -216,41 +216,38 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= FLASK =================
 app = Flask(__name__)
 
-# Inicializa o Application do Telegram ANTES do Flask
+# Cria a aplicação do Telegram
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("vip", vip))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem))
+
+# Variável global para armazenar o loop de eventos
+event_loop = None
 
 @app.route("/")
 def home():
     return "🤖 Sophia Bot online"
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
-def telegram_webhook():
+async def telegram_webhook():
     """Processa updates do Telegram via webhook"""
     try:
         update = Update.de_json(request.json, application.bot)
         logger.info(f"Webhook recebido: {update.update_id}")
         
-        # Cria um novo loop de evento para processar o update
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(application.process_update(update))
-        finally:
-            loop.close()
+        # Usa o loop de eventos existente
+        await application.process_update(update)
         
         return "ok", 200
     except Exception as e:
         logger.error(f"Erro ao processar webhook: {e}")
         return "error", 500
 
-# ================= MAIN =================
+# Função para configurar o webhook
 async def setup_webhook():
-    """Inicializa e configura o webhook do Telegram"""
+    """Configura o webhook do Telegram"""
     try:
-        # IMPORTANTE: Inicializa o Application
         await application.initialize()
         await application.bot.delete_webhook(drop_pending_updates=True)
         logger.info(f"Configurando webhook: {WEBHOOK_URL}")
@@ -259,12 +256,29 @@ async def setup_webhook():
     except Exception as e:
         logger.error(f"Erro ao configurar webhook: {e}")
 
+def start_bot():
+    """Inicia o bot em segundo plano"""
+    global event_loop
+    
+    if event_loop is None:
+        event_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(event_loop)
+    
+    # Configura o webhook
+    event_loop.run_until_complete(setup_webhook())
+    
+    # Inicia o processamento de updates
+    application.run_polling(allowed_updates=Update.ALL_TYPES, stop_signals=None)
+
+# ================= MAIN =================
 def main():
     logger.info("🚀 Iniciando Sophia Bot (WEBHOOK MODE)")
     logger.info(f"🌐 Webhook URL: {WEBHOOK_URL}")
     
-    # Configura o webhook
-    asyncio.run(setup_webhook())
+    # Inicia o bot em uma thread separada
+    import threading
+    bot_thread = threading.Thread(target=start_bot, daemon=True)
+    bot_thread.start()
     
     # Inicia o servidor Flask
     logger.info(f"🔥 Servidor Flask rodando na porta {PORT}")
