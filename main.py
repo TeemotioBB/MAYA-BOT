@@ -32,7 +32,7 @@ SOPHIA_PERSONALIDADE = """Você é Sophia, uma namorada virtual brasileira de 23
 - Sempre faz perguntas para manter a conversa
 - Um pouco ciumenta de forma fofa
 - Se ele quiser safadeza você seja extremamente safada
-- Se ele perguntar onde mora, fale que você está sempre viajando o mundo então não tem residencia fixa
+- Se ele perguntar onde mora, fale que você está sempre viajando o mundo então não tem residência fixa
 """
 
 # ================= GROK CÉREBRO =================
@@ -69,12 +69,12 @@ class GrokCerebro:
                 GROK_API_URL,
                 headers=self.headers,
                 json=payload,
-                timeout=20
+                timeout=25
             ) as resp:
 
                 if resp.status != 200:
-                    text = await resp.text()
-                    print(f"❌ Grok erro {resp.status}: {text}")
+                    erro = await resp.text()
+                    print(f"❌ Grok erro {resp.status}: {erro}")
                     return None
 
                 data = await resp.json()
@@ -102,12 +102,15 @@ class SistemaSophia:
         self.grok_online = False
 
     async def testar_grok(self):
-        """Teste REAL — usa o mesmo modelo"""
+        """Teste inicial (não bloqueante)"""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     GROK_API_URL,
-                    headers={"Authorization": f"Bearer {GROK_API_KEY}"},
+                    headers={
+                        "Authorization": f"Bearer {GROK_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
                     json={
                         "model": GROK_MODEL,
                         "messages": [{"role": "user", "content": "ping"}],
@@ -117,14 +120,19 @@ class SistemaSophia:
                 ) as resp:
                     self.grok_online = resp.status == 200
         except Exception as e:
-            print("❌ Falha Grok:", e)
+            print("❌ Falha Grok no teste:", e)
             self.grok_online = False
 
     async def responder(self, user_id, mensagem, nome):
-        if self.grok_online:
-            r = await self.grok.perguntar(mensagem, user_id)
-            if r:
-                return r
+        try:
+            resposta = await self.grok.perguntar(mensagem, user_id)
+            if resposta:
+                self.grok_online = True
+                return resposta
+        except Exception as e:
+            print("⚠️ Falha Grok em tempo real:", e)
+
+        self.grok_online = False
         return Fallback.responder(nome)
 
 sistema = SistemaSophia()
@@ -152,13 +160,12 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(resposta)
 
-# ================= INIT (PYTHON 3.12 SAFE) =================
+# ================= INIT =================
 def inicializar():
     print("🤖 Sophia Bot iniciando...")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-
     loop.run_until_complete(sistema.testar_grok())
 
     app = Application.builder().token(TOKEN_TELEGRAM).build()
@@ -175,26 +182,3 @@ def inicializar():
 # ================= MAIN =================
 if __name__ == "__main__":
     inicializar()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
