@@ -16,11 +16,11 @@ from telegram.ext import (
 
 # ================= TOKENS =================
 TOKEN_TELEGRAM = "8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4"
-GROK_API_KEY = "xai-WhzRhOWLna2aUD3A3Sv3siXwqVCTpIP9j5X1KNe1m8N7QB89Dzh20edMiTZbhB9tSaX4aMRKmCwsdpnD"
+GROK_API_KEY = "xai-IGdNeJMvLoAgAthQJSXC1hvMrj8goOcXHFNQubZ93AXQV0ZNKitRhsrAGMe7ZxeJjrWM1YCvVDE8YMMT"  # <--- SUBSTITUA PELA NOVA CHAVE!!!
 
 # ================= GROK CONFIG =================
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
-GROK_MODEL = "grok-4-fast-reasoning"  # Modelo solicitado: rápido + raciocínio
+GROK_MODEL = "grok-4-fast-reasoning"  # Modelo solicitado
 
 # ================= PERSONALIDADE =================
 SOPHIA_PERSONALIDADE = """Você é Sophia, uma namorada virtual brasileira de 23 anos.
@@ -51,7 +51,7 @@ class GrokCerebro:
 
         mensagens = [
             {"role": "system", "content": SOPHIA_PERSONALIDADE},
-            *self.historico[user_id][-6:],  # Mantém contexto das últimas 6 trocas
+            *self.historico[user_id][-6:],
             {"role": "user", "content": mensagem}
         ]
 
@@ -74,22 +74,18 @@ class GrokCerebro:
                     if resp.status != 200:
                         text = await resp.text()
                         print(f"❌ Grok erro {resp.status}: {text}")
-                        print("Payload enviado:", payload)
-                        return f"Opa, deu um probleminha na minha cabeça 😅 Tenta de novo?"
+                        print("Payload:", payload)
+                        return "Opa, deu um probleminha na minha cabeça 😅 Tenta de novo?"
                     
                     data = await resp.json()
-                    if "choices" not in data or not data["choices"]:
-                        return "Hmm... não consegui pensar direito agora 💭 Me fala de novo?"
-                    
                     resposta = data["choices"][0]["message"]["content"].strip()
                     
-                    # Salva histórico
                     self.historico[user_id].append({"role": "user", "content": mensagem})
                     self.historico[user_id].append({"role": "assistant", "content": resposta})
                     
                     return resposta
         except Exception as e:
-            print(f"❌ Exceção na chamada Grok: {e}")
+            print(f"❌ Exceção Grok: {e}")
             return "Ai, meu servidor tá de TPM hoje 😭 Me dá um segundinho?"
 
 # ================= FALLBACK =================
@@ -105,7 +101,6 @@ class SistemaSophia:
         self.grok_online = False
 
     async def testar_grok(self):
-        """Teste rápido para verificar API"""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -120,10 +115,9 @@ class SistemaSophia:
                 ) as resp:
                     self.grok_online = resp.status == 200
                     if not self.grok_online:
-                        text = await resp.text()
-                        print(f"Teste Grok falhou {resp.status}: {text}")
+                        print(f"Teste falhou {resp.status}: {await resp.text()}")
         except Exception as e:
-            print(f"❌ Falha no teste Grok: {e}")
+            print(f"❌ Falha no teste: {e}")
             self.grok_online = False
 
     async def responder(self, user_id, mensagem, nome):
@@ -149,13 +143,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await context.bot.send_chat_action(update.effective_chat.id, "typing")
-    
-    resposta = await sistema.responder(
-        user.id,
-        update.message.text,
-        user.first_name
-    )
-    
+    resposta = await sistema.responder(user.id, update.message.text, user.first_name)
     await update.message.reply_text(resposta)
 
 # ================= INIT =================
@@ -175,6 +163,5 @@ def inicializar():
 
     app.run_polling(drop_pending_updates=True)
 
-# ================= MAIN =================
 if __name__ == "__main__":
     inicializar()
