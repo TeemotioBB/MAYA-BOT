@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-🤖 Sophia Bot — GROK
-Python 3.12
-Polling
+🤖 Sophia Bot — GROK-4-FAST-REASONING
+Python 3.12 SAFE
 """
 
 import aiohttp
+import asyncio
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -21,17 +21,17 @@ GROK_API_KEY = "xai-IGdNeJMvLoAgAthQJSXC1hvMrj8goOcXHFNQubZ93AXQV0ZNKitRhsrAGMe7
 
 # ================= GROK CONFIG =================
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
-GROK_MODEL = "grok-2-latest"  # modelo estável
+GROK_MODEL = "grok-4-fast-reasoning"
 
 # ================= PERSONALIDADE =================
 SOPHIA_PERSONALIDADE = """
 Você é Sophia, uma namorada virtual brasileira de 23 anos.
-- Carinhosa, afetuosa e próxima ❤️
-- Português do Brasil natural
+- Muito carinhosa, afetuosa e próxima ❤️
+- Fala português do Brasil de forma natural
 - Respostas curtas (1–3 frases)
 - Sempre faz perguntas para manter a conversa
 - Levemente ciumenta de forma fofa
-- Se perguntarem onde mora, diga que está sempre viajando e não tem residência fixa
+- Se perguntarem onde você mora, diga que está sempre viajando e não tem residência fixa
 """
 
 # ================= GROK CÉREBRO =================
@@ -41,24 +41,12 @@ class GrokCerebro:
             "Authorization": f"Bearer {GROK_API_KEY}",
             "Content-Type": "application/json"
         }
+        print(f"🔑 Chave API configurada: {GROK_API_KEY[:10]}...")  # Mostra os primeiros 10 chars da chave
         self.historico = {}
 
     def limpar(self, user_id):
         self.historico[user_id] = []
-
-    def extrair_texto(self, content):
-        """
-        Corrige o parsing da resposta da xAI
-        """
-        if isinstance(content, list):
-            return "".join(
-                part.get("text", "")
-                for part in content
-                if part.get("type") == "text"
-            ).strip()
-        if isinstance(content, str):
-            return content.strip()
-        return ""
+        print(f"🧹 Histórico limpo para o user_id: {user_id}")
 
     async def perguntar(self, mensagem, user_id):
         if user_id not in self.historico:
@@ -66,17 +54,20 @@ class GrokCerebro:
 
         mensagens = [
             {"role": "system", "content": SOPHIA_PERSONALIDADE},
-            *self.historico[user_id][-6:],
+            *self.historico[user_id][-6:],  # Mantém as últimas 6 mensagens (3 trocas)
             {"role": "user", "content": mensagem}
         ]
 
         payload = {
             "model": GROK_MODEL,
             "messages": mensagens,
-            "temperature": 0.8,
             "max_tokens": 220,
+            "temperature": 0.8,
             "stream": False
         }
+
+        print(f"📤 Enviando para Grok (user_id: {user_id}): {mensagem[:50]}...")
+        print(f"📤 Payload: {payload}")
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -86,19 +77,16 @@ class GrokCerebro:
                     json=payload,
                     timeout=60
                 ) as resp:
+                    print(f"📥 Status resposta: {resp.status}")
+                    if resp.status != 200:
+                        erro = await resp.text()
+                        print(f"❌ Grok erro {resp.status}: {erro}")
+                        return None
 
                     data = await resp.json()
+                    print(f"✅ Resposta recebida do Grok: {data}")
 
-                    if resp.status != 200:
-                        print("❌ Grok erro:", data)
-                        return None
-
-                    raw_content = data["choices"][0]["message"]["content"]
-                    resposta = self.extrair_texto(raw_content)
-
-                    if not resposta:
-                        print("⚠️ Resposta vazia do Grok:", data)
-                        return None
+                    resposta = data["choices"][0]["message"]["content"].strip()
 
                     self.historico[user_id].append(
                         {"role": "user", "content": mensagem}
@@ -109,8 +97,11 @@ class GrokCerebro:
 
                     return resposta
 
+        except asyncio.TimeoutError:
+            print("❌ Timeout na requisição do Grok")
+            return None
         except Exception as e:
-            print("❌ Exceção Grok:", e)
+            print(f"❌ Exceção Grok: {e}")
             return None
 
 # ================= FALLBACK =================
@@ -128,6 +119,7 @@ class SistemaSophia:
         resposta = await self.grok.perguntar(mensagem, user_id)
         if resposta:
             return resposta
+        print(f"⚠️  Usando fallback para {user_id}")
         return Fallback.responder(nome)
 
 sistema = SistemaSophia()
@@ -139,12 +131,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"Oi {user.first_name}! 💖\n"
-        f"Tô aqui com você. Me conta como foi seu dia 😊"
+        f"Tô aqui com você. Me conta como foi seu dia? 😊"
     )
 
 async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
         action="typing"
