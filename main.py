@@ -16,7 +16,7 @@ from telegram.ext import (
 )
 
 # ================= TOKENS =================
-TOKEN_TELEGRAM = "8528168785:AAEvDjIGUjRyz8RAfJwM4Ygr7nG6aMF_eLM"
+TOKEN_TELEGRAM = "8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4"
 GROK_API_KEY  = "xai-WhzRhOWLna2aUD3A3Sv3siXwqVCTpIP9j5X1KNe1m8N7QB89Dzh20edMiTZbhB9tSaX4aMRKmCwsdpnD"
 
 # ================= GROK CONFIG =================
@@ -175,6 +175,7 @@ def inicializar():
 # ================= MAIN =================
 if __name__ == "__main__":
     inicializar()
+
 
 
 
