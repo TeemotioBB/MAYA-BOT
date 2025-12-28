@@ -233,8 +233,13 @@ def telegram_webhook():
         update = Update.de_json(request.json, application.bot)
         logger.info(f"Webhook recebido: {update.update_id}")
         
-        # Processa o update de forma assíncrona usando asyncio.run
-        asyncio.run(application.process_update(update))
+        # Cria um novo loop de evento para processar o update
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(application.process_update(update))
+        finally:
+            loop.close()
         
         return "ok", 200
     except Exception as e:
@@ -243,8 +248,10 @@ def telegram_webhook():
 
 # ================= MAIN =================
 async def setup_webhook():
-    """Configura o webhook do Telegram"""
+    """Inicializa e configura o webhook do Telegram"""
     try:
+        # IMPORTANTE: Inicializa o Application
+        await application.initialize()
         await application.bot.delete_webhook(drop_pending_updates=True)
         logger.info(f"Configurando webhook: {WEBHOOK_URL}")
         await application.bot.set_webhook(WEBHOOK_URL)
