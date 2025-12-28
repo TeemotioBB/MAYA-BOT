@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 🔥 Sophia Bot — Railway + Grok + PushinPay
-Telegram via WEBHOOK (sem polling / sem conflito)
+Telegram via WEBHOOK (estável, sem polling, sem erro de loop)
 """
 
 import os
@@ -10,7 +10,7 @@ import aiohttp
 import sqlite3
 import logging
 from datetime import datetime, date
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -19,15 +19,12 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
+from telegram.constants import ChatAction
 
 # ================= LOG =================
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-    handlers=[
-        logging.FileHandler("namorada_ia.log"),
-        logging.StreamHandler()
-    ]
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
@@ -35,12 +32,12 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = "8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4"
 GROK_API_KEY = "xai-IGdNeJMvLoAgAthQJSXC1hvMrj8goOcXHFNQubZ93AXQV0ZNKitRhsrAGMe7ZxeJjrWM1YCvVDE8YMMT"
 PUSHINPAY_TOKEN = "57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5"
+
 WEBHOOK_SECRET = "teste"
 WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}"
 
 PORT = int(os.getenv("PORT", 8080))
 
-# IMPORTANTE: Configure esta URL com o endereço real do seu servidor Railway
 WEBHOOK_URL = os.getenv(
     "WEBHOOK_URL",
     f"https://maya-bot-production.up.railway.app{WEBHOOK_PATH}"
@@ -86,7 +83,7 @@ def is_vip(user_id: int) -> bool:
 
 # ================= GROK =================
 SOPHIA_PERSONALIDADE = """Você é Sophia, uma namorada virtual brasileira de 23 anos.
-Carinhosa, romântica, afetuosa ❤️
+Carinhosa, romântica e afetuosa ❤️
 Respostas curtas e naturais (máx 2–3 frases)
 Sempre faça perguntas
 Use emojis ocasionalmente 💖
@@ -116,13 +113,12 @@ class GrokCerebro:
                     timeout=30
                 ) as r:
                     if r.status != 200:
-                        error_text = await r.text()
-                        logger.error(f"API falhou ({r.status}): {error_text}")
+                        logger.error(await r.text())
                         return None
                     data = await r.json()
                     return data["choices"][0]["message"]["content"]
         except Exception as e:
-            logger.error(f"Exceção ao chamar Grok: {e}")
+            logger.error(f"Erro Grok: {e}")
             return None
 
     async def perguntar(self, texto, user_id):
@@ -138,12 +134,10 @@ class GrokCerebro:
         modelo = PRIMARY_MODEL
 
         if not resposta:
-            logger.warning(f"Tentando fallback model para user {user_id}")
             resposta = await self.chamar(FALLBACK_MODEL, mensagens)
             modelo = FALLBACK_MODEL
 
         if not resposta:
-            logger.error(f"Ambos os modelos falharam para user {user_id}")
             return "Hmm… tive um probleminha agora 😕 Me fala de novo, amor?"
 
         hist.extend([
@@ -151,16 +145,12 @@ class GrokCerebro:
             {"role": "assistant", "content": resposta}
         ])
 
-        # Log da conversa
-        try:
-            cur = db.cursor()
-            cur.execute("""
-                INSERT INTO message_logs
-                VALUES (NULL, ?, ?, ?, ?, ?)
-            """, (user_id, texto, resposta, datetime.now().isoformat(), modelo))
-            db.commit()
-        except Exception as e:
-            logger.error(f"Erro ao salvar log: {e}")
+        cur = db.cursor()
+        cur.execute("""
+            INSERT INTO message_logs
+            VALUES (NULL, ?, ?, ?, ?, ?)
+        """, (user_id, texto, resposta, datetime.now().isoformat(), modelo))
+        db.commit()
 
         return resposta
 
@@ -177,15 +167,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = f"Oi {user.first_name}! 💖\n\n"
     msg += "💎 VIP ilimitado!" if is_vip(user.id) else f"✨ Você tem {LIMITE_DIARIO} mensagens hoje"
-
-    logger.info(f"/start de {user.first_name} (ID: {user.id})")
     await update.message.reply_text(msg)
 
 async def vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_vip(update.effective_user.id):
         await update.message.reply_text("💎 Você já é VIP 😘")
     else:
-        await update.message.reply_text("💎 VIP por R$14,99/mês\nUse /vip")
+        await update.message.reply_text("💎 VIP por R$14,99/mês")
 
 def pode_falar(user_id):
     hoje = date.today()
@@ -203,20 +191,21 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     texto = update.message.text.strip()
 
-    logger.info(f"Mensagem de {user.first_name}: {texto}")
-
     if not pode_falar(user.id):
         await update.message.reply_text("💔 Limite diário atingido. Volte amanhã ou vire VIP 💎")
         return
 
-    await context.bot.send_chat_action(update.effective_chat.id, "typing")
+    await context.bot.send_chat_action(
+        chat_id=update.effective_chat.id,
+        action=ChatAction.TYPING
+    )
+
     resposta = await grok.perguntar(texto, user.id)
     await update.message.reply_text(resposta)
 
 # ================= FLASK =================
 app = Flask(__name__)
 
-# Inicializa o Application do Telegram ANTES do Flask
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("vip", vip))
@@ -228,46 +217,20 @@ def home():
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def telegram_webhook():
-    """Processa updates do Telegram via webhook"""
-    try:
-        update = Update.de_json(request.json, application.bot)
-        logger.info(f"Webhook recebido: {update.update_id}")
-        
-        # Cria um novo loop de evento para processar o update
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(application.process_update(update))
-        finally:
-            loop.close()
-        
-        return "ok", 200
-    except Exception as e:
-        logger.error(f"Erro ao processar webhook: {e}")
-        return "error", 500
+    update = Update.de_json(request.json, application.bot)
+    application.create_task(application.process_update(update))
+    return "ok", 200
 
 # ================= MAIN =================
 async def setup_webhook():
-    """Inicializa e configura o webhook do Telegram"""
-    try:
-        # IMPORTANTE: Inicializa o Application
-        await application.initialize()
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        logger.info(f"Configurando webhook: {WEBHOOK_URL}")
-        await application.bot.set_webhook(WEBHOOK_URL)
-        logger.info("✅ Webhook configurado com sucesso")
-    except Exception as e:
-        logger.error(f"Erro ao configurar webhook: {e}")
+    await application.initialize()
+    await application.bot.delete_webhook(drop_pending_updates=True)
+    await application.bot.set_webhook(WEBHOOK_URL)
 
 def main():
-    logger.info("🚀 Iniciando Sophia Bot (WEBHOOK MODE)")
-    logger.info(f"🌐 Webhook URL: {WEBHOOK_URL}")
-    
-    # Configura o webhook
+    logger.info("🚀 Iniciando Sophia Bot (WEBHOOK)")
+    logger.info(f"🌐 Webhook: {WEBHOOK_URL}")
     asyncio.run(setup_webhook())
-    
-    # Inicia o servidor Flask
-    logger.info(f"🔥 Servidor Flask rodando na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT)
 
 if __name__ == "__main__":
