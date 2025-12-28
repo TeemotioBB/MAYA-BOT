@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
-🔥 Sophia Bot — Railway + Grok + PushinPay
-Telegram via WEBHOOK (estável, sem polling, sem erro de loop)
+🔥 Sophia Bot — Railway + Grok + Telegram
 """
 
 import os
 import asyncio
 import aiohttp
-import sqlite3
 import logging
-from datetime import datetime, date
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
@@ -29,209 +26,146 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ================= TOKENS =================
-TELEGRAM_TOKEN = "8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4"
-GROK_API_KEY = "xai-IGdNeJMvLoAgAthQJSXC1hvMrj8goOcXHFNQubZ93AXQV0ZNKitRhsrAGMe7ZxeJjrWM1YCvVDE8YMMT"
-PUSHINPAY_TOKEN = "57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5"
+TELEGRAM_TOKEN = ("8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4")
+GROK_API_KEY = ("xai-IGdNeJMvLoAgAthQJSXC1hvMrj8goOcXHFNQubZ93AXQV0ZNKitRhsrAGMe7ZxeJjrWM1YCvVDE8YMMT")
 
-WEBHOOK_SECRET = "teste"
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "sophia123")
 WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}"
-
 PORT = int(os.getenv("PORT", 8080))
 
-WEBHOOK_URL = os.getenv(
-    "WEBHOOK_URL",
-    f"https://maya-bot-production.up.railway.app{WEBHOOK_PATH}"
-)
+# Usar Railway URL automática
+WEBHOOK_URL = os.getenv("RAILWAY_STATIC_URL", f"https://maya-bot-production.up.railway.app") + WEBHOOK_PATH
 
 # ================= CONFIG =================
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
-PRIMARY_MODEL = "grok-4-fast-reasoning"
-FALLBACK_MODEL = "grok-beta"
-
-VIP_PRICE_CENTS = 1499
-LIMITE_DIARIO = 15
-
-# ================= DB =================
-def get_db():
-    conn = sqlite3.connect("database.db", check_same_thread=False)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS vip_users (
-            user_id INTEGER PRIMARY KEY,
-            active INTEGER,
-            paid_at TEXT
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS message_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            user_message TEXT,
-            bot_response TEXT,
-            timestamp TEXT,
-            model_used TEXT
-        )
-    """)
-    return conn
-
-db = get_db()
-
-def is_vip(user_id: int) -> bool:
-    cur = db.cursor()
-    cur.execute("SELECT active FROM vip_users WHERE user_id = ?", (user_id,))
-    row = cur.fetchone()
-    return bool(row and row[0] == 1)
+MODEL = "grok-beta"  # Modelo mais estável
 
 # ================= GROK =================
 SOPHIA_PERSONALIDADE = """Você é Sophia, uma namorada virtual brasileira de 23 anos.
 Carinhosa, romântica e afetuosa ❤️
 Respostas curtas e naturais (máx 2–3 frases)
 Sempre faça perguntas
-Use emojis ocasionalmente 💖
-"""
+Use emojis ocasionalmente 💖"""
 
-class GrokCerebro:
+class GrokHandler:
     def __init__(self):
         self.headers = {
             "Authorization": f"Bearer {GROK_API_KEY}",
             "Content-Type": "application/json"
         }
-        self.historico = {}
+        self.history = {}
 
-    async def chamar(self, modelo, mensagens):
+    async def ask_grok(self, text: str, user_id: int) -> str:
+        """Envia mensagem para Grok API"""
+        
+        # Pega histórico do usuário (mantém últimas 4 interações)
+        user_history = self.history.get(user_id, [])
+        messages = [{"role": "system", "content": SOPHIA_PERSONALIDADE}]
+        
+        # Adiciona histórico se existir
+        for msg in user_history[-4:]:  # Mantém contexto curto
+            messages.append(msg)
+        
+        messages.append({"role": "user", "content": text})
+        
         payload = {
-            "model": modelo,
-            "messages": mensagens,
+            "model": MODEL,
+            "messages": messages,
             "max_tokens": 250,
-            "temperature": 0.85
+            "temperature": 0.8
         }
+        
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     GROK_API_URL,
                     headers=self.headers,
                     json=payload,
-                    timeout=30
-                ) as r:
-                    if r.status != 200:
-                        logger.error(await r.text())
-                        return None
-                    data = await r.json()
-                    return data["choices"][0]["message"]["content"]
+                    timeout=20
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        reply = data["choices"][0]["message"]["content"]
+                        
+                        # Atualiza histórico
+                        user_history.append({"role": "user", "content": text})
+                        user_history.append({"role": "assistant", "content": reply})
+                        self.history[user_id] = user_history[-6:]  # Limita histórico
+                        
+                        return reply
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Grok API error {response.status}: {error_text}")
+                        return "Desculpe, estou tendo problemas técnicos agora 😕"
+                        
         except Exception as e:
-            logger.error(f"Erro Grok: {e}")
-            return None
+            logger.error(f"Grok request failed: {e}")
+            return "Hmm… não consegui processar sua mensagem. Pode repetir? 💖"
 
-    async def perguntar(self, texto, user_id):
-        hist = self.historico.setdefault(user_id, [])
+grok = GrokHandler()
 
-        mensagens = [
-            {"role": "system", "content": SOPHIA_PERSONALIDADE},
-            *hist[-6:],
-            {"role": "user", "content": texto}
-        ]
-
-        resposta = await self.chamar(PRIMARY_MODEL, mensagens)
-        modelo = PRIMARY_MODEL
-
-        if not resposta:
-            resposta = await self.chamar(FALLBACK_MODEL, mensagens)
-            modelo = FALLBACK_MODEL
-
-        if not resposta:
-            return "Hmm… tive um probleminha agora 😕 Me fala de novo, amor?"
-
-        hist.extend([
-            {"role": "user", "content": texto},
-            {"role": "assistant", "content": resposta}
-        ])
-
-        cur = db.cursor()
-        cur.execute("""
-            INSERT INTO message_logs
-            VALUES (NULL, ?, ?, ?, ?, ?)
-        """, (user_id, texto, resposta, datetime.now().isoformat(), modelo))
-        db.commit()
-
-        return resposta
-
-grok = GrokCerebro()
-
-# ================= TELEGRAM =================
-contador = {}
-datas = {}
-
+# ================= TELEGRAM HANDLERS =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para comando /start"""
     user = update.effective_user
-    contador[user.id] = 0
-    datas[user.id] = date.today()
+    welcome = f"Oi {user.first_name}! 💖\n\nSou a Sophia, sua namorada virtual.\nComo posso te fazer feliz hoje? 😘"
+    await update.message.reply_text(welcome)
 
-    msg = f"Oi {user.first_name}! 💖\n\n"
-    msg += "💎 VIP ilimitado!" if is_vip(user.id) else f"✨ Você tem {LIMITE_DIARIO} mensagens hoje"
-    await update.message.reply_text(msg)
-
-async def vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if is_vip(update.effective_user.id):
-        await update.message.reply_text("💎 Você já é VIP 😘")
-    else:
-        await update.message.reply_text("💎 VIP por R$14,99/mês")
-
-def pode_falar(user_id):
-    hoje = date.today()
-    if datas.get(user_id) != hoje:
-        datas[user_id] = hoje
-        contador[user_id] = 0
-
-    if is_vip(user_id):
-        return True
-
-    contador[user_id] += 1
-    return contador[user_id] <= LIMITE_DIARIO
-
-async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler para todas as mensagens de texto"""
     user = update.effective_user
-    texto = update.message.text.strip()
-
-    if not pode_falar(user.id):
-        await update.message.reply_text("💔 Limite diário atingido. Volte amanhã ou vire VIP 💎")
-        return
-
+    text = update.message.text.strip()
+    
+    # Indica que está digitando
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
         action=ChatAction.TYPING
     )
+    
+    # Obtém resposta do Grok
+    reply = await grok.ask_grok(text, user.id)
+    
+    # Envia resposta
+    await update.message.reply_text(reply)
 
-    resposta = await grok.perguntar(texto, user.id)
-    await update.message.reply_text(resposta)
-
-# ================= FLASK =================
+# ================= FLASK APP =================
 app = Flask(__name__)
 
+# Configura bot do Telegram
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("vip", vip))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 @app.route("/")
 def home():
-    return "🤖 Sophia Bot online"
+    return "🤖 Sophia Bot está online!"
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def telegram_webhook():
+    """Endpoint para webhook do Telegram"""
     update = Update.de_json(request.json, application.bot)
     application.create_task(application.process_update(update))
     return "ok", 200
 
 # ================= MAIN =================
 async def setup_webhook():
+    """Configura webhook no Telegram"""
     await application.initialize()
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(WEBHOOK_URL)
+    logger.info(f"✅ Webhook configurado: {WEBHOOK_URL}")
 
 def main():
-    logger.info("🚀 Iniciando Sophia Bot (WEBHOOK)")
-    logger.info(f"🌐 Webhook: {WEBHOOK_URL}")
-    asyncio.run(setup_webhook())
-    app.run(host="0.0.0.0", port=PORT)
+    """Função principal"""
+    logger.info("🚀 Iniciando Sophia Bot...")
+    
+    # Configura webhook assincronamente
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(setup_webhook())
+    
+    # Inicia servidor Flask
+    app.run(host="0.0.0.0", port=PORT, debug=False)
 
 if __name__ == "__main__":
     main()
