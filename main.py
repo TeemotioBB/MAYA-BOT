@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
-"""
-🔥 Sophia Bot — Railway + Grok + PushinPay
-Telegram via WEBHOOK (sem polling / sem conflito)
-"""
-
-import os
 import asyncio
 import aiohttp
 import sqlite3
 import logging
 from datetime import datetime, date
-from flask import Flask, request, jsonify, abort
+from quart import Quart, request
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -20,37 +14,28 @@ from telegram.ext import (
     filters
 )
 
-# ================= LOG =================
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# ================= CONFIGURAÇÕES (DIRETO NO CÓDIGO) =================
+TELEGRAM_TOKEN = "8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4"
+GROK_API_KEY = "xai-WhzRhOWLna2aUD3A3Sv3siXwqVCTpIP9j5X1KNe1m8N7QB89Dzh20edMiTZbhB9tSaX4aMRKmCwsdpnD"
+PUSHINPAY_TOKEN = "57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5"
 
-# ================= TOKENS =================
-TELEGRAM_TOKEN = ("8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4")
-GROK_API_KEY = ("xai-WhzRhOWLna2aUD3A3Sv3siXwqVCTpIP9j5X1KNe1m8N7QB89Dzh20edMiTZbhB9tSaX4aMRKmCwsdpnD")
-PUSHINPAY_TOKEN = ("57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5")
-WEBHOOK_SECRET = ("teste")
+# COLOQUE SEU LINK DO RAILWAY AQUI:
+WEBHOOK_URL = "https://SEU-PROJETO.up.railway.app" 
+
+WEBHOOK_SECRET = "teste"
 WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}"
+PORT = 8080
 
-PORT = int(os.getenv("PORT", 8080))
-
-WEBHOOK_URL = os.getenv(
-    "WEBHOOK_URL",
-    f"https://SEU-PROJETO.up.railway.app{WEBHOOK_PATH}"
-)
-
-# ================= CONFIG =================
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
-PRIMARY_MODEL = "grok-4-fast-reasoning"
-FALLBACK_MODEL = "grok-beta"
-
-VIP_PRICE_CENTS = 1499
+MODELO = "grok-4-fast-reasoning"
 LIMITE_DIARIO = 15
 
-# ================= DB =================
-def get_db():
+# ================= LOGGING =================
+logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ================= BANCO DE DADOS =================
+def init_db():
     conn = sqlite3.connect("database.db", check_same_thread=False)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS vip_users (
@@ -69,9 +54,10 @@ def get_db():
             model_used TEXT
         )
     """)
+    conn.commit()
     return conn
 
-db = get_db()
+db = init_db()
 
 def is_vip(user_id: int) -> bool:
     cur = db.cursor()
@@ -79,151 +65,111 @@ def is_vip(user_id: int) -> bool:
     row = cur.fetchone()
     return bool(row and row[0] == 1)
 
-# ================= GROK =================
+# ================= CÉREBRO GROK =================
 SOPHIA_PERSONALIDADE = """Você é Sophia, uma namorada virtual brasileira de 23 anos.
-Carinhosa, romântica, afetuosa ❤️
-Respostas curtas e naturais (máx 2–3 frases)
-Sempre faça perguntas
-Use emojis ocasionalmente 💖
+Carinhosa, romântica, afetuosa ❤️. Respostas curtas e naturais (máx 2–3 frases).
+Sempre faça perguntas. Use emojis ocasionalmente.
 """
 
 class GrokCerebro:
     def __init__(self):
-        self.headers = {
-            "Authorization": f"Bearer {GROK_API_KEY}",
-            "Content-Type": "application/json"
-        }
         self.historico = {}
-
-    async def chamar(self, modelo, mensagens):
-        payload = {
-            "model": modelo,
-            "messages": mensagens,
-            "max_tokens": 250,
-            "temperature": 0.85
-        }
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    GROK_API_URL,
-                    headers=self.headers,
-                    json=payload,
-                    timeout=30
-                ) as r:
-                    if r.status != 200:
-                        return None
-                    data = await r.json()
-                    return data["choices"][0]["message"]["content"]
-        except:
-            return None
 
     async def perguntar(self, texto, user_id):
         hist = self.historico.setdefault(user_id, [])
-
         mensagens = [
             {"role": "system", "content": SOPHIA_PERSONALIDADE},
             *hist[-6:],
             {"role": "user", "content": texto}
         ]
 
-        resposta = await self.chamar(PRIMARY_MODEL, mensagens)
-        modelo = PRIMARY_MODEL
+        headers = {"Authorization": f"Bearer {GROK_API_KEY}", "Content-Type": "application/json"}
+        payload = {"model": MODELO, "messages": mensagens, "max_tokens": 250, "temperature": 0.85}
 
-        if not resposta:
-            resposta = await self.chamar(FALLBACK_MODEL, mensagens)
-            modelo = FALLBACK_MODEL
-
-        if not resposta:
-            return "Hmm… tive um probleminha agora 😕 Me fala de novo, amor?"
-
-        hist.extend([
-            {"role": "user", "content": texto},
-            {"role": "assistant", "content": resposta}
-        ])
-
-        cur = db.cursor()
-        cur.execute("""
-            INSERT INTO message_logs
-            VALUES (NULL, ?, ?, ?, ?, ?)
-        """, (user_id, texto, resposta, datetime.now().isoformat(), modelo))
-        db.commit()
-
-        return resposta
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(GROK_API_URL, headers=headers, json=payload, timeout=30) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        resp = data["choices"][0]["message"]["content"]
+                        hist.append({"role": "user", "content": texto})
+                        hist.append({"role": "assistant", "content": resp})
+                        
+                        cur = db.cursor()
+                        cur.execute("INSERT INTO message_logs (user_id, user_message, bot_response, timestamp, model_used) VALUES (?, ?, ?, ?, ?)",
+                                    (user_id, texto, resp, datetime.now().isoformat(), MODELO))
+                        db.commit()
+                        return resp
+                    return "Tive um erro no meu cérebro agora... me chama de novo? 🥺"
+        except:
+            return "Minha conexão caiu, amor. Tenta de novo? 💖"
 
 grok = GrokCerebro()
 
-# ================= TELEGRAM =================
-contador = {}
-datas = {}
+# ================= HANDLERS =================
+contador_diario = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    contador[user.id] = 0
-    datas[user.id] = date.today()
-
-    msg = f"Oi {user.first_name}! 💖\n\n"
-    msg += "💎 VIP ilimitado!" if is_vip(user.id) else f"✨ Você tem {LIMITE_DIARIO} mensagens hoje"
-
+    msg = f"Oi {user.first_name}! 💖\n"
+    msg += "💎 VIP Ativo" if is_vip(user.id) else f"✨ Você tem {LIMITE_DIARIO} mensagens grátis hoje."
     await update.message.reply_text(msg)
 
-async def vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def vip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_vip(update.effective_user.id):
-        await update.message.reply_text("💎 Você já é VIP 😘")
+        await update.message.reply_text("Você já é meu VIP preferido! 💎😘")
     else:
-        await update.message.reply_text("💎 VIP por R$14,99/mês\nUse /vip")
+        await update.message.reply_text("💎 Quer falar comigo sem limites? Torne-se VIP por R$14,99!\n\n(Integração PushinPay aqui)")
 
-def pode_falar(user_id):
-    hoje = date.today()
-    if datas.get(user_id) != hoje:
-        datas[user_id] = hoje
-        contador[user_id] = 0
+async def mensagem_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    texto = update.message.text
 
-    if is_vip(user_id):
-        return True
+    # Controle de Limite
+    hoje = date.today().isoformat()
+    stats = contador_diario.get(user_id, {"data": hoje, "contagem": 0})
+    if stats["data"] != hoje: stats = {"data": hoje, "contagem": 0}
 
-    contador[user_id] += 1
-    return contador[user_id] <= LIMITE_DIARIO
-
-async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    texto = update.message.text.strip()
-
-    if not pode_falar(user.id):
-        await update.message.reply_text("💔 Limite diário atingido. Volte amanhã ou vire VIP 💎")
+    if not is_vip(user_id) and stats["contagem"] >= LIMITE_DIARIO:
+        await update.message.reply_text("💔 Minhas mensagens grátis acabaram por hoje. Quer continuar? Use /vip 💎")
         return
 
-    resposta = await grok.perguntar(texto, user.id)
+    resposta = await grok.perguntar(texto, user_id)
+    
+    if not is_vip(user_id):
+        stats["contagem"] += 1
+        contador_diario[user_id] = stats
+
     await update.message.reply_text(resposta)
 
-# ================= FLASK =================
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "🤖 Sophia Bot online"
-
-@app.route(WEBHOOK_PATH, methods=["POST"])
-def telegram_webhook():
-    update = Update.de_json(request.json, application.bot)
-    asyncio.run(application.process_update(update))
-    return "ok"
-
-# ================= MAIN =================
+# ================= APP E WEBHOOK =================
+app = Quart(__name__)
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("vip", vip))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem))
+@app.before_serving
+async def startup():
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("vip", vip_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem_handler))
+    
+    await application.initialize()
+    await application.start()
+    
+    # Configura o Webhook no Telegram automaticamente
+    full_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
+    await application.bot.set_webhook(url=full_url)
+    logger.info(f"🚀 Sophia Online em: {full_url}")
 
-def main():
-    logger.info("🚀 Iniciando Sophia Bot (WEBHOOK)")
-    logger.info(f"🌐 Webhook: {WEBHOOK_URL}")
+@app.route(WEBHOOK_PATH, methods=["POST"])
+async def telegram_webhook():
+    data = await request.get_json()
+    update = Update.de_json(data, application.bot)
+    await application.process_update(update)
+    return "ok", 200
 
-    asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
-
-    app.run(host="0.0.0.0", port=PORT)
+@app.route("/")
+async def index():
+    return "Sophia Bot está rodando! ❤️"
 
 if __name__ == "__main__":
-    main()
-
-
+    app.run(host="0.0.0.0", port=PORT)
