@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 🔥 Sophia Bot — Railway + Grok + PushinPay
-Telegram via WEBHOOK (estável, produção)
+Telegram via WEBHOOK (produção, estável)
 """
 
 import os
@@ -23,8 +23,8 @@ from telegram.constants import ChatAction
 
 # ================= LOG =================
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    level=logging.INFO
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -32,19 +32,25 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 PUSHINPAY_TOKEN = os.getenv("PUSHINPAY_TOKEN")
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "teste")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "TESTE")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-
 PORT = int(os.getenv("PORT", 8080))
 
+# 🔎 DEBUG VISUAL (PODE REMOVER DEPOIS)
+logger.info(f"ENV TELEGRAM_TOKEN: {'OK' if TELEGRAM_TOKEN else 'MISSING'}")
+logger.info(f"ENV GROK_API_KEY: {'OK' if GROK_API_KEY else 'MISSING'}")
+logger.info(f"ENV PUSHINPAY_TOKEN: {'OK' if PUSHINPAY_TOKEN else 'MISSING'}")
+logger.info(f"ENV WEBHOOK_URL: {WEBHOOK_URL}")
+
+# ❌ BLOQUEIA SUBIDA SEM VARIÁVEIS
 if not TELEGRAM_TOKEN:
-    raise RuntimeError("❌ TELEGRAM_TOKEN não definido")
+    raise RuntimeError("❌ TELEGRAM_TOKEN not set")
 if not GROK_API_KEY:
-    raise RuntimeError("❌ GROK_API_KEY não definido")
+    raise RuntimeError("❌ GROK_API_KEY not set")
 if not PUSHINPAY_TOKEN:
-    raise RuntimeError("❌ PUSHINPAY_TOKEN não definido")
+    raise RuntimeError("❌ PUSHINPAY_TOKEN not set")
 if not WEBHOOK_URL:
-    raise RuntimeError("❌ WEBHOOK_URL não definido")
+    raise RuntimeError("❌ WEBHOOK_URL not set")
 
 WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}"
 
@@ -52,7 +58,6 @@ WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 PRIMARY_MODEL = "grok-4-fast-reasoning"
 FALLBACK_MODEL = "grok-beta"
-
 LIMITE_DIARIO = 15
 
 # ================= DB =================
@@ -127,7 +132,6 @@ class GrokCerebro:
 
     async def perguntar(self, texto, user_id):
         hist = self.historico.setdefault(user_id, [])
-
         mensagens = [
             {"role": "system", "content": SOPHIA_PERSONALIDADE},
             *hist[-6:],
@@ -168,7 +172,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     contador[user.id] = 0
     datas[user.id] = date.today()
-
     msg = f"Oi {user.first_name}! 💖\n\n"
     msg += "💎 VIP ilimitado!" if is_vip(user.id) else f"✨ Você tem {LIMITE_DIARIO} mensagens hoje"
     await update.message.reply_text(msg)
@@ -181,10 +184,8 @@ def pode_falar(user_id):
     if datas.get(user_id) != hoje:
         datas[user_id] = hoje
         contador[user_id] = 0
-
     if is_vip(user_id):
         return True
-
     contador[user_id] += 1
     return contador[user_id] <= LIMITE_DIARIO
 
