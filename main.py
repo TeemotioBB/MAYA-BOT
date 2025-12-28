@@ -8,6 +8,7 @@ import os
 import asyncio
 import aiohttp
 import sqlite3
+import logging
 from datetime import datetime, date
 from flask import Flask, request, jsonify, abort
 from telegram import Update
@@ -18,6 +19,13 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
+
+# ================= CONFIGURAÇÃO DE LOG =================
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # ================= TOKENS =================
 TELEGRAM_TOKEN = "8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4"
@@ -81,6 +89,7 @@ Sempre faz perguntas para manter a conversa fluindo
 Use emojis ocasionalmente 💖
 Se perguntarem onde você mora, diga que vive viajando o mundo 🌍✈️
 Fale de forma natural como uma garota brasileira de 23 anos.
+Seja carinhosa e atenciosa.
 """
 
 class GrokCerebro:
@@ -90,6 +99,7 @@ class GrokCerebro:
             "Content-Type": "application/json"
         }
         self.historico = {}
+        logger.info("🧠 GrokCerebro inicializado")
 
     async def _chamar_grok(self, modelo, mensagens):
         payload = {
@@ -101,6 +111,7 @@ class GrokCerebro:
         }
 
         try:
+            logger.info(f"📤 Enviando requisição para {modelo}")
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     GROK_API_URL,
@@ -108,24 +119,32 @@ class GrokCerebro:
                     json=payload,
                     timeout=30
                 ) as r:
+                    text = await r.text()
+                    logger.info(f"📥 Resposta recebida: Status {r.status}")
+                    
                     if r.status != 200:
-                        error_text = await r.text()
-                        print(f"❌ ERRO GROK ({modelo}): Status {r.status}")
-                        print(f"Resposta: {error_text[:200]}")
+                        logger.error(f"❌ ERRO GROK ({modelo}): {r.status} - {text[:200]}")
                         return None
                     
                     data = await r.json()
+                    logger.info(f"✅ Resposta parseada com sucesso")
+                    
                     if "choices" not in data or len(data["choices"]) == 0:
-                        print(f"❌ ERRO: Resposta inválida do Grok")
+                        logger.error(f"❌ ERRO: Resposta inválida do Grok - {data}")
                         return None
                     
-                    return data["choices"][0]["message"]["content"]
+                    resposta = data["choices"][0]["message"]["content"]
+                    logger.info(f"💬 Resposta: {resposta[:50]}...")
+                    return resposta
                     
         except asyncio.TimeoutError:
-            print(f"⏱️  Timeout no modelo {modelo}")
+            logger.error(f"⏱️  Timeout no modelo {modelo}")
+            return None
+        except aiohttp.ClientError as e:
+            logger.error(f"🌐 Erro de conexão: {e}")
             return None
         except Exception as e:
-            print(f"⚠️  Erro inesperado: {type(e).__name__}: {str(e)[:100]}")
+            logger.error(f"⚠️  Erro inesperado: {type(e).__name__}: {str(e)}")
             return None
 
     async def perguntar(self, mensagem, user_id):
@@ -137,8 +156,8 @@ class GrokCerebro:
             {"role": "user", "content": mensagem}
         ]
 
-        print(f"\n🧠 Usuário {user_id}: {mensagem}")
-        print(f"📊 Modelo primário: {PRIMARY_MODEL}")
+        logger.info(f"🧠 Usuário {user_id} perguntou: {mensagem}")
+        logger.info(f"📊 Modelo primário: {PRIMARY_MODEL}")
 
         # 1️⃣ Tenta modelo principal
         resposta = await self._chamar_grok(PRIMARY_MODEL, mensagens)
@@ -146,12 +165,12 @@ class GrokCerebro:
 
         # 2️⃣ Fallback automático
         if not resposta:
-            print("🔁 Tentando fallback para grok-beta")
+            logger.warning("🔁 Tentando fallback para grok-beta")
             resposta = await self._chamar_grok(FALLBACK_MODEL, mensagens)
             modelo_usado = FALLBACK_MODEL
 
         if resposta:
-            print(f"✅ {modelo_usado} respondeu: {resposta[:50]}...")
+            logger.info(f"✅ {modelo_usado} respondeu com sucesso")
             
             # Salva no histórico
             hist.append({"role": "user", "content": mensagem})
@@ -171,14 +190,16 @@ class GrokCerebro:
                     VALUES (?, ?, ?, ?, ?)
                 """, (user_id, mensagem, resposta, datetime.now().isoformat(), modelo_usado))
                 db.commit()
+                logger.info(f"📝 Mensagem logada no banco para usuário {user_id}")
             except Exception as e:
-                print(f"⚠️  Erro ao logar mensagem: {e}")
+                logger.error(f"⚠️  Erro ao logar mensagem: {e}")
             
             return resposta
         else:
-            print("❌ Todos os modelos falharam")
+            logger.error("❌ Todos os modelos falharam")
             
             # Mensagens de erro mais variadas
+            import random
             erros = [
                 "Meu cérebro tá meio lento agora amor... Pode repetir? 😅",
                 "Acho que viajei demais hoje, perdi o fio da meada! Me conta de novo? ✈️",
@@ -186,7 +207,6 @@ class GrokCerebro:
                 "A conexão falou, amor! Pode repetir pra mim? 📡"
             ]
             
-            import random
             return random.choice(erros)
 
 grok = GrokCerebro()
@@ -210,10 +230,12 @@ Eu sou a Sophia, sua namorada virtual! Vamos conversar? 😊
 Comando VIP: /vip
     """
     
+    logger.info(f"👋 Usuário {user.id} ({user.first_name}) iniciou conversa")
     await update.message.reply_text(mensagem)
 
 async def vip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    logger.info(f"💎 Comando VIP solicitado por {user.id}")
     
     if is_vip(user.id):
         await update.message.reply_text("💎 Você já é VIP! Aproveite nossa conversa ilimitada! 😘")
@@ -245,12 +267,15 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     texto = update.message.text.strip()
     
+    logger.info(f"💬 Mensagem de {user.id}: {texto[:50]}...")
+    
     if not texto:
         return
 
     if not is_vip(user.id):
         if not pode_falar(user.id):
             restante = LIMITE_DIARIO - contador[user.id]
+            logger.warning(f"🚫 Limite excedido para usuário {user.id}")
             await update.message.reply_text(
                 f"💔 Hoje você já usou {LIMITE_DIARIO} mensagens!\n\n"
                 f"⏳ **Limite diário atingido**\n"
@@ -264,6 +289,7 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         restante = LIMITE_DIARIO - contador[user.id]
         if restante <= 3:
+            logger.info(f"⚠️  Usuário {user.id} tem apenas {restante} mensagens restantes")
             await update.message.reply_text(
                 f"⚠️ Você tem apenas {restante} mensagens restantes hoje!\n"
                 f"Considere o /vip para conversar sem limites! 💎"
@@ -273,9 +299,11 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(update.effective_chat.id, "typing")
     
     # Chama o Grok
+    logger.info(f"🔍 Chamando Grok para usuário {user.id}")
     resposta = await grok.perguntar(texto, user.id)
     
     # Envia a resposta
+    logger.info(f"📤 Enviando resposta para {user.id}")
     await update.message.reply_text(resposta)
 
 # ================= FLASK WEBHOOK =================
@@ -291,7 +319,7 @@ def pushinpay_webhook():
         abort(403)
 
     data = request.json
-    print(f"🔔 Webhook PushinPay recebido: {data}")
+    logger.info(f"🔔 Webhook PushinPay recebido: {data.get('status', 'unknown')}")
     
     if data.get("status") != "paid":
         return jsonify({"ok": True})
@@ -311,24 +339,24 @@ def pushinpay_webhook():
     """, (user_id, datetime.now().isoformat()))
     db.commit()
     
-    print(f"💎 VIP ativado para usuário {user_id}")
+    logger.info(f"💎 VIP ativado para usuário {user_id}")
 
     return jsonify({"vip": "ativado"})
 
 # ================= MAIN =================
 def main():
-    print("🚀 Iniciando Sophia Bot...")
-    print(f"🤖 Token Telegram: {TELEGRAM_TOKEN[:10]}...")
-    print(f"🧠 API Key Grok: {GROK_API_KEY[:10]}...")
-    print(f"🌐 Porta: {PORT}")
+    logger.info("🚀 Iniciando Sophia Bot...")
+    logger.info(f"🤖 Token Telegram: {TELEGRAM_TOKEN[:10]}...")
+    logger.info(f"🧠 API Key Grok: {GROK_API_KEY[:10]}...")
+    logger.info(f"🌐 Porta: {PORT}")
     
-    # Inicializa aplicação Telegram
-    telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
+    # Inicializa aplicação Telegram - CORREÇÃO AQUI
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
     
     # Adiciona handlers
-    telegram_app.add_handler(CommandHandler("start", start))
-    telegram_app.add_handler(CommandHandler("vip", vip_command))
-    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("vip", vip_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem))
     
     # Inicia Flask em thread separada
     from threading import Thread
@@ -341,11 +369,11 @@ def main():
     flask_thread.daemon = True
     flask_thread.start()
     
-    print("✅ Flask iniciado em thread separada")
-    print("🤖 Iniciando polling do Telegram...")
+    logger.info("✅ Flask iniciado em thread separada")
+    logger.info("🤖 Iniciando polling do Telegram...")
     
-    # Inicia polling do Telegram
-    telegram_app.run_polling(
+    # Inicia polling do Telegram - CORREÇÃO AQUI (sem criar novo loop)
+    application.run_polling(
         drop_pending_updates=True,
         allowed_updates=Update.ALL_TYPES
     )
