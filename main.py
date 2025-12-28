@@ -28,10 +28,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ================= TOKENS =================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "SEU_TOKEN_AQUI")
-GROK_API_KEY = os.getenv("GROK_API_KEY", "SUA_KEY_AQUI")
-PUSHINPAY_TOKEN = os.getenv("PUSHINPAY_TOKEN", "SUA_PUSHINPAY_KEY")
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "segredo")
+TELEGRAM_TOKEN = os.getenv("8528168785:AAFlXEt1SGtyQDqYe4wt_f8MhN_JSKLYSj4")
+GROK_API_KEY = os.getenv("xai-WhzRhOWLna2aUD3A3Sv3siXwqVCTpIP9j5X1KNe1m8N7QB89Dzh20edMiTZbhB9tSaX4aMRKmCwsdpnD")
+PUSHINPAY_TOKEN = os.getenv("57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5")
+WEBHOOK_SECRET = os.getenv("teste")
 WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}"
 
 PORT = int(os.getenv("PORT", 8080))
@@ -225,3 +225,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
