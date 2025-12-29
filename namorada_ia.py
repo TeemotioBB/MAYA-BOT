@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
-WEBHOOK + FLASK (CORRETO)
+WEBHOOK NATIVO (CORRETO)
 python-telegram-bot v20+
 """
 
 import os
-import asyncio
 import logging
 import aiohttp
 import redis
 from datetime import datetime, timedelta, date
-from flask import Flask, request
 
 from telegram import (
     Update,
@@ -25,8 +23,7 @@ from telegram.ext import (
     MessageHandler,
     ContextTypes,
     filters,
-    CallbackQueryHandler,
-    PreCheckoutQueryHandler
+    CallbackQueryHandler
 )
 
 # ================= LOG =================
@@ -38,10 +35,9 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 PORT = int(os.getenv("PORT", 8080))
 
-REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
+WEBHOOK_URL = "https://maya-bot-production.up.railway.app/telegram"
 
-WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
-WEBHOOK_PATH = "/telegram"
+REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
 
 if not TELEGRAM_TOKEN or not GROK_API_KEY:
     raise RuntimeError("❌ Variáveis de ambiente não configuradas")
@@ -53,14 +49,6 @@ r = redis.from_url(REDIS_URL, decode_responses=True)
 LIMITE_DIARIO = 15
 DIAS_VIP = 15
 PRECO_VIP_STARS = 250
-
-# ================= APP =================
-app = Flask(__name__)
-application = Application.builder().token(TELEGRAM_TOKEN).build()
-
-# ================= LOOP ASYNC GLOBAL =================
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
 
 # ================= VIP =================
 def vip_key(uid): return f"vip:{uid}"
@@ -138,46 +126,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     resposta = await grok.reply(update.message.text)
     await update.message.reply_text(resposta)
 
-# ================= CALLBACK =================
-async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.callback_query.data == "buy_vip":
-        await context.bot.send_invoice(
-            chat_id=update.effective_chat.id,
-            title="VIP Sophia 💖",
-            description="Conversas ilimitadas por 15 dias",
-            payload="vip",
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice("VIP", PRECO_VIP_STARS)]
-        )
+# ================= APP =================
+app = Application.builder().token(TELEGRAM_TOKEN).build()
+app.add_handler(MessageHandler(filters.TEXT, message_handler))
 
-# ================= REGISTRO =================
-application.add_handler(MessageHandler(filters.TEXT, message_handler))
-application.add_handler(CallbackQueryHandler(callback_handler))
-
-# ================= STARTUP =================
-async def startup():
-    await application.initialize()
-    await application.start()
-    await application.bot.set_webhook(f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
-    logger.info("🚀 Webhook configurado e bot iniciado")
-
-loop.run_until_complete(startup())
-
-# ================= WEBHOOK FLASK (SINCRONO) =================
-@app.route(WEBHOOK_PATH, methods=["POST"])
-def telegram_webhook():
-    update = Update.de_json(request.json, application.bot)
-    asyncio.run_coroutine_threadsafe(
-        application.process_update(update),
-        loop
-    )
-    return "ok", 200
-
-@app.route("/")
-def home():
-    return "🤖 Sophia Bot online"
-
-# ================= MAIN =================
+# ================= START =================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT)
+    logger.info("🚀 Iniciando Sophia Bot (WEBHOOK NATIVO)")
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path="telegram",
+        webhook_url=WEBHOOK_URL
+    )
