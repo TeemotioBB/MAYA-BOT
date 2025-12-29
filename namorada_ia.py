@@ -58,6 +58,10 @@ PRECO_VIP_STARS = 250
 app = Flask(__name__)
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
+# ================= LOOP ASYNC GLOBAL =================
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
 # ================= VIP =================
 def vip_key(uid): return f"vip:{uid}"
 def count_key(uid): return f"count:{uid}:{date.today()}"
@@ -101,15 +105,14 @@ grok = Grok()
 
 # ================= HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("📩 Update recebido")
-
     if not update.message or not update.message.text:
         return
 
     uid = update.effective_user.id
     text = update.message.text.lower()
 
-    # VIP keyword
+    logger.info(f"📩 Mensagem recebida: {text}")
+
     if not is_vip(uid) and "vip" in text:
         await update.message.reply_text(
             "💖 Quer virar VIP? Converse comigo sem limites por 15 dias 😘",
@@ -152,24 +155,28 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 application.add_handler(MessageHandler(filters.TEXT, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 
-# ================= WEBHOOK =================
-@app.route(WEBHOOK_PATH, methods=["POST"])
-async def telegram_webhook():
-    update = Update.de_json(request.json, application.bot)
-    await application.process_update(update)
-    return "ok"
-
-@app.route("/")
-def home():
-    return "🤖 Sophia Bot online"
-
-# ================= START =================
+# ================= STARTUP =================
 async def startup():
     await application.initialize()
     await application.bot.set_webhook(f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
     logger.info("🚀 Webhook configurado")
 
-asyncio.run(startup())
+loop.run_until_complete(startup())
 
+# ================= WEBHOOK FLASK (SINCRONO) =================
+@app.route(WEBHOOK_PATH, methods=["POST"])
+def telegram_webhook():
+    update = Update.de_json(request.json, application.bot)
+    asyncio.run_coroutine_threadsafe(
+        application.process_update(update),
+        loop
+    )
+    return "ok", 200
+
+@app.route("/")
+def home():
+    return "🤖 Sophia Bot online"
+
+# ================= MAIN =================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
