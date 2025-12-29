@@ -29,7 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ================= ENV (APENAS LEITURA) =================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_TOKEN = ("8528168785:AAFfgtaB0vEagd1cdfZ3hWDyL9PKFZrmRjk")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 PUSHINPAY_TOKEN = os.getenv("PUSHINPAY_TOKEN")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "TESTE")
@@ -233,3 +233,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
