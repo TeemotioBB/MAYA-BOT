@@ -2,6 +2,7 @@
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
 WEBHOOK FIXO | LIMITE DIÁRIO | VIP COM TELEGRAM STARS
+python-telegram-bot v20+
 """
 
 import os
@@ -18,13 +19,15 @@ from telegram import (
     InlineKeyboardMarkup,
     LabeledPrice
 )
+from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
     MessageHandler,
     ContextTypes,
-    filters
+    filters,
+    CallbackQueryHandler,
+    PreCheckoutQueryHandler
 )
-from telegram.constants import ChatAction
 
 # ================= LOG =================
 logging.basicConfig(
@@ -53,18 +56,17 @@ Sempre faça perguntas.
 Use emojis ocasionalmente 💖
 """
 
-# ================= CONTROLES =================
+# ================= CONFIGURAÇÕES =================
 LIMITE_DIARIO = 15
 VIP_DIAS = 15
 VIP_PRECO_STARS = 250
-
-mensagens_hoje = {}     # user_id -> {date: int}
-vip_usuarios = {}      # user_id -> datetime
-memoria_usuarios = {}  # user_id -> histórico
-
 MEMORIA_MAX = 10
 
-# ================= GROK CLASS =================
+mensagens_hoje = {}     # user_id -> {date, count}
+vip_usuarios = {}      # user_id -> datetime
+memoria_usuarios = {}  # user_id -> histórico curto
+
+# ================= GROK =================
 class Grok:
     def __init__(self):
         self.headers = {
@@ -124,29 +126,27 @@ def limite_excedido(user_id: int) -> bool:
 
     return dados["count"] >= LIMITE_DIARIO
 
-def incrementar_contador(user_id: int):
+def incrementar(user_id: int):
     mensagens_hoje[user_id]["count"] += 1
 
-# ================= HANDLER PRINCIPAL =================
+# ================= HANDLER TEXTO =================
 async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.strip()
     user_id = update.effective_user.id
 
-    # VIP pode tudo
     if not is_vip(user_id):
         if limite_excedido(user_id):
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="comprar_vip")]
             ])
-
             await update.message.reply_text(
-                "💔 Seu limite de mensagens comigo encerrou por hoje amor.\n"
+                "💔 Seu limite de mensagens comigo encerrou por hoje, amor.\n"
                 "Volte amanhã ou se torne meu cliente VIP 💖",
                 reply_markup=keyboard
             )
             return
         else:
-            incrementar_contador(user_id)
+            incrementar(user_id)
 
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
@@ -184,7 +184,6 @@ async def pagamento_sucesso(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if payload == "vip_15_dias":
         vip_usuarios[user_id] = datetime.now() + timedelta(days=VIP_DIAS)
-
         await update.message.reply_text(
             "💖 Pagamento aprovado!\n"
             "Agora você pode conversar comigo sem limites por 15 dias 😘"
@@ -194,27 +193,27 @@ async def pagamento_sucesso(update: Update, context: ContextTypes.DEFAULT_TYPE):
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem))
+application.add_handler(CallbackQueryHandler(callback_handler))
+application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, pagamento_sucesso))
-application.add_handler(MessageHandler(filters.PreCheckoutQuery.ALL, pre_checkout))
-application.add_handler(MessageHandler(filters.CallbackQuery.ALL, callback_handler))
 
 # ================= LOOP ASYNC =================
 loop = asyncio.new_event_loop()
 
-def start_async_loop():
+def start_loop():
     asyncio.set_event_loop(loop)
     loop.run_forever()
 
-threading.Thread(target=start_async_loop, daemon=True).start()
+threading.Thread(target=start_loop, daemon=True).start()
 
-async def setup_telegram():
+async def setup():
     await application.initialize()
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
     await application.start()
     logger.info("🤖 Sophia Bot iniciado")
 
-asyncio.run_coroutine_threadsafe(setup_telegram(), loop)
+asyncio.run_coroutine_threadsafe(setup(), loop)
 
 # ================= FLASK =================
 app = Flask(__name__)
@@ -234,5 +233,5 @@ def telegram_webhook():
 
 # ================= MAIN =================
 if __name__ == "__main__":
-    logger.info("🚀 Iniciando Sophia Bot com VIP e Stars")
+    logger.info("🚀 Iniciando Sophia Bot")
     app.run(host="0.0.0.0", port=PORT)
