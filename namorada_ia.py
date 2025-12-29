@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
-WEBHOOK FIXO NO CÓDIGO | RESET TOTAL
+WEBHOOK FIXO | LOOP ASYNC CORRETO
 """
 
 import os
 import asyncio
 import logging
+import threading
 import aiohttp
 from flask import Flask, request
 from telegram import Update
@@ -30,7 +31,6 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 PORT = int(os.getenv("PORT", 8080))
 
-# 🔥 WEBHOOK FIXO (IGNORA RAILWAY)
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
 WEBHOOK_PATH = "/telegram"
 
@@ -64,29 +64,19 @@ class Grok:
             "temperature": 0.85
         }
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    GROK_API_URL,
-                    headers=self.headers,
-                    json=payload,
-                    timeout=30
-                ) as resp:
-
-                    if resp.status != 200:
-                        logger.error(await resp.text())
-                        return "Hmm… algo deu errado 😕"
-
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"]
-
-        except Exception as e:
-            logger.error(f"Grok error: {e}")
-            return "Tive um errinho agora 😕 Me fala de novo, amor?"
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                GROK_API_URL,
+                headers=self.headers,
+                json=payload,
+                timeout=30
+            ) as resp:
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"]
 
 grok = Grok()
 
-# ================= TELEGRAM =================
+# ================= TELEGRAM HANDLER =================
 async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.strip()
 
@@ -98,13 +88,35 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     resposta = await grok.responder(texto)
     await update.message.reply_text(resposta)
 
-# ================= FLASK + WEBHOOK =================
-app = Flask(__name__)
-
+# ================= APP TELEGRAM =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(
     MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem)
 )
+
+# ================= LOOP ASYNC BACKGROUND =================
+loop = asyncio.new_event_loop()
+
+def start_async_loop():
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+threading.Thread(target=start_async_loop, daemon=True).start()
+
+async def setup_telegram():
+    await application.initialize()
+    await application.bot.delete_webhook(drop_pending_updates=True)
+    await application.bot.set_webhook(
+        f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}",
+        drop_pending_updates=True
+    )
+    await application.start()
+    logger.info("🤖 Telegram Application iniciado")
+
+asyncio.run_coroutine_threadsafe(setup_telegram(), loop)
+
+# ================= FLASK =================
+app = Flask(__name__)
 
 @app.route("/")
 def home():
@@ -113,34 +125,13 @@ def home():
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def telegram_webhook():
     update = Update.de_json(request.json, application.bot)
-    application.create_task(application.process_update(update))
+    asyncio.run_coroutine_threadsafe(
+        application.process_update(update),
+        loop
+    )
     return "ok", 200
 
 # ================= MAIN =================
-async def setup_webhook():
-    await application.initialize()
-
-    webhook_final = f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}"
-
-    # 🔥 RESET TOTAL (IGNORA CACHE / VARIÁVEL)
-    await application.bot.delete_webhook(drop_pending_updates=True)
-    await application.bot.set_webhook(
-        webhook_final,
-        drop_pending_updates=True
-    )
-
-    logger.info(f"🌐 Webhook FIXO FINAL: {webhook_final}")
-
-def main():
-    if not TELEGRAM_TOKEN:
-        raise RuntimeError("❌ TELEGRAM_TOKEN não definido")
-    if not GROK_API_KEY:
-        raise RuntimeError("❌ GROK_API_KEY não definido")
-
-    logger.info("🚀 Iniciando Sophia Bot (WEBHOOK FIXO)")
-
-    asyncio.run(setup_webhook())
-    app.run(host="0.0.0.0", port=PORT)
-
 if __name__ == "__main__":
-    main()
+    logger.info("🚀 Iniciando Sophia Bot (LOOP CORRETO)")
+    app.run(host="0.0.0.0", port=PORT)
