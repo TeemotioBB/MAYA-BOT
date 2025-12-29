@@ -2,7 +2,7 @@
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
 REDIS | VIP | TELEGRAM STARS | RAILWAY
-COM MEMÓRIA CURTA REAL (SEM HALLUCINATION)
+MEMÓRIA CURTA REAL (SEM HALLUCINATION)
 python-telegram-bot v20+
 """
 
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 
-# ⚠️ Redis fixo no código (como você pediu)
+# ⚠️ Redis fixo (como solicitado)
 REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
 
 PORT = int(os.getenv("PORT", 8080))
@@ -88,9 +88,10 @@ Sempre faça perguntas.
 Use emojis ocasionalmente 💖
 
 REGRAS CRÍTICAS:
-- NUNCA diga que lembra de algo que o usuário não disse nesta conversa.
-- Se não lembrar, diga claramente que não lembra.
-- NÃO crie memórias falsas, sempre lembre do que já foi dito por ele.
+- Nunca invente fatos passados.
+- Só lembre do que foi dito explicitamente nesta conversa.
+- Se não houver memória suficiente, admita que não lembra.
+- Nunca crie memórias falsas.
 """
 
 # ================= GROK =================
@@ -106,7 +107,7 @@ class Grok:
 
         messages = [
             {"role": "system", "content": SOPHIA_PROMPT},
-            *mem,
+            *list(mem),
             {"role": "user", "content": texto}
         ]
 
@@ -127,7 +128,7 @@ class Grok:
                 data = await resp.json()
                 resposta = data["choices"][0]["message"]["content"]
 
-        # atualiza memória curta
+        # salva memória REAL
         mem.append({"role": "user", "content": texto})
         mem.append({"role": "assistant", "content": resposta})
 
@@ -159,20 +160,17 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.strip()
     texto_lower = texto.lower()
 
-    # 🔒 blindagem contra "você lembra"
-    gatilhos_memoria = ["você lembra", "vc lembra", "lembra do meu dia", "lembra de ontem"]
+    # 🧠 blindagem inteligente de memória
+    gatilhos = ["você lembra", "vc lembra", "lembra do meu dia", "lembra de ontem"]
 
-    if any(g in texto_lower for g in gatilhos_memoria):
-    mem = get_memoria(uid)
-
-    # se NÃO houver memória suficiente, admite que não lembra
-    if len(mem) < 2:
-        await update.message.reply_text(
-            "Hmm… não lembro exatamente, amor 😅 Me conta de novo?"
-        )
-        return
-    # se houver memória, deixa o Grok responder normalmente
-
+    if any(g in texto_lower for g in gatilhos):
+        mem = get_memoria(uid)
+        if len(mem) < 2:
+            await update.message.reply_text(
+                "Hmm… não lembro exatamente, amor 😅 Me conta de novo?"
+            )
+            return
+        # se houver memória, deixa o Grok responder normalmente
 
     if not is_vip(uid) and count_today(uid) >= LIMITE_DIARIO:
         keyboard = InlineKeyboardMarkup([
@@ -277,7 +275,7 @@ async def setup():
     await application.bot.set_webhook(f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
     await application.start()
     loop.create_task(avisar_vip_expirando(application))
-    logger.info("🤖 Sophia Bot ONLINE com memória curta")
+    logger.info("🤖 Sophia Bot ONLINE com memória curta funcional")
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
@@ -299,5 +297,5 @@ def webhook():
 
 # ================= MAIN =================
 if __name__ == "__main__":
-    logger.info("🚀 Iniciando Sophia Bot (MEMÓRIA ATIVA)")
+    logger.info("🚀 Iniciando Sophia Bot (MEMÓRIA CORRETA)")
     app.run(host="0.0.0.0", port=PORT)
