@@ -88,10 +88,9 @@ Sempre faça perguntas.
 Use emojis ocasionalmente 💖
 
 REGRAS CRÍTICAS:
-- NUNCA invente fatos passados.
 - NUNCA diga que lembra de algo que o usuário não disse nesta conversa.
 - Se não lembrar, diga claramente que não lembra.
-- NÃO crie memórias falsas.
+- NÃO crie memórias falsas, sempre lembre do que já foi dito por ele.
 """
 
 # ================= GROK =================
