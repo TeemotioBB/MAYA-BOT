@@ -65,14 +65,14 @@ r = redis.from_url(
 # ================= CONFIGURAÇÕES =================
 LIMITE_DIARIO = 15
 DIAS_VIP = 15
-PRECO_VIP_STARS = 250
+PRECO_VIP_STARS = 250  # altere para 1 apenas para testes
 
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= MEMÓRIA DE CURTO PRAZO =================
-MAX_MEMORIA = 6
-short_memory = {}
+MAX_MEMORIA = 6  # 3 turnos (usuário + assistente)
+short_memory = {}  # user_id -> deque
 
 def get_memory(uid: int):
     if uid not in short_memory:
@@ -129,6 +129,7 @@ class Grok:
                 data = await resp.json()
                 answer = data["choices"][0]["message"]["content"]
 
+        # salva memória REAL
         mem.append({"role": "user", "content": text})
         mem.append({"role": "assistant", "content": answer})
 
@@ -158,19 +159,6 @@ def increment(uid: int):
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text.strip().lower()
-
-    # 💎 OFERTA DE VIP SE A PALAVRA "VIP" APARECER (ANTES DA TRAVA)
-    if not is_vip(uid) and "vip" in text:
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("💖 Virar VIP – 250 ⭐", callback_data="buy_vip")]
-        ])
-        await update.message.reply_text(
-            "💖 Quer virar VIP, amor? 😘\n\n"
-            "Como VIP você conversa comigo sem limites por 15 dias 💬🔥\n"
-            "É só tocar no botão abaixo 💫",
-            reply_markup=keyboard
-        )
-        return
 
     # 🧠 proteção inteligente de memória
     gatilhos_memoria = [
@@ -290,7 +278,7 @@ async def setup():
     await application.bot.set_webhook(f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
     await application.start()
     loop.create_task(vip_expiry_warning(application))
-    logger.info("🤖 Sophia Bot ONLINE (VIP ATIVO)")
+    logger.info("🤖 Sophia Bot ONLINE (VERSÃO EM PORTUGUÊS)")
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
@@ -312,5 +300,5 @@ def webhook():
 
 # ================= MAIN =================
 if __name__ == "__main__":
-    logger.info("🚀 Iniciando Sophia Bot (VIP IMPLEMENTADO)")
+    logger.info("🚀 Iniciando Sophia Bot (VERSÃO EM PORTUGUÊS)")
     app.run(host="0.0.0.0", port=PORT)
