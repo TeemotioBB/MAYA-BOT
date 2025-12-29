@@ -161,11 +161,18 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 🔒 blindagem contra "você lembra"
     gatilhos_memoria = ["você lembra", "vc lembra", "lembra do meu dia", "lembra de ontem"]
+
     if any(g in texto_lower for g in gatilhos_memoria):
+    mem = get_memoria(uid)
+
+    # se NÃO houver memória suficiente, admite que não lembra
+    if len(mem) < 2:
         await update.message.reply_text(
             "Hmm… não lembro exatamente, amor 😅 Me conta de novo?"
         )
         return
+    # se houver memória, deixa o Grok responder normalmente
+
 
     if not is_vip(uid) and count_today(uid) >= LIMITE_DIARIO:
         keyboard = InlineKeyboardMarkup([
