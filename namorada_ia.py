@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
-WEBHOOK FIXO | LOOP ASYNC CORRETO
+WEBHOOK FIXO | LOOP ASYNC CORRETO | MEMÓRIA CURTA
 """
 
 import os
@@ -46,6 +46,10 @@ Sempre faça perguntas.
 Use emojis ocasionalmente 💖
 """
 
+# ================= MEMÓRIA CURTA =================
+MEMORIA_MAX = 10  # mensagens (user + assistant)
+memoria_usuarios = {}
+
 class Grok:
     def __init__(self):
         self.headers = {
@@ -53,13 +57,18 @@ class Grok:
             "Content-Type": "application/json"
         }
 
-    async def responder(self, texto: str) -> str:
+    async def responder(self, user_id: int, texto: str) -> str:
+        historico = memoria_usuarios.setdefault(user_id, [])
+
+        mensagens = [
+            {"role": "system", "content": SOPHIA_PROMPT},
+            *historico,
+            {"role": "user", "content": texto}
+        ]
+
         payload = {
             "model": MODEL,
-            "messages": [
-                {"role": "system", "content": SOPHIA_PROMPT},
-                {"role": "user", "content": texto}
-            ],
+            "messages": mensagens,
             "max_tokens": 250,
             "temperature": 0.85
         }
@@ -72,20 +81,33 @@ class Grok:
                 timeout=30
             ) as resp:
                 data = await resp.json()
-                return data["choices"][0]["message"]["content"]
+                resposta = data["choices"][0]["message"]["content"]
+
+        # Atualiza memória
+        historico.extend([
+            {"role": "user", "content": texto},
+            {"role": "assistant", "content": resposta}
+        ])
+
+        # Limita tamanho da memória
+        if len(historico) > MEMORIA_MAX:
+            memoria_usuarios[user_id] = historico[-MEMORIA_MAX:]
+
+        return resposta
 
 grok = Grok()
 
 # ================= TELEGRAM HANDLER =================
 async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.strip()
+    user_id = update.effective_user.id
 
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
         action=ChatAction.TYPING
     )
 
-    resposta = await grok.responder(texto)
+    resposta = await grok.responder(user_id, texto)
     await update.message.reply_text(resposta)
 
 # ================= APP TELEGRAM =================
@@ -133,5 +155,5 @@ def telegram_webhook():
 
 # ================= MAIN =================
 if __name__ == "__main__":
-    logger.info("🚀 Iniciando Sophia Bot (LOOP CORRETO)")
+    logger.info("🚀 Iniciando Sophia Bot (MEMÓRIA ATIVA)")
     app.run(host="0.0.0.0", port=PORT)
