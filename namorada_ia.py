@@ -65,7 +65,7 @@ r = redis.from_url(
 # ================= CONFIG =================
 LIMITE_DIARIO = 15
 VIP_DIAS = 15
-VIP_PRECO_STARS = 250
+VIP_PRECO_STARS = 1
 
 MODEL = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
@@ -174,7 +174,7 @@ async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not is_vip(uid) and count_today(uid) >= LIMITE_DIARIO:
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="comprar_vip")]
+            [InlineKeyboardButton("💖 Comprar VIP – 1 ⭐", callback_data="comprar_vip")]
         ])
         await update.message.reply_text(
             "💔 Seu limite de mensagens comigo acabou hoje, amor.\n"
