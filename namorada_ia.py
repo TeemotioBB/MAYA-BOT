@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # ================= ENV =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-REDIS_URL = os.getenv("REDIS_URL")
+REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
 PORT = int(os.getenv("PORT", 8080))
 
 if not TELEGRAM_TOKEN or not GROK_API_KEY or not REDIS_URL:
