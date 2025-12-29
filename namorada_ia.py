@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
-WEBHOOK | Railway | RESET TOTAL
+WEBHOOK FIXO NO CÓDIGO | RESET TOTAL
 """
 
 import os
@@ -25,11 +25,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ================= ENV =================
+# ================= TOKENS =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 PORT = int(os.getenv("PORT", 8080))
+
+# 🔥 WEBHOOK FIXO (IGNORA RAILWAY)
+WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
+WEBHOOK_PATH = "/telegram"
 
 # ================= GROK =================
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
@@ -107,7 +110,7 @@ application.add_handler(
 def home():
     return "🤖 Sophia Bot online"
 
-@app.route("/telegram", methods=["POST"])
+@app.route(WEBHOOK_PATH, methods=["POST"])
 def telegram_webhook():
     update = Update.de_json(request.json, application.bot)
     application.create_task(application.process_update(update))
@@ -117,23 +120,24 @@ def telegram_webhook():
 async def setup_webhook():
     await application.initialize()
 
-    # 🔥 RESET TOTAL DO WEBHOOK
+    webhook_final = f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}"
+
+    # 🔥 RESET TOTAL (IGNORA CACHE / VARIÁVEL)
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(
-        f"{WEBHOOK_URL}/telegram",
+        webhook_final,
         drop_pending_updates=True
     )
+
+    logger.info(f"🌐 Webhook FIXO FINAL: {webhook_final}")
 
 def main():
     if not TELEGRAM_TOKEN:
         raise RuntimeError("❌ TELEGRAM_TOKEN não definido")
     if not GROK_API_KEY:
         raise RuntimeError("❌ GROK_API_KEY não definido")
-    if not WEBHOOK_URL:
-        raise RuntimeError("❌ WEBHOOK_URL não definido")
 
-    logger.info("🚀 Iniciando Sophia Bot")
-    logger.info(f"🌐 Webhook FINAL: {WEBHOOK_URL}/telegram")
+    logger.info("🚀 Iniciando Sophia Bot (WEBHOOK FIXO)")
 
     asyncio.run(setup_webhook())
     app.run(host="0.0.0.0", port=PORT)
