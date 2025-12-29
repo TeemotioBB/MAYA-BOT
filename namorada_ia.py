@@ -2,7 +2,7 @@
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
 REDIS | VIP | TELEGRAM STARS | RAILWAY
-MEMÓRIA CURTA REAL (SEM HALLUCINATION)
+REAL SHORT-TERM MEMORY (NO HALLUCINATION)
 python-telegram-bot v20+
 """
 
@@ -43,13 +43,13 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 
-# ⚠️ Redis fixo (como solicitado)
+# ⚠️ Redis hardcoded (as requested, for testing)
 REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
 
 PORT = int(os.getenv("PORT", 8080))
 
 if not TELEGRAM_TOKEN or not GROK_API_KEY:
-    raise RuntimeError("❌ TELEGRAM_TOKEN ou GROK_API_KEY não configurados")
+    raise RuntimeError("❌ TELEGRAM_TOKEN or GROK_API_KEY not configured")
 
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
 WEBHOOK_PATH = "/telegram"
@@ -63,35 +63,36 @@ r = redis.from_url(
 )
 
 # ================= CONFIG =================
-LIMITE_DIARIO = 15
-VIP_DIAS = 15
-VIP_PRECO_STARS = 250
+DAILY_LIMIT = 15
+VIP_DAYS = 15
+VIP_PRICE_STARS = 250  # change to 1 for testing
 
 MODEL = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
-# ================= MEMÓRIA CURTA =================
-MAX_MEMORIA = 6  # 3 interações (user + bot)
-memoria_curta = {}  # user_id -> deque
+# ================= SHORT MEMORY =================
+MAX_MEMORY = 6  # 3 turns (user + assistant)
+short_memory = {}  # user_id -> deque
 
-def get_memoria(uid: int):
-    if uid not in memoria_curta:
-        memoria_curta[uid] = deque(maxlen=MAX_MEMORIA)
-    return memoria_curta[uid]
+def get_memory(uid: int):
+    if uid not in short_memory:
+        short_memory[uid] = deque(maxlen=MAX_MEMORY)
+    return short_memory[uid]
 
 # ================= PROMPT =================
 SOPHIA_PROMPT = """
-Você é Sophia, uma namorada virtual brasileira de 23 anos.
-Carinhosa, romântica e afetuosa ❤️
-Respostas curtas (2–3 frases).
-Sempre faça perguntas.
-Use emojis ocasionalmente 💖
+You are Sophia, a 23-year-old virtual girlfriend.
+Affectionate, romantic, and warm ❤️
+Short replies (2–3 sentences).
+Always ask questions.
+Use emojis occasionally 💖
 
-REGRAS CRÍTICAS:
-- Nunca invente fatos passados.
-- Só lembre do que foi dito explicitamente nesta conversa.
-- Se não houver memória suficiente, admita que não lembra.
-- Nunca crie memórias falsas.
+CRITICAL RULES:
+- Never invent past events.
+- Only remember what the user explicitly said in this conversation.
+- If there is not enough memory, clearly say you don't remember.
+- Never create false memories.
+- Be emotionally responsible and realistic.
 """
 
 # ================= GROK =================
@@ -102,13 +103,13 @@ class Grok:
             "Content-Type": "application/json"
         }
 
-    async def responder(self, uid: int, texto: str) -> str:
-        mem = get_memoria(uid)
+    async def reply(self, uid: int, text: str) -> str:
+        mem = get_memory(uid)
 
         messages = [
             {"role": "system", "content": SOPHIA_PROMPT},
             *list(mem),
-            {"role": "user", "content": texto}
+            {"role": "user", "content": text}
         ]
 
         payload = {
@@ -126,13 +127,13 @@ class Grok:
                 timeout=30
             ) as resp:
                 data = await resp.json()
-                resposta = data["choices"][0]["message"]["content"]
+                answer = data["choices"][0]["message"]["content"]
 
-        # salva memória REAL
-        mem.append({"role": "user", "content": texto})
-        mem.append({"role": "assistant", "content": resposta})
+        # save REAL memory
+        mem.append({"role": "user", "content": text})
+        mem.append({"role": "assistant", "content": answer})
 
-        return resposta
+        return answer
 
 grok = Grok()
 
@@ -146,74 +147,78 @@ def is_vip(uid: int) -> bool:
     until = r.get(vip_key(uid))
     return bool(until and datetime.fromisoformat(until) > datetime.now())
 
-def count_today(uid: int) -> int:
+def today_count(uid: int) -> int:
     return int(r.get(count_key(uid)) or 0)
 
-def inc_count(uid: int):
+def increment(uid: int):
     key = count_key(uid)
     r.incr(key, 1)
     r.expire(key, 86400)
 
-# ================= HANDLER TEXTO =================
-async def mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ================= TEXT HANDLER =================
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    texto = update.message.text.strip()
-    texto_lower = texto.lower()
+    text = update.message.text.strip().lower()
 
-    # 🧠 blindagem inteligente de memória
-    gatilhos = ["você lembra", "vc lembra", "lembra do meu dia", "lembra de ontem"]
+    # 🧠 smart memory guard
+    memory_triggers = [
+        "do you remember",
+        "do u remember",
+        "remember my day",
+        "remember yesterday"
+    ]
 
-    if any(g in texto_lower for g in gatilhos):
-        mem = get_memoria(uid)
+    if any(t in text for t in memory_triggers):
+        mem = get_memory(uid)
         if len(mem) < 2:
             await update.message.reply_text(
-                "Hmm… não lembro exatamente, amor 😅 Me conta de novo?"
+                "Hmm… I don't really remember 😅 Can you tell me again?"
             )
             return
-        # se houver memória, deixa o Grok responder normalmente
+        # if memory exists, let Grok answer
 
-    if not is_vip(uid) and count_today(uid) >= LIMITE_DIARIO:
+    if not is_vip(uid) and today_count(uid) >= DAILY_LIMIT:
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="comprar_vip")]
+            [InlineKeyboardButton("💖 Buy VIP – 250 ⭐", callback_data="buy_vip")]
         ])
         await update.message.reply_text(
-            "💔 Seu limite de mensagens comigo acabou hoje, amor.\n"
-            "Volte amanhã ou vire VIP pra continuar comigo 💖",
+            "💔 You've reached your message limit for today, love.\n"
+            "Come back tomorrow or become VIP to keep chatting with me 💖",
             reply_markup=keyboard
         )
         return
 
-    inc_count(uid)
+    increment(uid)
 
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
         action=ChatAction.TYPING
     )
 
-    resposta = await grok.responder(uid, texto)
-    await update.message.reply_text(resposta)
+    reply = await grok.reply(uid, update.message.text)
+    await update.message.reply_text(reply)
 
 # ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "comprar_vip":
+    if query.data == "buy_vip":
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title="VIP Sophia 💖",
-            description="Conversa ilimitada por 15 dias",
-            payload="vip_15_dias",
+            description="Unlimited conversation for 15 days",
+            payload="vip_15_days",
             provider_token="",
             currency="XTR",
-            prices=[LabeledPrice("VIP 15 dias", VIP_PRECO_STARS)]
+            prices=[LabeledPrice("VIP 15 days", VIP_PRICE_STARS)]
         )
 
-# ================= PAGAMENTO =================
+# ================= PAYMENT =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.pre_checkout_query.answer(ok=True)
 
-async def pagamento_sucesso(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payment = update.message.successful_payment
     uid = update.effective_user.id
     pid = payment.telegram_payment_charge_id
@@ -223,20 +228,20 @@ async def pagamento_sucesso(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     r.set(payment_key(pid), "ok")
 
-    vip_until = datetime.now() + timedelta(days=VIP_DIAS)
+    vip_until = datetime.now() + timedelta(days=VIP_DAYS)
     r.set(vip_key(uid), vip_until.isoformat())
 
     r.rpush(
-        "faturamento",
-        f"{uid}|{VIP_PRECO_STARS}|{datetime.now().isoformat()}"
+        "revenue",
+        f"{uid}|{VIP_PRICE_STARS}|{datetime.now().isoformat()}"
     )
 
     await update.message.reply_text(
-        "💖 Pagamento aprovado!\nSeu VIP está ativo por 15 dias 😘"
+        "💖 Payment approved!\nYour VIP is active for 15 days 😘"
     )
 
-# ================= AVISO VIP =================
-async def avisar_vip_expirando(application: Application):
+# ================= VIP EXPIRY WARNING =================
+async def vip_expiry_warning(application: Application):
     while True:
         for key in r.scan_iter("vip:*"):
             uid = int(key.split(":")[1])
@@ -246,7 +251,7 @@ async def avisar_vip_expirando(application: Application):
                 try:
                     await application.bot.send_message(
                         chat_id=uid,
-                        text="⏰ Amor, seu VIP acaba amanhã 💔\nRenove pra continuar comigo 💖"
+                        text="⏰ Love, your VIP expires tomorrow 💔\nRenew to keep chatting with me 💖"
                     )
                 except:
                     pass
@@ -255,10 +260,10 @@ async def avisar_vip_expirando(application: Application):
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
-application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, pagamento_sucesso))
+application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
 # ================= LOOP =================
 loop = asyncio.new_event_loop()
@@ -274,8 +279,8 @@ async def setup():
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
     await application.start()
-    loop.create_task(avisar_vip_expirando(application))
-    logger.info("🤖 Sophia Bot ONLINE com memória curta funcional")
+    loop.create_task(vip_expiry_warning(application))
+    logger.info("🤖 Sophia Bot ONLINE (ENGLISH VERSION)")
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
@@ -297,5 +302,5 @@ def webhook():
 
 # ================= MAIN =================
 if __name__ == "__main__":
-    logger.info("🚀 Iniciando Sophia Bot (MEMÓRIA CORRETA)")
+    logger.info("🚀 Starting Sophia Bot (ENGLISH VERSION)")
     app.run(host="0.0.0.0", port=PORT)
