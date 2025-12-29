@@ -158,8 +158,9 @@ application.add_handler(CallbackQueryHandler(callback_handler))
 # ================= STARTUP =================
 async def startup():
     await application.initialize()
+    await application.start()
     await application.bot.set_webhook(f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
-    logger.info("🚀 Webhook configurado")
+    logger.info("🚀 Webhook configurado e bot iniciado")
 
 loop.run_until_complete(startup())
 
