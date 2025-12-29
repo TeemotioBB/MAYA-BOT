@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
-WEBHOOK | Railway | Código LIMPO
+WEBHOOK | Railway | RESET TOTAL
 """
 
 import os
@@ -116,8 +116,13 @@ def telegram_webhook():
 # ================= MAIN =================
 async def setup_webhook():
     await application.initialize()
+
+    # 🔥 RESET TOTAL DO WEBHOOK
     await application.bot.delete_webhook(drop_pending_updates=True)
-    await application.bot.set_webhook(f"{WEBHOOK_URL}/telegram")
+    await application.bot.set_webhook(
+        f"{WEBHOOK_URL}/telegram",
+        drop_pending_updates=True
+    )
 
 def main():
     if not TELEGRAM_TOKEN:
@@ -128,7 +133,7 @@ def main():
         raise RuntimeError("❌ WEBHOOK_URL não definido")
 
     logger.info("🚀 Iniciando Sophia Bot")
-    logger.info(f"🌐 Webhook: {WEBHOOK_URL}/telegram")
+    logger.info(f"🌐 Webhook FINAL: {WEBHOOK_URL}/telegram")
 
     asyncio.run(setup_webhook())
     app.run(host="0.0.0.0", port=PORT)
