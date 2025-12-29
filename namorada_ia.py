@@ -2,7 +2,7 @@
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
 REDIS | VIP | TELEGRAM STARS | RAILWAY
-REAL SHORT-TERM MEMORY (NO HALLUCINATION)
+MEMÓRIA DE CURTO PRAZO REAL (SEM ALUCINAÇÕES)
 python-telegram-bot v20+
 """
 
@@ -39,7 +39,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ================= ENV =================
+# ================= VARIÁVEIS DE AMBIENTE =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 
@@ -53,68 +53,69 @@ WEBHOOK_PATH = "/telegram"
 # ================= REDIS =================
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
-# ================= CONFIG =================
-DAILY_LIMIT = 15
-VIP_DAYS = 15
-VIP_PRICE_STARS = 250
+# ================= CONFIGURAÇÕES =================
+LIMITE_DIARIO = 15
+DIAS_VIP = 15
+PRECO_VIP_STARS = 250
 
-MODEL = "grok-4-fast-reasoning"
+MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
-# ================= MEMORY =================
-MAX_MEMORY = 6
+# ================= MEMÓRIA DE CURTO PRAZO =================
+MAX_MEMORIA = 6
 short_memory = {}
 
 def get_memory(uid: int):
     if uid not in short_memory:
-        short_memory[uid] = deque(maxlen=MAX_MEMORY)
+        short_memory[uid] = deque(maxlen=MAX_MEMORIA)
     return short_memory[uid]
 
-# ================= CHAT LOG =================
+# ================= LOG DE CONVERSA =================
 def log_chat(uid: int, role: str, text: str):
     ts = datetime.now().strftime("%H:%M:%S")
     r.rpush(f"chatlog:{uid}", f"[{ts}] {role.upper()}: {text}")
 
 # ================= VIP =================
-def vip_key(uid): return f"vip:{uid}"
+def vip_key(uid):
+    return f"vip:{uid}"
 
 def is_vip(uid: int) -> bool:
     until = r.get(vip_key(uid))
     return bool(until and datetime.fromisoformat(until) > datetime.now())
 
-# ================= PROMPT BUILDER =================
+# ================= CONSTRUTOR DE PROMPT =================
 def build_prompt(is_vip_user: bool) -> str:
     base = """
-You are Maya, a 23-year-old virtual girlfriend.
-Affectionate, romantic, playful and emotionally intelligent ❤️
-Short replies (2–3 sentences).
-Always ask questions.
-If they're getting naughty, get naughty right back - keep up the vibe
-If they ask for photos, say that only VIPs get photos.
-Use emojis occasionally 💖
+Você é Maya, uma namorada virtual de 23 anos.
+Carinhosa, romântica, brincalhona e emocionalmente inteligente ❤️
+Respostas curtas (2–3 frases).
+Sempre faça perguntas.
+Se o usuário falar safadeza, seja extremamente safada também 😈
+Se pedirem fotos, diga que apenas usuários VIP recebem fotos.
+Use emojis ocasionalmente 💖
 
-CRITICAL RULES:
-- Never invent past events.
-- Only remember what the user explicitly said in this conversation.
-- Never create false memories.
+REGRAS CRÍTICAS:
+- Nunca invente eventos passados.
+- Só lembre do que o usuário disse explicitamente nesta conversa.
+- Nunca crie memórias falsas.
 """
 
     if is_vip_user:
         base += """
 
-IMPORTANT:
-- The user IS VIP.
-- You ARE ALLOWED to be naughty, teasing and sexually suggestive.
-- You MAY talk dirty and flirt openly.
-- If the user asks for photos, you can describe sending exclusive photos.
+IMPORTANTE:
+- O usuário É VIP.
+- Você ESTÁ AUTORIZADA a ser provocante, safada e sugestiva.
+- Você PODE flertar abertamente e falar coisas mais quentes.
+- Se o usuário pedir fotos, você pode DESCREVER o envio de fotos exclusivas.
 """
     else:
         base += """
 
-IMPORTANT:
-- The user is NOT VIP.
-- Never send explicit sexual content or photos.
-- If asked for photos or explicit content, politely say it is VIP-only.
+IMPORTANTE:
+- O usuário NÃO é VIP.
+- Nunca envie conteúdo sexual explícito ou fotos.
+- Se pedirem fotos ou algo explícito, diga educadamente que é exclusivo para VIPs.
 """
 
     return base.strip()
@@ -140,7 +141,7 @@ class Grok:
         ]
 
         payload = {
-            "model": MODEL,
+            "model": MODELO,
             "messages": messages,
             "temperature": 0.9,
             "max_tokens": 250
@@ -162,12 +163,12 @@ class Grok:
 
 grok = Grok()
 
-# ================= MESSAGE HANDLER =================
+# ================= HANDLER DE MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     user_text = update.message.text.strip()
 
-    log_chat(uid, "user", user_text)
+    log_chat(uid, "usuario", user_text)
 
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
@@ -179,9 +180,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log_chat(uid, "sophia", reply)
     await update.message.reply_text(reply)
 
-# ================= BOT SETUP =================
+# ================= CONFIGURAÇÃO DO BOT =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+application.add_handler(
+    MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler)
+)
 
 loop = asyncio.new_event_loop()
 
@@ -196,11 +199,11 @@ async def setup():
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
     await application.start()
-    logger.info("🤖 Sophia Bot ONLINE (VIP-AWARE PROMPT)")
+    logger.info("🤖 Sophia Bot ONLINE (PROMPT COM SUPORTE A VIP)")
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
-# ================= FLASK =================
+# ================= FLASK (WEBHOOK) =================
 app = Flask(__name__)
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
