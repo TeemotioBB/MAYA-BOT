@@ -43,7 +43,6 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 
-# ⚠️ Redis hardcoded (as requested, for testing)
 REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
 
 PORT = int(os.getenv("PORT", 8080))
@@ -65,19 +64,27 @@ r = redis.from_url(
 # ================= CONFIG =================
 DAILY_LIMIT = 15
 VIP_DAYS = 15
-VIP_PRICE_STARS = 250  # change to 1 for testing
+VIP_PRICE_STARS = 250  # set to 1 for testing
 
 MODEL = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= SHORT MEMORY =================
-MAX_MEMORY = 6  # 3 turns (user + assistant)
-short_memory = {}  # user_id -> deque
+MAX_MEMORY = 6
+short_memory = {}
 
 def get_memory(uid: int):
     if uid not in short_memory:
         short_memory[uid] = deque(maxlen=MAX_MEMORY)
     return short_memory[uid]
+
+# ================= CHAT LOG =================
+def log_chat(uid: int, role: str, text: str):
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    r.rpush(
+        f"chatlog:{uid}",
+        f"[{timestamp}] {role.upper()}: {text}"
+    )
 
 # ================= PROMPT =================
 SOPHIA_PROMPT = """
@@ -129,7 +136,6 @@ class Grok:
                 data = await resp.json()
                 answer = data["choices"][0]["message"]["content"]
 
-        # save REAL memory
         mem.append({"role": "user", "content": text})
         mem.append({"role": "assistant", "content": answer})
 
@@ -155,12 +161,16 @@ def increment(uid: int):
     r.incr(key, 1)
     r.expire(key, 86400)
 
-# ================= TEXT HANDLER =================
+# ================= MESSAGE HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    text = update.message.text.strip().lower()
+    user_text = update.message.text.strip()
 
-    # 🧠 smart memory guard
+    # LOG USER
+    log_chat(uid, "user", user_text)
+
+    text_lower = user_text.lower()
+
     memory_triggers = [
         "do you remember",
         "do u remember",
@@ -168,24 +178,27 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "remember yesterday"
     ]
 
-    if any(t in text for t in memory_triggers):
+    if any(t in text_lower for t in memory_triggers):
         mem = get_memory(uid)
         if len(mem) < 2:
-            await update.message.reply_text(
-                "Hmm… I don't really remember 😅 Can you tell me again?"
-            )
+            reply = "Hmm… I don't really remember 😅 Can you tell me again?"
+            log_chat(uid, "sophia", reply)
+            await update.message.reply_text(reply)
             return
-        # if memory exists, let Grok answer
 
     if not is_vip(uid) and today_count(uid) >= DAILY_LIMIT:
+        reply = (
+            "💔 You've reached your message limit for today, love.\n"
+            "Come back tomorrow or become VIP to keep chatting with me 💖"
+        )
+
+        log_chat(uid, "sophia", reply)
+
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("💖 Buy VIP – 250 ⭐", callback_data="buy_vip")]
         ])
-        await update.message.reply_text(
-            "💔 You've reached your message limit for today, love.\n"
-            "Come back tomorrow or become VIP to keep chatting with me 💖",
-            reply_markup=keyboard
-        )
+
+        await update.message.reply_text(reply, reply_markup=keyboard)
         return
 
     increment(uid)
@@ -195,7 +208,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action=ChatAction.TYPING
     )
 
-    reply = await grok.reply(uid, update.message.text)
+    reply = await grok.reply(uid, user_text)
+
+    # LOG SOPHIA
+    log_chat(uid, "sophia", reply)
+
     await update.message.reply_text(reply)
 
 # ================= CALLBACK =================
@@ -236,11 +253,12 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{uid}|{VIP_PRICE_STARS}|{datetime.now().isoformat()}"
     )
 
-    await update.message.reply_text(
-        "💖 Payment approved!\nYour VIP is active for 15 days 😘"
-    )
+    reply = "💖 Payment approved!\nYour VIP is active for 15 days 😘"
+    log_chat(uid, "sophia", reply)
 
-# ================= VIP EXPIRY WARNING =================
+    await update.message.reply_text(reply)
+
+# ================= VIP EXPIRY =================
 async def vip_expiry_warning(application: Application):
     while True:
         for key in r.scan_iter("vip:*"):
@@ -249,7 +267,7 @@ async def vip_expiry_warning(application: Application):
 
             if 0 < (until - datetime.now()).days == 1:
                 try:
-                    await application.bot.send_message(
+                    application.bot.send_message(
                         chat_id=uid,
                         text="⏰ Love, your VIP expires tomorrow 💔\nRenew to keep chatting with me 💖"
                     )
@@ -280,7 +298,7 @@ async def setup():
     await application.bot.set_webhook(f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
     await application.start()
     loop.create_task(vip_expiry_warning(application))
-    logger.info("🤖 Sophia Bot ONLINE (ENGLISH VERSION)")
+    logger.info("🤖 Sophia Bot ONLINE")
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
@@ -302,5 +320,5 @@ def webhook():
 
 # ================= MAIN =================
 if __name__ == "__main__":
-    logger.info("🚀 Starting Sophia Bot (ENGLISH VERSION)")
+    logger.info("🚀 Starting Sophia Bot")
     app.run(host="0.0.0.0", port=PORT)
