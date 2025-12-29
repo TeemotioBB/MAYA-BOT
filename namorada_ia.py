@@ -2,10 +2,6 @@
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
 REDIS | VIP | TELEGRAM STARS | RAILWAY
-MEMÓRIA CURTA REAL (SEM HALLUCINAT#!/usr/bin/env python3
-"""
-🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
-REDIS | VIP | TELEGRAM STARS | RAILWAY
 MEMÓRIA CURTA REAL (SEM HALLUCINATION)
 python-telegram-bot v20+
 """
