@@ -47,11 +47,18 @@ PORT = int(os.getenv("PORT", 8080))
 if not TELEGRAM_TOKEN or not GROK_API_KEY:
     raise RuntimeError("❌ Tokens não configurados")
 
-WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
-WEBHOOK_PATH = "/telegram"
+# O Railway fornece a URL automaticamente via env
+WEBHOOK_URL = os.getenv("RAILWAY_PUBLIC_DOMAIN", "https://maya-bot-production.up.railway.app")
+WEBHOOK_PATH = "/webhook"
 
 # ================= REDIS =================
-r = redis.from_url(REDIS_URL, decode_responses=True)
+try:
+    r = redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=5)
+    r.ping()  # Testa a conexão
+    logger.info("✅ Redis conectado com sucesso")
+except redis.ConnectionError:
+    logger.error("❌ Falha ao conectar ao Redis")
+    r = None
 
 # ================= CONFIG =================
 LIMITE_DIARIO = 15
@@ -86,24 +93,33 @@ def count_key(uid): return f"count:{uid}:{date.today()}"
 def lang_key(uid): return f"lang:{uid}"
 
 def is_vip(uid):
+    if not r:
+        return False
     until = r.get(vip_key(uid))
     return until and datetime.fromisoformat(until) > datetime.now()
 
 def today_count(uid):
+    if not r:
+        return 0
     return int(r.get(count_key(uid)) or 0)
 
 def increment(uid):
-    r.incr(count_key(uid))
-    r.expire(count_key(uid), 86400)
+    if r:
+        r.incr(count_key(uid))
+        r.expire(count_key(uid), 86400)
 
 def reset_daily_count(uid):
-    r.delete(count_key(uid))
+    if r:
+        r.delete(count_key(uid))
 
 def get_lang(uid):
+    if not r:
+        return "pt"
     return r.get(lang_key(uid)) or "pt"
 
 def set_lang(uid, lang):
-    r.set(lang_key(uid), lang)
+    if r:
+        r.set(lang_key(uid), lang)
 
 # ================= COMANDOS ADMIN =================
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -128,13 +144,26 @@ async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     uid = int(context.args[0])
     reset_daily_count(uid)
-    r.delete(vip_key(uid))
+    if r:
+        r.delete(vip_key(uid))
 
     await update.message.reply_text(
         f"🔥 Reset concluído:\n"
         f"• Limite diário\n"
         f"• VIP removido\n\n"
         f"👤 Usuário: {uid}"
+    )
+
+# ================= DEBUG COMMAND =================
+async def debug_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    await update.message.reply_text(
+        f"🔍 Debug Info:\n"
+        f"ID: {uid}\n"
+        f"VIP: {is_vip(uid)}\n"
+        f"Uso hoje: {today_count(uid)}/{LIMITE_DIARIO}\n"
+        f"Idioma: {get_lang(uid)}\n"
+        f"Redis: {'✅ Conectado' if r else '❌ Offline'}"
     )
 
 # ================= TEXTOS =================
@@ -160,11 +189,11 @@ TEXTS = {
         "vip_success": "💖 Payment approved!\nVIP active for 15 days 😘",
         "photo_block": (
             "😘 Love… full photos are only for VIPs 💖\n"
-            "Become VIP and I’ll show you more of me ✨"
+            "Become VIP and I'll show you more of me ✨"
         ),
         "lang_ok": "✅ Language set!",
         "after_lang": (
-            "💕 All set, my love! Now it’s official: you’re my favorite today ❤️\n\n"
+            "💕 All set, my love! Now it's official: you're my favorite today ❤️\n\n"
             "How are you feeling right now?\n"
             "I want to give you all the affection you deserve 😘"
         )
@@ -175,11 +204,11 @@ TEXTS = {
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
         return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️
-Short answers (2–3 sentences). Always ask questions.
+Short answers (2-3 sentences). Always ask questions.
 Do not be naughty on the first contact. Only be very naughty if the user gets naughty first 😏
 Use emojis occasionally 💖"""
     return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️
-Respostas curtas (2–3 frases). Sempre faça perguntas.
+Respostas curtas (2-3 frases). Sempre faça perguntas.
 Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
 Use emojis ocasionalmente 💖"""
 
@@ -200,21 +229,30 @@ class Grok:
             "temperature": 0.85
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                GROK_API_URL,
-                headers={
-                    "Authorization": f"Bearer {GROK_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json=payload
-            ) as resp:
-                data = await resp.json()
-                answer = data["choices"][0]["message"]["content"]
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    GROK_API_URL,
+                    headers={
+                        "Authorization": f"Bearer {GROK_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as resp:
+                    if resp.status != 200:
+                        logger.error(f"Grok API error: {resp.status}")
+                        return "❌ Desculpe, estou tendo problemas técnicos. Tente novamente mais tarde."
+                    
+                    data = await resp.json()
+                    answer = data["choices"][0]["message"]["content"]
 
-        mem.append({"role": "user", "content": text})
-        mem.append({"role": "assistant", "content": answer})
-        return answer
+            mem.append({"role": "user", "content": text})
+            mem.append({"role": "assistant", "content": answer})
+            return answer
+        except Exception as e:
+            logger.error(f"Erro no Grok: {e}")
+            return "❌ Oops, algo deu errado. Tente novamente!"
 
 grok = Grok()
 
@@ -265,7 +303,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             payload=f"vip_{uid}",
             provider_token="",
             currency="XTR",
-            prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)],
+            prices=[LabeledPrice("VIP Sophia - 15 dias", PRECO_VIP_STARS)],
             start_parameter="vip"
         )
 
@@ -281,7 +319,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             photo=FOTO_TEASE_FILE_ID,
             caption=TEXTS[lang]["photo_block"],
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+                [InlineKeyboardButton("💖 Comprar VIP - 250 ⭐", callback_data="buy_vip")]
             ])
         )
         return
@@ -290,7 +328,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             TEXTS[lang]["limit"],
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+                [InlineKeyboardButton("💖 Comprar VIP - 250 ⭐", callback_data="buy_vip")]
             ])
         )
         return
@@ -313,39 +351,126 @@ async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
-    r.set(vip_key(uid), vip_until.isoformat())
+    if r:
+        r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= APP =================
-application = Application.builder().token(TELEGRAM_TOKEN).build()
+# ================= INICIALIZAÇÃO DO BOT =================
+application = None
 
-application.add_handler(CommandHandler("start", start_handler))
-application.add_handler(CommandHandler("reset", reset_cmd))
-application.add_handler(CommandHandler("resetall", resetall_cmd))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-application.add_handler(CallbackQueryHandler(callback_handler))
-application.add_handler(PreCheckoutQueryHandler(pre_checkout))
-application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
+def init_bot():
+    global application
+    
+    if not TELEGRAM_TOKEN:
+        logger.error("❌ TELEGRAM_TOKEN não configurado!")
+        return
+    
+    try:
+        application = Application.builder().token(TELEGRAM_TOKEN).build()
+        
+        # Handlers
+        application.add_handler(CommandHandler("start", start_handler))
+        application.add_handler(CommandHandler("reset", reset_cmd))
+        application.add_handler(CommandHandler("resetall", resetall_cmd))
+        application.add_handler(CommandHandler("debug", debug_cmd))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+        application.add_handler(CallbackQueryHandler(callback_handler))
+        application.add_handler(PreCheckoutQueryHandler(pre_checkout))
+        application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
+        
+        logger.info("✅ Bot inicializado com sucesso!")
+        return application
+    except Exception as e:
+        logger.error(f"❌ Erro ao inicializar bot: {e}")
+        return None
 
-# ================= LOOP =================
-loop = asyncio.new_event_loop()
-threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
+# Inicializa o bot imediatamente
+init_bot()
 
-async def setup():
-    await application.initialize()
-    await application.bot.delete_webhook(drop_pending_updates=True)
-    await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
-    await application.start()
-
-asyncio.run_coroutine_threadsafe(setup(), loop)
-
-# ================= FLASK =================
+# ================= FLASK APP =================
 app = Flask(__name__)
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
-    update = Update.de_json(request.json, application.bot)
-    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
-    return "ok", 200
+    if application is None:
+        logger.error("❌ Bot não inicializado!")
+        return "Bot não inicializado", 500
+    
+    try:
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        application.update_queue.put_nowait(update)
+        return "ok", 200
+    except Exception as e:
+        logger.error(f"❌ Erro no webhook: {e}")
+        return "error", 500
 
-app.run(host="0.0.0.0", port=PORT)
+@app.route("/", methods=["GET"])
+def health_check():
+    return f"""
+    ✅ Sophia Bot está online!
+    <br>Bot: {'✅ Inicializado' if application else '❌ Não inicializado'}
+    <br>Redis: {'✅ Conectado' if r else '❌ Offline'}
+    <br>Webhook: {WEBHOOK_URL + WEBHOOK_PATH if WEBHOOK_URL else '❌ Não configurado'}
+    """
+
+@app.route("/setwebhook", methods=["GET"])
+def set_webhook():
+    if not application:
+        return "Bot não inicializado", 500
+    
+    try:
+        webhook_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
+        result = asyncio.run(application.bot.set_webhook(webhook_url))
+        return f"✅ Webhook configurado: {webhook_url}<br>Resultado: {result}"
+    except Exception as e:
+        return f"❌ Erro ao configurar webhook: {e}", 500
+
+@app.route("/deletewebhook", methods=["GET"])
+def delete_webhook():
+    if not application:
+        return "Bot não inicializado", 500
+    
+    try:
+        result = asyncio.run(application.bot.delete_webhook())
+        return f"✅ Webhook removido<br>Resultado: {result}"
+    except Exception as e:
+        return f"❌ Erro ao remover webhook: {e}", 500
+
+# ================= INICIALIZAÇÃO ASSÍNCRONA =================
+async def setup_webhook():
+    """Configura o webhook na inicialização"""
+    if not application or not WEBHOOK_URL:
+        return
+    
+    try:
+        webhook_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
+        logger.info(f"🔗 Configurando webhook: {webhook_url}")
+        
+        # Remove webhook antigo e configura novo
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        await application.bot.set_webhook(webhook_url)
+        
+        logger.info("✅ Webhook configurado com sucesso!")
+        
+        # Inicia o bot em background
+        await application.start()
+        logger.info("✅ Bot iniciado com sucesso!")
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao configurar webhook: {e}")
+
+# Executa a configuração do webhook em background
+if application and WEBHOOK_URL:
+    import threading
+    def run_async():
+        asyncio.run(setup_webhook())
+    
+    thread = threading.Thread(target=run_async, daemon=True)
+    thread.start()
+    logger.info("🔄 Iniciando configuração do webhook em background...")
+
+# NÃO USE app.run() - O Railway inicia o Flask automaticamente
+if __name__ == "__main__":
+    # Apenas para desenvolvimento local
+    logger.info("🚀 Iniciando Sophia Bot localmente...")
+    app.run(host="0.0.0.0", port=PORT, debug=True)
