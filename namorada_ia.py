@@ -8,10 +8,12 @@ IDIOMA DINÂMICO (PT / EN)
 import os
 import asyncio
 import logging
+import threading
 import aiohttp
 import redis
 import re
 from datetime import datetime, timedelta, date
+from flask import Flask, request
 from collections import deque
 
 from telegram import (
@@ -46,7 +48,7 @@ if not TELEGRAM_TOKEN or not GROK_API_KEY:
     raise RuntimeError("❌ Tokens não configurados")
 
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
-WEBHOOK_PATH = "telegram"
+WEBHOOK_PATH = "/telegram"
 
 # ================= REDIS =================
 r = redis.from_url(REDIS_URL, decode_responses=True)
@@ -107,9 +109,11 @@ def set_lang(uid, lang):
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
+
     if not context.args:
         await update.message.reply_text("Uso: /reset <user_id>")
         return
+
     uid = int(context.args[0])
     reset_daily_count(uid)
     await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
@@ -117,13 +121,32 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
+
     if not context.args:
         await update.message.reply_text("Uso: /resetall <user_id>")
         return
+
     uid = int(context.args[0])
     reset_daily_count(uid)
     r.delete(vip_key(uid))
-    await update.message.reply_text(f"🔥 Reset completo\nUsuário: {uid}")
+
+    await update.message.reply_text(
+        f"🔥 Reset concluído:\n"
+        f"• Limite diário\n"
+        f"• VIP removido\n\n"
+        f"👤 Usuário: {uid}"
+    )
+
+# ================= DEBUG COMMAND =================
+async def debug_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    await update.message.reply_text(
+        f"🔍 Debug Info:\n"
+        f"ID: {uid}\n"
+        f"VIP: {is_vip(uid)}\n"
+        f"Uso hoje: {today_count(uid)}/{LIMITE_DIARIO}\n"
+        f"Idioma: {get_lang(uid)}"
+    )
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -159,7 +182,7 @@ TEXTS = {
     }
 }
 
-# ================= PROMPT (ORIGINAL) =================
+# ================= PROMPT =================
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
         return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️
@@ -304,25 +327,48 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= MAIN =================
-def main():
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+# ================= APP =================
+application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    application.add_handler(CommandHandler("start", start_handler))
-    application.add_handler(CommandHandler("reset", reset_cmd))
-    application.add_handler(CommandHandler("resetall", resetall_cmd))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-    application.add_handler(CallbackQueryHandler(callback_handler))
-    application.add_handler(PreCheckoutQueryHandler(pre_checkout))
-    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
+application.add_handler(CommandHandler("start", start_handler))
+application.add_handler(CommandHandler("reset", reset_cmd))
+application.add_handler(CommandHandler("resetall", resetall_cmd))
+application.add_handler(CommandHandler("debug", debug_cmd))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+application.add_handler(CallbackQueryHandler(callback_handler))
+application.add_handler(PreCheckoutQueryHandler(pre_checkout))
+application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path=WEBHOOK_PATH,
-        webhook_url=f"{WEBHOOK_BASE_URL}/{WEBHOOK_PATH}",
-        drop_pending_updates=True
-    )
+# ================= LOOP =================
+loop = asyncio.new_event_loop()
+threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
+async def setup():
+    await application.initialize()
+    await application.bot.delete_webhook(drop_pending_updates=True)
+    await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
+    await application.start()
+
+asyncio.run_coroutine_threadsafe(setup(), loop)
+
+# ================= FLASK =================
+app = Flask(__name__)
+
+@app.route(WEBHOOK_PATH, methods=["POST"])
+def webhook():
+    update = Update.de_json(request.json, application.bot)
+    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+    return "ok", 200
+
+@app.route("/", methods=["GET"])
+def health_check():
+    return "✅ Sophia Bot está online!", 200
+
+# IMPORTANTE: NÃO USE app.run() no Railway
+# O Railway inicia o Flask automaticamente
+# Apenas para referência, aqui está como rodar localmente:
 if __name__ == "__main__":
-    main()
+    # Para desenvolvimento local apenas
+    print("🤖 Iniciando Sophia Bot localmente...")
+    from waitress import serve
+    serve(app, host="0.0.0.0", port=PORT)
