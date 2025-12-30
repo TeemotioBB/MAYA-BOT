@@ -1,5 +1,7 @@
+python-telegram-bot[webhooks]
 python-telegram-bot==20.7
 aiohttp==3.9.5
 redis==5.0.4
 flask==3.0.2
 openai
+
