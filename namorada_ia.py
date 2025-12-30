@@ -61,6 +61,9 @@ PRECO_VIP_STARS = 250
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
+# ================= ADMIN =================
+ADMIN_IDS = {1293602874}  # 🔴 COLOQUE SEU ID AQUI
+
 # ================= FOTO TEASER =================
 FOTO_TEASE_FILE_ID = (
     "AgACAgEAAxkBAAEC_zVpUyHjYxNx9GFfVMTja2RQM1gu6QACVQtrG1LGmUa_7PmysLeFmAEAAwIAA3MAAzgE"
@@ -89,6 +92,9 @@ def today_count(uid):
 def increment(uid):
     r.incr(count_key(uid))
     r.expire(count_key(uid), 86400)
+
+def reset_daily_count(uid):
+    r.delete(count_key(uid))
 
 def get_lang(uid):
     return r.get(lang_key(uid)) or "pt"
@@ -202,6 +208,26 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
+# ================= /RESET =================
+async def reset_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Você não tem permissão.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Uso correto: /reset <id_do_usuario>")
+        return
+
+    try:
+        uid = int(context.args[0])
+        reset_daily_count(uid)
+        await update.message.reply_text(
+            f"✅ Contador diário resetado para o usuário `{uid}`",
+            parse_mode="Markdown"
+        )
+    except ValueError:
+        await update.message.reply_text("❌ ID inválido.")
+
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -274,6 +300,7 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start_handler))
+application.add_handler(CommandHandler("reset", reset_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
