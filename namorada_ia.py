@@ -227,22 +227,20 @@ PEDIDO_FOTO_REGEX = re.compile(
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         TEXTS["pt"]["choose_lang"],
-        reply_markup=InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
-                InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
-            ]
-        ])
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
+            InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
+        ]])
     )
 
 # ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    uid = query.from_user.id
 
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
-        uid = query.from_user.id
         set_lang(uid, lang)
 
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
@@ -258,6 +256,18 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
             await asyncio.sleep(2.0)
             await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+
+    elif query.data == "buy_vip":
+        await context.bot.send_invoice(
+            chat_id=query.message.chat_id,
+            title="💖 VIP Sophia",
+            description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
+            payload=f"vip_{uid}",
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)],
+            start_parameter="vip"
+        )
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -288,12 +298,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_vip(uid):
         increment(uid)
 
-    # 🔒 CORREÇÃO DO TIMEOUT (NÃO DERRUBA O BOT)
     try:
-        await context.bot.send_chat_action(
-            update.effective_chat.id,
-            ChatAction.TYPING
-        )
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
     except Exception as e:
         logger.warning(f"⚠️ send_chat_action falhou: {e}")
 
