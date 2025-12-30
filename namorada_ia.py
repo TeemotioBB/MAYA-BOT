@@ -3,7 +3,7 @@
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
 VIP | TELEGRAM STARS | REDIS | RAILWAY
 IDIOMA DINÂMICO (PT / EN)
-PYTHON 3.12 SAFE | SEM TIMEOUT
+PYTHON 3.12 — ESTÁVEL
 """
 
 import os
@@ -33,36 +33,49 @@ from telegram.ext import (
     CommandHandler
 )
 
-# ================= LOG =================
+# ======================================================
+# LOG
+# ======================================================
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ================= ENV =================
+# ======================================================
+# EVENT LOOP GLOBAL (CHAVE DA CORREÇÃO)
+# ======================================================
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+# ======================================================
+# ENV
+# ======================================================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 PORT = int(os.getenv("PORT", 8080))
 
 REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
-
-WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
 WEBHOOK_PATH = "/telegram"
 
 if not TELEGRAM_TOKEN or not GROK_API_KEY:
     raise RuntimeError("❌ Tokens não configurados")
 
-# ================= REDIS =================
+# ======================================================
+# REDIS
+# ======================================================
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
-# ================= CONFIG =================
+# ======================================================
+# CONFIG
+# ======================================================
 LIMITE_DIARIO = 15
 DIAS_VIP = 15
 PRECO_VIP_STARS = 250
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
-
 ADMIN_IDS = {1293602874}
 
-# ================= MEMÓRIA =================
+# ======================================================
+# MEMÓRIA
+# ======================================================
 MAX_MEMORIA = 6
 short_memory = {}
 
@@ -70,7 +83,9 @@ def get_memory(uid):
     short_memory.setdefault(uid, deque(maxlen=MAX_MEMORIA))
     return short_memory[uid]
 
-# ================= REDIS HELPERS =================
+# ======================================================
+# REDIS HELPERS
+# ======================================================
 def vip_key(uid): return f"vip:{uid}"
 def count_key(uid): return f"count:{uid}:{date.today()}"
 def lang_key(uid): return f"lang:{uid}"
@@ -86,16 +101,15 @@ def increment(uid):
     r.incr(count_key(uid))
     r.expire(count_key(uid), 86400)
 
-def reset_daily_count(uid):
-    r.delete(count_key(uid))
-
 def get_lang(uid):
     return r.get(lang_key(uid)) or "pt"
 
 def set_lang(uid, lang):
     r.set(lang_key(uid), lang)
 
-# ================= TEXTOS =================
+# ======================================================
+# TEXTOS
+# ======================================================
 TEXTS = {
     "pt": {
         "choose_lang": "🌍 Escolha seu idioma:",
@@ -108,7 +122,7 @@ TEXTS = {
             "💖 Pagamento via Pix 💖\n\n"
             "🔑 Chave Pix:\nSEU_PIX_AQUI\n\n"
             "💰 Valor:\nR$ 19,90\n\n"
-            "Após pagar, envie o comprovante 😘"
+            "Envie o comprovante após pagar 😘"
         )
     },
     "en": {
@@ -122,7 +136,9 @@ TEXTS = {
     }
 }
 
-# ================= GROK =================
+# ======================================================
+# GROK
+# ======================================================
 class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
@@ -133,7 +149,9 @@ class Grok:
             "temperature": 0.85
         }
 
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=20)
+        ) as session:
             async with session.post(
                 GROK_API_URL,
                 headers={
@@ -150,21 +168,19 @@ class Grok:
 
 grok = Grok()
 
-# ================= REGEX =================
+# ======================================================
+# REGEX
+# ======================================================
 PEDIDO_FOTO_REGEX = re.compile(r"(foto|selfie|imagem|photo|pic|vip)", re.I)
 
-# ================= BOT =================
+# ======================================================
+# APPLICATION TELEGRAM
+# ======================================================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
-bot_ready = False
 
-async def ensure_bot():
-    global bot_ready
-    if not bot_ready:
-        await application.initialize()
-        await application.start()
-        bot_ready = True
-
-# ================= HANDLERS =================
+# ======================================================
+# HANDLERS
+# ======================================================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         TEXTS["pt"]["choose_lang"],
@@ -239,7 +255,9 @@ async def vip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r.set(vip_key(uid), (datetime.now() + timedelta(days=dias)).isoformat())
     await update.message.reply_text(f"💎 VIP ativado por {dias} dias")
 
-# ================= REGISTRO =================
+# ======================================================
+# REGISTRO
+# ======================================================
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("vip", vip_cmd))
 application.add_handler(CallbackQueryHandler(callback_handler))
@@ -247,14 +265,24 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
-# ================= FLASK =================
+# ======================================================
+# INICIALIZA BOT UMA VEZ
+# ======================================================
+async def init_bot():
+    await application.initialize()
+    await application.start()
+
+loop.run_until_complete(init_bot())
+
+# ======================================================
+# FLASK WEBHOOK
+# ======================================================
 app = Flask(__name__)
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     update = Update.de_json(request.json, application.bot)
-    asyncio.run(ensure_bot())
-    asyncio.run(application.process_update(update))
+    loop.create_task(application.process_update(update))
     return "ok", 200
 
 app.run(host="0.0.0.0", port=PORT)
