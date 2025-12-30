@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
-VIP | TELEGRAM STARS | REDIS | RAILWAY
+VIP AUTOMÁTICO VIA PIX (PushinPay)
+REDIS | RAILWAY | WEBHOOK
 IDIOMA DINÂMICO (PT / EN)
 """
 
@@ -19,8 +20,7 @@ from collections import deque
 from telegram import (
     Update,
     InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    LabeledPrice
+    InlineKeyboardMarkup
 )
 from telegram.constants import ChatAction
 from telegram.ext import (
@@ -29,7 +29,6 @@ from telegram.ext import (
     ContextTypes,
     filters,
     CallbackQueryHandler,
-    PreCheckoutQueryHandler,
     CommandHandler
 )
 
@@ -40,15 +39,16 @@ logger = logging.getLogger(__name__)
 # ================= ENV =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
+PUSHINPAY_TOKEN = os.getenv("PUSHINPAY_TOKEN")
 
-REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
+REDIS_URL = os.getenv("REDIS_URL")
 PORT = int(os.getenv("PORT", 8080))
-
-if not TELEGRAM_TOKEN or not GROK_API_KEY:
-    raise RuntimeError("❌ Tokens não configurados")
 
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
 WEBHOOK_PATH = "/telegram"
+
+if not all([TELEGRAM_TOKEN, GROK_API_KEY, PUSHINPAY_TOKEN, REDIS_URL]):
+    raise RuntimeError("❌ Variáveis de ambiente não configuradas")
 
 # ================= REDIS =================
 r = redis.from_url(REDIS_URL, decode_responses=True)
@@ -56,15 +56,13 @@ r = redis.from_url(REDIS_URL, decode_responses=True)
 # ================= CONFIG =================
 LIMITE_DIARIO = 15
 DIAS_VIP = 15
-PRECO_VIP_STARS = 250
+VALOR_PIX_CENTAVOS = 2990  # R$29,90
 
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
-# ================= ADMIN =================
-ADMIN_IDS = {1293602874}  # 🔴 COLOQUE SEU ID AQUI
+ADMIN_IDS = {1293602874}
 
-# ================= FOTO TEASER =================
 FOTO_TEASE_FILE_ID = (
     "AgACAgEAAxkBAAEC_zVpUyHjYxNx9GFfVMTja2RQM1gu6QACVQtrG1LGmUa_7PmysLeFmAEAAwIAA3MAAzgE"
 )
@@ -115,8 +113,7 @@ TEXTS = {
         "lang_ok": "✅ Idioma configurado!",
         "after_lang": (
             "💕 Prontinho, meu amor! Agora é oficial: você é meu favorito do dia ❤️\n\n"
-            "Como você está se sentindo agora? "
-            "Quero te dar todo o carinho que você merece 😘"
+            "Como você está se sentindo agora? 😘"
         )
     },
     "en": {
@@ -129,31 +126,25 @@ TEXTS = {
         ),
         "lang_ok": "✅ Language set!",
         "after_lang": (
-            "💕 All set, my love! Now it’s official: you’re my favorite today ❤️\n\n"
-            "How are you feeling right now? "
-            "I want to give you all the affection you deserve 😘"
+            "💕 All set, my love! You’re my favorite today ❤️\n\n"
+            "How are you feeling now? 😘"
         )
     }
 }
 
 # ================= PROMPT =================
 def build_prompt(is_vip_user: bool, lang: str):
-    if lang == "en":
-        return (
-            "You are Sophia, a 23-year-old virtual girlfriend.\n"
-            + ("The user is VIP.\nBe more intimate.\n"
-               if is_vip_user else
-               "The user is NOT VIP.\nNever send photos.\n")
-            + "Short answers (2–3 sentences). Always ask questions."
-        )
-
-    return (
-        "Você é Sophia, uma namorada virtual de 23 anos.\n"
-        + ("O usuário é VIP.\nSeja mais próxima.\n"
-           if is_vip_user else
-           "O usuário NÃO é VIP.\nNunca envie fotos.\n")
-        + "Respostas curtas (2–3 frases). Sempre faça perguntas."
+    base = (
+        "You are Sophia, a 23-year-old virtual girlfriend.\n"
+        if lang == "en"
+        else "Você é Sophia, uma namorada virtual de 23 anos.\n"
     )
+    vip = (
+        "The user is VIP. Be more intimate.\n"
+        if is_vip_user else
+        "The user is NOT VIP. Never send photos.\n"
+    )
+    return base + vip + "Short answers. Always ask questions."
 
 # ================= GROK =================
 class Grok:
@@ -191,12 +182,35 @@ class Grok:
 grok = Grok()
 
 # ================= REGEX =================
-PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic)",
-    re.IGNORECASE
-)
+PEDIDO_FOTO_REGEX = re.compile(r"(foto|selfie|imagem|photo|pic)", re.I)
 
-# ================= /START =================
+# ================= PUSHINPAY =================
+async def criar_pix_pushinpay(uid: int):
+    url = "https://api.pushinpay.com.br/api/pix/cashIn"
+
+    payload = {
+        "value": VALOR_PIX_CENTAVOS,
+        "webhook_url": f"{WEBHOOK_BASE_URL}/pushinpay/webhook",
+        "split_rules": []
+    }
+
+    headers = {
+        "Authorization": f"Bearer {PUSHINPAY_TOKEN}",
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=payload, headers=headers) as resp:
+            data = await resp.json()
+
+            if resp.status != 200:
+                raise RuntimeError(data)
+
+            r.set(f"pix:{data['id']}", uid, ex=3600)
+            return data
+
+# ================= HANDLERS =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         TEXTS["pt"]["choose_lang"],
@@ -208,27 +222,13 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-# ================= /RESET =================
 async def reset_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("❌ Você não tem permissão.")
         return
+    uid = int(context.args[0])
+    reset_daily_count(uid)
+    await update.message.reply_text("✅ Resetado.")
 
-    if not context.args:
-        await update.message.reply_text("Uso correto: /reset <id_do_usuario>")
-        return
-
-    try:
-        uid = int(context.args[0])
-        reset_daily_count(uid)
-        await update.message.reply_text(
-            f"✅ Contador diário resetado para o usuário `{uid}`",
-            parse_mode="Markdown"
-        )
-    except ValueError:
-        await update.message.reply_text("❌ ID inválido.")
-
-# ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text or ""
@@ -236,11 +236,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
         await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=FOTO_TEASE_FILE_ID,
+            update.effective_chat.id,
+            FOTO_TEASE_FILE_ID,
             caption=TEXTS[lang]["photo_block"],
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+                [InlineKeyboardButton("💖 Comprar VIP (PIX)", callback_data="buy_vip")]
             ])
         )
         return
@@ -249,7 +249,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             TEXTS[lang]["limit"],
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+                [InlineKeyboardButton("💖 Comprar VIP (PIX)", callback_data="buy_vip")]
             ])
         )
         return
@@ -261,7 +261,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
 
-# ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = query.from_user.id
@@ -269,33 +268,20 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
         set_lang(uid, lang)
-
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=TEXTS[lang]["after_lang"]
-        )
+        await context.bot.send_message(query.message.chat_id, TEXTS[lang]["after_lang"])
         return
 
-    await context.bot.send_invoice(
-        chat_id=query.message.chat_id,
-        title="VIP Sophia 💖",
-        description="Conversas ilimitadas por 15 dias",
-        payload="vip_15",
-        provider_token="",
-        currency="XTR",
-        prices=[LabeledPrice("VIP 15 dias", PRECO_VIP_STARS)]
-    )
-
-# ================= PAGAMENTO =================
-async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.pre_checkout_query.answer(ok=True)
-
-async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    vip_until = datetime.now() + timedelta(days=DIAS_VIP)
-    r.set(vip_key(uid), vip_until.isoformat())
-    await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
+    if query.data == "buy_vip":
+        pix = await criar_pix_pushinpay(uid)
+        await query.message.reply_photo(
+            pix["qr_code_base64"],
+            caption=(
+                "💖 Pague via PIX\n\n"
+                "Após o pagamento, seu VIP será liberado automaticamente.\n\n"
+                "⚠️ A PushinPay atua apenas como processadora de pagamentos."
+            )
+        )
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -303,16 +289,12 @@ application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
-application.add_handler(PreCheckoutQueryHandler(pre_checkout))
-application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
-# ================= LOOP =================
 loop = asyncio.new_event_loop()
 threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
     await application.initialize()
-    await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
     await application.start()
 
@@ -322,9 +304,23 @@ asyncio.run_coroutine_threadsafe(setup(), loop)
 app = Flask(__name__)
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
-def webhook():
+def telegram_webhook():
     update = Update.de_json(request.json, application.bot)
     asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+    return "ok", 200
+
+@app.route("/pushinpay/webhook", methods=["POST"])
+def pushinpay_webhook():
+    data = request.json
+    if data.get("status") != "paid":
+        return "ignored", 200
+
+    uid = r.get(f"pix:{data['id']}")
+    if not uid:
+        return "not found", 404
+
+    vip_until = datetime.now() + timedelta(days=DIAS_VIP)
+    r.set(vip_key(int(uid)), vip_until.isoformat())
     return "ok", 200
 
 app.run(host="0.0.0.0", port=PORT)
