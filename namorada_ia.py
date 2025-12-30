@@ -364,11 +364,13 @@ def webhook():
 def health_check():
     return "✅ Sophia Bot está online!", 200
 
-# IMPORTANTE: NÃO USE app.run() no Railway
-# O Railway inicia o Flask automaticamente
-# Apenas para referência, aqui está como rodar localmente:
-if __name__ == "__main__":
-    # Para desenvolvimento local apenas
-    print("🤖 Iniciando Sophia Bot localmente...")
-    from waitress import serve
-    serve(app, host="0.0.0.0", port=PORT)
+# O Railway vai executar a aplicação Flask automaticamente.
+# Não é necessário iniciar o servidor manualmente.
+# Para desenvolvimento local, você pode usar o blixo abaixo, mas lembre-se de instalar waitress.
+# Mas no Railway, não execute isso.
+
+# Remova o bloco abaixo que tenta importar waitress e iniciar o servidor.
+# Em vez disso, apenas deixe a aplicação Flask pronta.
+
+# O Railway procura a variável `app` e a executa.
+# Não há necessidade de mais nada.
