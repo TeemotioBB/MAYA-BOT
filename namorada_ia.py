@@ -199,10 +199,7 @@ class Grok:
 grok = Grok()
 
 # ================= REGEX =================
-PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic)",
-    re.IGNORECASE
-)
+PEDIDO_FOTO_REGEX = re.compile(r"(foto|selfie|imagem|photo|pic)", re.IGNORECASE)
 
 # ================= /START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -288,13 +285,26 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
+
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("❌ Uso correto:\n/reset <user_id>")
+        return
+
     uid = int(context.args[0])
     reset_daily_limit(uid)
-    await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
+
+    await update.message.reply_text(
+        f"✅ Limite diário resetado para:\n{uid}"
+    )
 
 async def removevip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
+
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("❌ Uso correto:\n/removevip <user_id>")
+        return
+
     uid = int(context.args[0])
     remove_vip(uid)
     await update.message.reply_text(f"💔 VIP removido do usuário {uid}")
@@ -302,10 +312,18 @@ async def removevip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def addvip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
+
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("❌ Uso correto:\n/addvip <user_id> [dias]")
+        return
+
     uid = int(context.args[0])
-    days = int(context.args[1]) if len(context.args) > 1 else DIAS_VIP
+    days = int(context.args[1]) if len(context.args) > 1 and context.args[1].isdigit() else DIAS_VIP
     set_vip(uid, days)
-    await update.message.reply_text(f"💖 VIP ativado para {uid} por {days} dias")
+
+    await update.message.reply_text(
+        f"💖 VIP ativado para {uid} por {days} dias"
+    )
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
