@@ -200,10 +200,19 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     increment(uid)
 
+    try:
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
-        action=ChatAction.TYPING
+        action=ChatAction.TYPING,
+        message_thread_id=(
+            update.message.message_thread_id
+            if update.message and update.message.message_thread_id
+            else None
+        )
     )
+except Exception as e:
+    logger.warning(f"⚠️ send_chat_action ignorado: {e}")
+
 
     reply = await grok.reply(uid, update.message.text)
     await update.message.reply_text(reply)
