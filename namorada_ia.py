@@ -61,7 +61,7 @@ GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= FOTO TEASER (FILE_ID) =================
 FOTO_TEASE_FILE_ID = (
-    "AgACAgEAAxkBAAEC_zNpUyDwCfhpelChoUEAAVDqHq8kqiQAAlQLaxtSxplG2QAB5ozzDbw4AQADAgADcwADOAQ"
+    "AgACAgEAAxkBAAEC_zVpUyHjYxNx9GFfVMTja2RQM1gu6QACVQtrG1LGmUa_7PmysLeFmAEAAwIAA3MAAzgE"
 )
 
 # ================= MEMÓRIA =================
