@@ -345,7 +345,8 @@ app = Flask(__name__)
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     update = Update.de_json(request.json, application.bot)
-    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+    asyncio.run_coroutine_threadsafe(
+        application.process_update(update),
+        loop
+    )
     return "ok", 200
-
-app.run(host="0.0.0.0", port=PORT)
