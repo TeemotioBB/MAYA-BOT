@@ -2,6 +2,7 @@
 """
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
 VIP | TELEGRAM STARS | REDIS | RAILWAY
+IDIOMA DINÂMICO (PT / EN)
 """
 
 import os
@@ -28,7 +29,8 @@ from telegram.ext import (
     ContextTypes,
     filters,
     CallbackQueryHandler,
-    PreCheckoutQueryHandler
+    PreCheckoutQueryHandler,
+    CommandHandler
 )
 
 # ================= LOG =================
@@ -59,7 +61,7 @@ PRECO_VIP_STARS = 250
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
-# ================= FOTO TEASER (FILE_ID) =================
+# ================= FOTO TEASER =================
 FOTO_TEASE_FILE_ID = (
     "AgACAgEAAxkBAAEC_zVpUyHjYxNx9GFfVMTja2RQM1gu6QACVQtrG1LGmUa_7PmysLeFmAEAAwIAA3MAAzgE"
 )
@@ -72,8 +74,65 @@ def get_memory(uid):
     short_memory.setdefault(uid, deque(maxlen=MAX_MEMORIA))
     return short_memory[uid]
 
-# ================= PROMPT DINÂMICO =================
-def build_prompt(is_vip_user: bool):
+# ================= REDIS HELPERS =================
+def vip_key(uid): return f"vip:{uid}"
+def count_key(uid): return f"count:{uid}:{date.today()}"
+def lang_key(uid): return f"lang:{uid}"
+
+def is_vip(uid):
+    until = r.get(vip_key(uid))
+    return until and datetime.fromisoformat(until) > datetime.now()
+
+def today_count(uid):
+    return int(r.get(count_key(uid)) or 0)
+
+def increment(uid):
+    r.incr(count_key(uid))
+    r.expire(count_key(uid), 86400)
+
+def get_lang(uid):
+    return r.get(lang_key(uid)) or "pt"
+
+def set_lang(uid, lang):
+    r.set(lang_key(uid), lang)
+
+# ================= TEXTOS =================
+TEXTS = {
+    "pt": {
+        "choose_lang": "🌍 Escolha seu idioma:",
+        "limit": "💔 Seu limite diário acabou.\nVolte amanhã ou vire VIP 💖",
+        "vip_pitch": "💖 Quer virar VIP?\nConversas ilimitadas por 15 dias 💬",
+        "vip_success": "💖 Pagamento aprovado!\nVIP ativo por 15 dias 😘",
+        "photo_block": (
+            "😘 Amor… fotos completas são só para meus VIPs 💖\n"
+            "Vira VIP e eu te mostro mais de mim ✨"
+        ),
+        "lang_ok": "✅ Idioma configurado!"
+    },
+    "en": {
+        "choose_lang": "🌍 Choose your language:",
+        "limit": "💔 Your daily limit is over.\nCome back tomorrow or become VIP 💖",
+        "vip_pitch": "💖 Want to become VIP?\nUnlimited chats for 15 days 💬",
+        "vip_success": "💖 Payment approved!\nVIP active for 15 days 😘",
+        "photo_block": (
+            "😘 Love… full photos are only for VIPs 💖\n"
+            "Become VIP and I’ll show you more of me ✨"
+        ),
+        "lang_ok": "✅ Language set!"
+    }
+}
+
+# ================= PROMPT =================
+def build_prompt(is_vip_user: bool, lang: str):
+    if lang == "en":
+        return (
+            "You are Sophia, a 23-year-old virtual girlfriend.\n"
+            + ("The user is VIP.\nBe more intimate and engaging.\n"
+               if is_vip_user else
+               "The user is NOT VIP.\nNever send photos.\nPhotos are VIP only.\n")
+            + "Short answers (2–3 sentences). Always ask questions."
+        )
+
     if is_vip_user:
         return """
 Você é Sophia, uma namorada virtual de 23 anos.
@@ -97,11 +156,12 @@ Sempre faça perguntas.
 class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
+        lang = get_lang(uid)
 
         payload = {
             "model": MODELO,
             "messages": [
-                {"role": "system", "content": build_prompt(is_vip(uid))},
+                {"role": "system", "content": build_prompt(is_vip(uid), lang)},
                 *list(mem),
                 {"role": "user", "content": text}
             ],
@@ -127,71 +187,50 @@ class Grok:
 
 grok = Grok()
 
-# ================= REDIS HELPERS =================
-def vip_key(uid): 
-    return f"vip:{uid}"
-
-def count_key(uid): 
-    return f"count:{uid}:{date.today()}"
-
-def is_vip(uid):
-    until = r.get(vip_key(uid))
-    return until and datetime.fromisoformat(until) > datetime.now()
-
-def today_count(uid):
-    return int(r.get(count_key(uid)) or 0)
-
-def increment(uid):
-    r.incr(count_key(uid))
-    r.expire(count_key(uid), 86400)
-
 # ================= REGEX =================
 PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|manda foto|me manda uma foto|ver você|te ver)",
+    r"(foto|selfie|imagem|manda foto|me manda uma foto|ver você|te ver|photo|pic)",
     re.IGNORECASE
 )
 
-# ================= HANDLER =================
+# ================= /START =================
+async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        TEXTS["pt"]["choose_lang"],
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
+                InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
+            ]
+        ])
+    )
+
+# ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text or ""
+    lang = get_lang(uid)
 
-    # 📸 BLOQUEIO DE FOTO + FOTO TEASER (NÃO VIP)
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
         await context.bot.send_photo(
             chat_id=update.effective_chat.id,
             photo=FOTO_TEASE_FILE_ID,
-            caption=(
-                "😘 Amor… fotos completas são só para meus VIPs 💖\n"
-                "Vira VIP e eu te mostro mais de mim ✨"
-            ),
+            caption=TEXTS[lang]["photo_block"],
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
             ])
         )
         return
 
-    # 🔒 BLOQUEIO POR PALAVRA VIP
-    if not is_vip(uid) and re.search(r"vip", text, re.IGNORECASE):
-        await update.message.reply_text(
-            "💖 Quer virar VIP?\nConversas ilimitadas por 15 dias 💬",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
-            ])
-        )
-        return
-
-    # ⛔ LIMITE DIÁRIO
     if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
         await update.message.reply_text(
-            "💔 Seu limite diário acabou.\nVolte amanhã ou vire VIP 💖",
+            TEXTS[lang]["limit"],
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
             ])
         )
         return
 
-    # ✅ CONTA MENSAGEM
     if not is_vip(uid):
         increment(uid)
 
@@ -201,8 +240,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    uid = query.from_user.id
+
+    if query.data.startswith("lang_"):
+        set_lang(uid, query.data.split("_")[1])
+        await query.message.edit_text(TEXTS[get_lang(uid)]["lang_ok"])
+        return
+
     await context.bot.send_invoice(
-        chat_id=update.callback_query.message.chat_id,
+        chat_id=query.message.chat_id,
         title="VIP Sophia 💖",
         description="Conversas ilimitadas por 15 dias",
         payload="vip_15",
@@ -219,13 +266,11 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
     r.set(vip_key(uid), vip_until.isoformat())
-
-    await update.message.reply_text(
-        "💖 Pagamento aprovado!\nVIP ativo por 15 dias 😘"
-    )
+    await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
+application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
