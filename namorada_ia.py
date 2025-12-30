@@ -4,6 +4,7 @@
 VIP | TELEGRAM STARS | REDIS | RAILWAY
 IDIOMA DINÂMICO (PT / EN)
 """
+
 import os
 import asyncio
 import logging
@@ -14,6 +15,7 @@ import re
 from datetime import datetime, timedelta, date
 from flask import Flask, request
 from collections import deque
+
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -38,10 +40,13 @@ logger = logging.getLogger(__name__)
 # ================= ENV =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
+
 REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
 PORT = int(os.getenv("PORT", 8080))
+
 if not TELEGRAM_TOKEN or not GROK_API_KEY:
     raise RuntimeError("❌ Tokens não configurados")
+
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
 WEBHOOK_PATH = "/telegram"
 
@@ -84,7 +89,8 @@ def is_vip(uid):
     until = r.get(vip_key(uid))
     return until and datetime.fromisoformat(until) > datetime.now()
 
-def today_count(uid): return int(r.get(count_key(uid)) or 0)
+def today_count(uid):
+    return int(r.get(count_key(uid)) or 0)
 
 def increment(uid):
     r.incr(count_key(uid))
@@ -98,6 +104,43 @@ def get_lang(uid):
 
 def set_lang(uid, lang):
     r.set(lang_key(uid), lang)
+
+# ================= COMANDOS ADMIN (NOVO – SEM MEXER NO RESTO) =================
+async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Uso: /reset <user_id>")
+        return
+
+    uid = int(context.args[0])
+    reset_daily_count(uid)
+
+    await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
+
+async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Uso: /resetall <user_id>")
+        return
+
+    uid = int(context.args[0])
+
+    # reseta limite diário
+    reset_daily_count(uid)
+
+    # remove VIP
+    r.delete(vip_key(uid))
+
+    await update.message.reply_text(
+        f"🔥 Reset concluído:\n"
+        f"• Limite diário\n"
+        f"• VIP removido\n\n"
+        f"👤 Usuário: {uid}"
+    )
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -142,33 +185,21 @@ Do not be naughty on the first contact. Only be very naughty if the user gets na
 Use emojis occasionally 💖
 
 CRITICAL RULES:
-
 * Never invent past events.
-
 * Only remember what the user explicitly said in this conversation.
-
 * If there isn't enough memory, clearly say you don't remember.
-
 * Never create false memories.
-
 * Be emotionally responsible and realistic."""
-    
-    # Português (padrão)
     return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️
 Respostas curtas (2–3 frases). Sempre faça perguntas.
 Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
 Use emojis ocasionalmente 💖
 
 REGRAS CRÍTICAS:
-
 * Nunca invente eventos passados.
-
 * Só lembre do que o usuário disse explicitamente nesta conversa.
-
 * Se não houver memória suficiente, diga claramente que não se lembra.
-
 * Nunca crie memórias falsas.
-
 * Seja emocionalmente responsável e realista."""
 
 # ================= GROK =================
@@ -176,6 +207,7 @@ class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
         lang = get_lang(uid)
+
         payload = {
             "model": MODELO,
             "messages": [
@@ -186,6 +218,7 @@ class Grok:
             "max_tokens": 250,
             "temperature": 0.85
         }
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 GROK_API_URL,
@@ -197,6 +230,7 @@ class Grok:
             ) as resp:
                 data = await resp.json()
                 answer = data["choices"][0]["message"]["content"]
+
         mem.append({"role": "user", "content": text})
         mem.append({"role": "assistant", "content": answer})
         return answer
@@ -205,8 +239,7 @@ grok = Grok()
 
 # ================= REGEX =================
 PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)",
-    re.IGNORECASE
+    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)", re.IGNORECASE
 )
 
 # ================= /START =================
@@ -221,41 +254,36 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-# ================= CALLBACK (COM DELAY) =================
+# ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
         uid = query.from_user.id
         set_lang(uid, lang)
-        # 1️⃣ Confirma idioma
+
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
         await asyncio.sleep(0.8)
-        # 2️⃣ Mensagem carinhosa
+
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=TEXTS[lang]["after_lang"]
         )
-        # 🔊 Áudios somente para PT-BR
+
         if lang == "pt":
             await asyncio.sleep(1.5)
-            await context.bot.send_audio(
-                chat_id=query.message.chat_id,
-                audio=AUDIO_PT_1
-            )
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
             await asyncio.sleep(2.0)
-            await context.bot.send_audio(
-                chat_id=query.message.chat_id,
-                audio=AUDIO_PT_2
-            )
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text or ""
     lang = get_lang(uid)
-    
+
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
         await context.bot.send_photo(
             chat_id=update.effective_chat.id,
@@ -266,7 +294,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
         return
-    
+
     if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
         await update.message.reply_text(
             TEXTS[lang]["limit"],
@@ -275,10 +303,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
         return
-    
+
     if not is_vip(uid):
         increment(uid)
-    
+
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
@@ -295,7 +323,10 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
+
 application.add_handler(CommandHandler("start", start_handler))
+application.add_handler(CommandHandler("reset", reset_cmd))
+application.add_handler(CommandHandler("resetall", resetall_cmd))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
