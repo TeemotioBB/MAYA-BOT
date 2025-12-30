@@ -192,7 +192,7 @@ grok = Grok()
 
 # ================= REGEX =================
 PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic)",
+    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)",
     re.IGNORECASE
 )
 
