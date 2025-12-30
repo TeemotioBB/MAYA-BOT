@@ -132,6 +132,27 @@ async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👤 Usuário: {uid}"
     )
 
+# 🔥 NOVO COMANDO /vip <id> <dias>
+async def vip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    if len(context.args) != 2:
+        await update.message.reply_text("Uso: /vip <user_id> <dias>")
+        return
+
+    uid = int(context.args[0])
+    dias = int(context.args[1])
+
+    vip_until = datetime.now() + timedelta(days=dias)
+    r.set(vip_key(uid), vip_until.isoformat())
+
+    await update.message.reply_text(
+        f"💎 VIP ativado manualmente!\n\n"
+        f"👤 Usuário: {uid}\n"
+        f"⏳ Dias: {dias}"
+    )
+
 # ================= TEXTOS =================
 TEXTS = {
     "pt": {
@@ -147,6 +168,16 @@ TEXTS = {
             "💕 Prontinho, meu amor! Agora é oficial: você é meu favorito do dia ❤️\n\n"
             "Como você está se sentindo agora?\n"
             "Quero te dar todo o carinho que você merece 😘"
+        ),
+        # 🔥 PIX MANUAL
+        "pix_msg": (
+            "💖 Pagamento via Pix 💖\n\n"
+            "🔑 Chave Pix:\n"
+            "SEU_PIX_AQUI\n\n"
+            "💰 Valor:\n"
+            "R$ 19,90\n\n"
+            "🕒 Após o pagamento, envie o comprovante aqui 😘\n"
+            "Assim que eu confirmar, libero seu VIP 💎"
         )
     },
     "en": {
@@ -162,6 +193,14 @@ TEXTS = {
             "💕 All set, my love! Now it’s official: you’re my favorite today ❤️\n\n"
             "How are you feeling right now?\n"
             "I want to give you all the affection you deserve 😘"
+        ),
+        "pix_msg": (
+            "💖 Pix payment 💖\n\n"
+            "🔑 Pix key:\n"
+            "YOUR_PIX_HERE\n\n"
+            "💰 Amount:\n"
+            "$4.00\n\n"
+            "🕒 After payment, send the receipt here 😘"
         )
     }
 }
@@ -252,6 +291,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await asyncio.sleep(2.0)
             await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
 
+    elif query.data == "pay_pix":
+        lang = get_lang(uid)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=TEXTS[lang]["pix_msg"]
+        )
+
     elif query.data == "buy_vip":
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
@@ -269,29 +315,28 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
 
-    logger.info("📩 message_handler acionado")
-
     uid = update.effective_user.id
     text = update.message.text
     lang = get_lang(uid)
+
+    vip_keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("💸 Pagar via Pix (manual)", callback_data="pay_pix")],
+        [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+    ])
 
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
         await context.bot.send_photo(
             chat_id=update.effective_chat.id,
             photo=FOTO_TEASE_FILE_ID,
             caption=TEXTS[lang]["photo_block"],
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
-            ])
+            reply_markup=vip_keyboard
         )
         return
 
     if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
         await update.message.reply_text(
             TEXTS[lang]["limit"],
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
-            ])
+            reply_markup=vip_keyboard
         )
         return
 
@@ -302,7 +347,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
 
-# ================= PAGAMENTO =================
+# ================= PAGAMENTO STARS =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.pre_checkout_query.answer(ok=True)
 
@@ -318,11 +363,10 @@ application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
+application.add_handler(CommandHandler("vip", vip_cmd))
 
-# ORDEM CORRIGIDA (IMPORTANTE)
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
