@@ -109,11 +109,9 @@ def set_lang(uid, lang):
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
-
     if not context.args:
         await update.message.reply_text("Uso: /reset <user_id>")
         return
-
     uid = int(context.args[0])
     reset_daily_count(uid)
     await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
@@ -121,15 +119,12 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
-
     if not context.args:
         await update.message.reply_text("Uso: /resetall <user_id>")
         return
-
     uid = int(context.args[0])
     reset_daily_count(uid)
     r.delete(vip_key(uid))
-
     await update.message.reply_text(
         f"🔥 Reset concluído:\n"
         f"• Limite diário\n"
@@ -210,6 +205,9 @@ class Grok:
                 json=payload
             ) as resp:
                 data = await resp.json()
+                if "choices" not in data:
+                    logger.error(f"❌ Grok API inválida: {data}")
+                    return "💔 Amor, tive um probleminha agora… tenta de novo 😘"
                 answer = data["choices"][0]["message"]["content"]
 
         mem.append({"role": "user", "content": text})
@@ -242,15 +240,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
         set_lang(uid, lang)
-
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
         await asyncio.sleep(0.8)
-
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=TEXTS[lang]["after_lang"]
         )
-
         if lang == "pt":
             await asyncio.sleep(1.5)
             await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
@@ -271,8 +266,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return
+
+    logger.info("📩 message_handler acionado")
+
     uid = update.effective_user.id
-    text = update.message.text or ""
+    text = update.message.text
     lang = get_lang(uid)
 
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
@@ -298,11 +298,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_vip(uid):
         increment(uid)
 
-    try:
-        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-    except Exception as e:
-        logger.warning(f"⚠️ send_chat_action falhou: {e}")
-
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
 
@@ -322,8 +318,11 @@ application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
+# ORDEM CORRIGIDA (IMPORTANTE)
 application.add_handler(CallbackQueryHandler(callback_handler))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
