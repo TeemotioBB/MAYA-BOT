@@ -43,9 +43,7 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 
-# ⚠️ Redis fixo (apenas para testes)
 REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
-
 PORT = int(os.getenv("PORT", 8080))
 
 if not TELEGRAM_TOKEN or not GROK_API_KEY:
@@ -136,12 +134,11 @@ class Grok:
 
 grok = Grok()
 
-# ================= CHAVES REDIS =================
+# ================= REDIS HELPERS =================
 def vip_key(uid): return f"vip:{uid}"
 def count_key(uid): return f"count:{uid}:{date.today()}"
 def payment_key(pid): return f"payment:{pid}"
 
-# ================= UTIL =================
 def is_vip(uid: int) -> bool:
     until = r.get(vip_key(uid))
     return bool(until and datetime.fromisoformat(until) > datetime.now())
@@ -154,65 +151,48 @@ def increment(uid: int):
     r.incr(key, 1)
     r.expire(key, 86400)
 
-# ================= HANDLER DE TEXTO =================
+# ================= HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text.strip().lower()
 
-    # 💎 OFERTA DE VIP SE A PALAVRA "VIP" APARECER (ANTES DA TRAVA)
     if not is_vip(uid) and "vip" in text:
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("💖 Virar VIP – 250 ⭐", callback_data="buy_vip")]
         ])
         await update.message.reply_text(
-            "💖 Quer virar VIP, amor? 😘\n\n"
-            "Como VIP você conversa comigo sem limites por 15 dias 💬🔥\n"
-            "É só tocar no botão abaixo 💫",
+            "💖 Quer virar VIP, amor?\n"
+            "Conversas ilimitadas por 15 dias 💬🔥",
             reply_markup=keyboard
         )
         return
-
-    # 🧠 proteção inteligente de memória
-    gatilhos_memoria = [
-        "você lembra",
-        "lembra do meu dia",
-        "lembra de ontem"
-    ]
-
-    if any(t in text for t in gatilhos_memoria):
-        mem = get_memory(uid)
-        if len(mem) < 2:
-            await update.message.reply_text(
-                "Hmm… eu não lembro muito bem 😅 Pode me contar de novo?"
-            )
-            return
 
     if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
         ])
         await update.message.reply_text(
-            "💔 Você atingiu seu limite de mensagens hoje, amor.\n"
-            "Volte amanhã ou vire VIP para continuar conversando comigo 💖",
+            "💔 Você atingiu seu limite de mensagens hoje.\n"
+            "Volte amanhã ou vire VIP 💖",
             reply_markup=keyboard
         )
         return
 
     increment(uid)
 
+    # 🔥 BLOCO CORRIGIDO (SEM ERRO DE TOPIC)
     try:
-    await context.bot.send_chat_action(
-        chat_id=update.effective_chat.id,
-        action=ChatAction.TYPING,
-        message_thread_id=(
-            update.message.message_thread_id
-            if update.message and update.message.message_thread_id
-            else None
+        await context.bot.send_chat_action(
+            chat_id=update.effective_chat.id,
+            action=ChatAction.TYPING,
+            message_thread_id=(
+                update.message.message_thread_id
+                if update.message and update.message.message_thread_id
+                else None
+            )
         )
-    )
-except Exception as e:
-    logger.warning(f"⚠️ send_chat_action ignorado: {e}")
-
+    except Exception as e:
+        logger.warning(f"⚠️ send_chat_action ignorado: {e}")
 
     reply = await grok.reply(uid, update.message.text)
     await update.message.reply_text(reply)
@@ -250,31 +230,9 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
     r.set(vip_key(uid), vip_until.isoformat())
 
-    r.rpush(
-        "revenue",
-        f"{uid}|{PRECO_VIP_STARS}|{datetime.now().isoformat()}"
-    )
-
     await update.message.reply_text(
-        "💖 Pagamento aprovado!\nSeu VIP está ativo por 15 dias 😘"
+        "💖 Pagamento aprovado!\nVIP ativo por 15 dias 😘"
     )
-
-# ================= AVISO DE EXPIRAÇÃO DO VIP =================
-async def vip_expiry_warning(application: Application):
-    while True:
-        for key in r.scan_iter("vip:*"):
-            uid = int(key.split(":")[1])
-            until = datetime.fromisoformat(r.get(key))
-
-            if 0 < (until - datetime.now()).days == 1:
-                try:
-                    await application.bot.send_message(
-                        chat_id=uid,
-                        text="⏰ Amor, seu VIP expira amanhã 💔\nRenove para continuar falando comigo 💖"
-                    )
-                except:
-                    pass
-        await asyncio.sleep(3600)
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -298,8 +256,7 @@ async def setup():
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
     await application.start()
-    loop.create_task(vip_expiry_warning(application))
-    logger.info("🤖 Sophia Bot ONLINE (VIP ATIVO)")
+    logger.info("🤖 Sophia Bot ONLINE")
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
@@ -319,7 +276,5 @@ def webhook():
     )
     return "ok", 200
 
-# ================= MAIN =================
 if __name__ == "__main__":
-    logger.info("🚀 Iniciando Sophia Bot (VIP IMPLEMENTADO)")
     app.run(host="0.0.0.0", port=PORT)
