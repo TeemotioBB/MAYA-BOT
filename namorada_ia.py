@@ -125,6 +125,14 @@ class Grok:
                 timeout=30
             ) as resp:
                 data = await resp.json()
+                if resp.status != 200:
+                    logger.error(f"Erro na API do Grok: {data}")
+                    return "❌ Desculpe, estou com problemas técnicos. Tente novamente mais tarde."
+
+                if "choices" not in data:
+                    logger.error(f"Resposta inesperada da API do Grok: {data}")
+                    return "❌ Ops, algo deu errado na minha resposta. Tente novamente."
+
                 answer = data["choices"][0]["message"]["content"]
 
         mem.append({"role": "user", "content": text})
@@ -180,17 +188,21 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     increment(uid)
 
-    # 🔥 BLOCO CORRIGIDO (SEM ERRO DE TOPIC)
+    # Envia ação de digitação
     try:
-        await context.bot.send_chat_action(
-            chat_id=update.effective_chat.id,
-            action=ChatAction.TYPING,
-            message_thread_id=(
-                update.message.message_thread_id
-                if update.message and update.message.message_thread_id
-                else None
+        chat_id = update.effective_chat.id
+        # Verifica se é uma mensagem de tópico (tópicos são suportados apenas em supergrupos)
+        if update.message and update.message.is_topic_message and update.message.message_thread_id:
+            await context.bot.send_chat_action(
+                chat_id=chat_id,
+                action=ChatAction.TYPING,
+                message_thread_id=update.message.message_thread_id
             )
-        )
+        else:
+            await context.bot.send_chat_action(
+                chat_id=chat_id,
+                action=ChatAction.TYPING
+            )
     except Exception as e:
         logger.warning(f"⚠️ send_chat_action ignorado: {e}")
 
@@ -241,6 +253,14 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
+
+# ================= HANDLER DE ERROS =================
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"Exceção não tratada: {context.error}")
+    if update and update.effective_message:
+        await update.effective_message.reply_text("❌ Ocorreu um erro inesperado. Tente novamente.")
+
+application.add_error_handler(error_handler)
 
 # ================= LOOP =================
 loop = asyncio.new_event_loop()
