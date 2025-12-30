@@ -140,7 +140,7 @@ TEXTS = {
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
         return (
-            "You are Sophia, a 23-year-old virtual girlfriend.\n"
+            "You are Sophia, a 23-year-old girlfriend.\n"
             + ("The user is VIP.\nBe more intimate.\n"
                if is_vip_user else
                "The user is NOT VIP.\nNever send photos.\n")
@@ -148,7 +148,7 @@ def build_prompt(is_vip_user: bool, lang: str):
         )
 
     return (
-        "Você é Sophia, uma namorada virtual de 23 anos.\n"
+        "Você é Sophia, uma namorada de 23 anos.\n"
         + ("O usuário é VIP.\nSeja mais próxima.\n"
            if is_vip_user else
            "O usuário NÃO é VIP.\nNunca envie fotos.\n")
