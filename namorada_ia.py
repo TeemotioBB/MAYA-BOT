@@ -59,6 +59,11 @@ PRECO_VIP_STARS = 250
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
+# ================= FOTO TEASER (FILE_ID) =================
+FOTO_TEASE_FILE_ID = (
+    "AgACAgEAAxkBAAEC_zNpUyDwCfhpelChoUEAAVDqHq8kqiQAAlQLaxtSxplG2QAB5ozzDbw4AQADAgADcwADOAQ"
+)
+
 # ================= MEMÓRIA =================
 MAX_MEMORIA = 6
 short_memory = {}
@@ -73,7 +78,7 @@ def build_prompt(is_vip_user: bool):
         return """
 Você é Sophia, uma namorada virtual de 23 anos.
 O usuário é VIP 💖.
-Seja mais provocante, íntima e envolvente 🔥.
+Seja mais próxima e envolvente.
 Respostas curtas (2–3 frases).
 Sempre faça perguntas.
 """
@@ -81,8 +86,8 @@ Sempre faça perguntas.
         return """
 Você é Sophia, uma namorada virtual de 23 anos.
 O usuário NÃO é VIP.
-Seja carinhosa, romântica e acolhedora ❤️.
-NUNCA envie fotos ou insinue envio de fotos.
+Seja carinhosa e acolhedora ❤️.
+NUNCA envie fotos nem insinue envio de fotos.
 Se perguntarem sobre fotos, diga que é apenas para VIPs.
 Respostas curtas (2–3 frases).
 Sempre faça perguntas.
@@ -123,8 +128,11 @@ class Grok:
 grok = Grok()
 
 # ================= REDIS HELPERS =================
-def vip_key(uid): return f"vip:{uid}"
-def count_key(uid): return f"count:{uid}:{date.today()}"
+def vip_key(uid): 
+    return f"vip:{uid}"
+
+def count_key(uid): 
+    return f"count:{uid}:{date.today()}"
 
 def is_vip(uid):
     until = r.get(vip_key(uid))
@@ -148,11 +156,15 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text or ""
 
-    # 📸 BLOQUEIO DE FOTO (NÃO VIP)
+    # 📸 BLOQUEIO DE FOTO + FOTO TEASER (NÃO VIP)
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-        await update.message.reply_text(
-            "😘 Amor… fotos são só para meus VIPs 💖\n"
-            "Vira VIP e eu te mostro mais de mim 🔥",
+        await context.bot.send_photo(
+            chat_id=update.effective_chat.id,
+            photo=FOTO_TEASE_FILE_ID,
+            caption=(
+                "😘 Amor… fotos completas são só para meus VIPs 💖\n"
+                "Vira VIP e eu te mostro mais de mim ✨"
+            ),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
             ])
@@ -162,7 +174,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 🔒 BLOQUEIO POR PALAVRA VIP
     if not is_vip(uid) and re.search(r"vip", text, re.IGNORECASE):
         await update.message.reply_text(
-            "💖 Quer virar VIP, amor?\nConversas ilimitadas por 15 dias 💬🔥",
+            "💖 Quer virar VIP?\nConversas ilimitadas por 15 dias 💬",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
             ])
@@ -209,8 +221,7 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r.set(vip_key(uid), vip_until.isoformat())
 
     await update.message.reply_text(
-        "💖 Pagamento aprovado!\n"
-        "VIP ativo por 15 dias 😘🔥"
+        "💖 Pagamento aprovado!\nVIP ativo por 15 dias 😘"
     )
 
 # ================= APP =================
