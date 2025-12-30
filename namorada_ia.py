@@ -137,17 +137,6 @@ async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👤 Usuário: {uid}"
     )
 
-# ================= DEBUG COMMAND =================
-async def debug_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    await update.message.reply_text(
-        f"🔍 Debug Info:\n"
-        f"ID: {uid}\n"
-        f"VIP: {is_vip(uid)}\n"
-        f"Uso hoje: {today_count(uid)}/{LIMITE_DIARIO}\n"
-        f"Idioma: {get_lang(uid)}"
-    )
-
 # ================= TEXTOS =================
 TEXTS = {
     "pt": {
@@ -333,7 +322,6 @@ application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
-application.add_handler(CommandHandler("debug", debug_cmd))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
@@ -360,17 +348,4 @@ def webhook():
     asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
     return "ok", 200
 
-@app.route("/", methods=["GET"])
-def health_check():
-    return "✅ Sophia Bot está online!", 200
-
-# O Railway vai executar a aplicação Flask automaticamente.
-# Não é necessário iniciar o servidor manualmente.
-# Para desenvolvimento local, você pode usar o blixo abaixo, mas lembre-se de instalar waitress.
-# Mas no Railway, não execute isso.
-
-# Remova o bloco abaixo que tenta importar waitress e iniciar o servidor.
-# Em vez disso, apenas deixe a aplicação Flask pronta.
-
-# O Railway procura a variável `app` e a executa.
-# Não há necessidade de mais nada.
+app.run(host="0.0.0.0", port=PORT)
