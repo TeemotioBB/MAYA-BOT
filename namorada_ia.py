@@ -294,18 +294,35 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    uid = query.from_user.id
 
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
-        set_lang(query.from_user.id, lang)
+        set_lang(uid, lang)
 
+        # Confirma idioma
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
+
+        # Mensagem principal
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=TEXTS[lang]["after_lang"]
         )
+
+        # 🔊 ÁUDIOS APENAS PARA PT-BR
+        if lang == "pt":
+            await context.bot.send_voice(
+                chat_id=query.message.chat_id,
+                voice=AUDIO_PT_1
+            )
+            await context.bot.send_voice(
+                chat_id=query.message.chat_id,
+                voice=AUDIO_PT_2
+            )
+
         return
 
+    # Compra VIP
     await context.bot.send_invoice(
         chat_id=query.message.chat_id,
         title="VIP Sophia 💖",
