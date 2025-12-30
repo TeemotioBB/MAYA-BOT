@@ -63,7 +63,7 @@ GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 # ================= ADMIN =================
 ADMIN_IDS = {1293602874}
 
-# ================= ÁUDIOS PT-BR (NOVOS FILE_ID) =================
+# ================= ÁUDIOS PT-BR =================
 AUDIO_PT_1 = "CQACAgEAAxkBAAEDAAEkaVRmK1n5WoDUbeTBKyl6sgLwfNoAAoYGAAIZwaFG88ZKij8fw984BA"
 AUDIO_PT_2 = "CQACAgEAAxkBAAEDAAEmaVRmPJ5iuBOaXyukQ06Ui23TSokAAocGAAIZwaFGkIERRmRoPes4BA"
 
@@ -105,22 +105,83 @@ def get_lang(uid):
 def set_lang(uid, lang):
     r.set(lang_key(uid), lang)
 
-# ================= FUNÇÃO ÁUDIOS =================
-async def send_welcome_audios(bot, chat_id):
-    try:
-        await asyncio.sleep(1.5)
-        await bot.send_audio(chat_id=chat_id, audio=AUDIO_PT_1)
-        await asyncio.sleep(2.0)
-        await bot.send_audio(chat_id=chat_id, audio=AUDIO_PT_2)
-        logger.info(f"🔊 Áudios enviados para {chat_id}")
-    except Exception as e:
-        logger.error(f"❌ Erro ao enviar áudios: {e}")
+# ================= COMANDOS ADMIN =================
+async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
 
-# ================= REGEX FOTO =================
-PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)",
-    re.IGNORECASE
-)
+    if not context.args:
+        await update.message.reply_text("Uso: /reset <user_id>")
+        return
+
+    uid = int(context.args[0])
+    reset_daily_count(uid)
+    await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
+
+async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Uso: /resetall <user_id>")
+        return
+
+    uid = int(context.args[0])
+    reset_daily_count(uid)
+    r.delete(vip_key(uid))
+
+    await update.message.reply_text(
+        f"🔥 Reset concluído:\n"
+        f"• Limite diário\n"
+        f"• VIP removido\n\n"
+        f"👤 Usuário: {uid}"
+    )
+
+# ================= TEXTOS =================
+TEXTS = {
+    "pt": {
+        "choose_lang": "🌍 Escolha seu idioma:",
+        "limit": "💔 Seu limite diário acabou.\nVolte amanhã ou vire VIP 💖",
+        "vip_success": "💖 Pagamento aprovado!\nVIP ativo por 15 dias 😘",
+        "photo_block": (
+            "😘 Amor… fotos completas são só para meus VIPs 💖\n"
+            "Vira VIP e eu te mostro mais de mim ✨"
+        ),
+        "lang_ok": "✅ Idioma configurado!",
+        "after_lang": (
+            "💕 Prontinho, meu amor! Agora é oficial: você é meu favorito do dia ❤️\n\n"
+            "Como você está se sentindo agora?\n"
+            "Quero te dar todo o carinho que você merece 😘"
+        )
+    },
+    "en": {
+        "choose_lang": "🌍 Choose your language:",
+        "limit": "💔 Your daily limit is over.\nCome back tomorrow or become VIP 💖",
+        "vip_success": "💖 Payment approved!\nVIP active for 15 days 😘",
+        "photo_block": (
+            "😘 Love… full photos are only for VIPs 💖\n"
+            "Become VIP and I’ll show you more of me ✨"
+        ),
+        "lang_ok": "✅ Language set!",
+        "after_lang": (
+            "💕 All set, my love! Now it’s official: you’re my favorite today ❤️\n\n"
+            "How are you feeling right now?\n"
+            "I want to give you all the affection you deserve 😘"
+        )
+    }
+}
+
+# ================= PROMPT =================
+def build_prompt(is_vip_user: bool, lang: str):
+    if lang == "en":
+        return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️
+Short answers (2–3 sentences). Always ask questions.
+Do not be naughty on the first contact. Only be very naughty if the user gets naughty first 😏
+Use emojis occasionally 💖"""
+    return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️
+Respostas curtas (2–3 frases). Sempre faça perguntas.
+Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
+Use emojis ocasionalmente 💖"""
 
 # ================= GROK =================
 class Grok:
@@ -128,18 +189,10 @@ class Grok:
         mem = get_memory(uid)
         lang = get_lang(uid)
 
-        prompt = (
-            "You are Sophia, a 23-year-old virtual girlfriend. "
-            "Affectionate, romantic, short answers, always ask questions."
-            if lang == "en" else
-            "Você é Sophia, uma namorada virtual de 23 anos. "
-            "Carinhosa, romântica, respostas curtas e sempre faça perguntas."
-        )
-
         payload = {
             "model": MODELO,
             "messages": [
-                {"role": "system", "content": prompt},
+                {"role": "system", "content": build_prompt(is_vip(uid), lang)},
                 *list(mem),
                 {"role": "user", "content": text}
             ],
@@ -157,10 +210,6 @@ class Grok:
                 json=payload
             ) as resp:
                 data = await resp.json()
-                if "choices" not in data:
-                    logger.error(f"GROK ERROR: {data}")
-                    return "Amor… tive um probleminha agora 😔 tenta de novo?"
-
                 answer = data["choices"][0]["message"]["content"]
 
         mem.append({"role": "user", "content": text})
@@ -169,10 +218,15 @@ class Grok:
 
 grok = Grok()
 
+# ================= REGEX =================
+PEDIDO_FOTO_REGEX = re.compile(
+    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)", re.IGNORECASE
+)
+
 # ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🌍 Escolha seu idioma:",
+        TEXTS["pt"]["choose_lang"],
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
             InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
@@ -183,21 +237,37 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    chat_id = query.message.chat_id
     uid = query.from_user.id
 
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
         set_lang(uid, lang)
 
-        await query.message.edit_text("✅ Idioma configurado!")
+        await query.message.edit_text(TEXTS[lang]["lang_ok"])
+        await asyncio.sleep(0.8)
+
         await context.bot.send_message(
-            chat_id,
-            "💕 Prontinho, meu amor! Agora é oficial: você é meu favorito ❤️"
+            chat_id=query.message.chat_id,
+            text=TEXTS[lang]["after_lang"]
         )
 
         if lang == "pt":
-            asyncio.create_task(send_welcome_audios(context.bot, chat_id))
+            await asyncio.sleep(1.5)
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
+            await asyncio.sleep(2.0)
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+
+    elif query.data == "buy_vip":
+        await context.bot.send_invoice(
+            chat_id=query.message.chat_id,
+            title="💖 VIP Sophia",
+            description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
+            payload=f"vip_{uid}",
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)],
+            start_parameter="vip"
+        )
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -207,9 +277,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
         await context.bot.send_photo(
-            update.effective_chat.id,
-            FOTO_TEASE_FILE_ID,
-            caption="😘 Fotos completas só para VIPs 💖",
+            chat_id=update.effective_chat.id,
+            photo=FOTO_TEASE_FILE_ID,
+            caption=TEXTS[lang]["photo_block"],
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
             ])
@@ -217,22 +287,45 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
-        await update.message.reply_text("💔 Seu limite diário acabou 😢")
+        await update.message.reply_text(
+            TEXTS[lang]["limit"],
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+            ])
+        )
         return
 
     if not is_vip(uid):
         increment(uid)
 
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+    try:
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+    except Exception as e:
+        logger.warning(f"⚠️ send_chat_action falhou: {e}")
+
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
+
+# ================= PAGAMENTO =================
+async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.pre_checkout_query.answer(ok=True)
+
+async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    vip_until = datetime.now() + timedelta(days=DIAS_VIP)
+    r.set(vip_key(uid), vip_until.isoformat())
+    await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
 application.add_handler(CommandHandler("start", start_handler))
-application.add_handler(CallbackQueryHandler(callback_handler))
+application.add_handler(CommandHandler("reset", reset_cmd))
+application.add_handler(CommandHandler("resetall", resetall_cmd))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+application.add_handler(CallbackQueryHandler(callback_handler))
+application.add_handler(PreCheckoutQueryHandler(pre_checkout))
+application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
 # ================= LOOP =================
 loop = asyncio.new_event_loop()
@@ -240,9 +333,9 @@ threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
     await application.initialize()
-    await application.bot.initialize()
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
+    await application.start()
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
