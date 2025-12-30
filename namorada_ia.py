@@ -123,10 +123,7 @@ async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = int(context.args[0])
     reset_daily_count(uid)
     r.delete(vip_key(uid))
-    await update.message.reply_text(
-        f"🔥 Reset completo\n"
-        f"Usuário: {uid}"
-    )
+    await update.message.reply_text(f"🔥 Reset completo\nUsuário: {uid}")
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -134,31 +131,45 @@ TEXTS = {
         "choose_lang": "🌍 Escolha seu idioma:",
         "limit": "💔 Seu limite diário acabou.\nVolte amanhã ou vire VIP 💖",
         "vip_success": "💖 Pagamento aprovado!\nVIP ativo por 15 dias 😘",
-        "photo_block": "😘 Fotos completas só para VIPs 💖",
+        "photo_block": (
+            "😘 Amor… fotos completas são só para meus VIPs 💖\n"
+            "Vira VIP e eu te mostro mais de mim ✨"
+        ),
         "lang_ok": "✅ Idioma configurado!",
         "after_lang": (
             "💕 Prontinho, meu amor! Agora é oficial: você é meu favorito do dia ❤️\n\n"
-            "Como você está se sentindo agora? 😘"
+            "Como você está se sentindo agora?\n"
+            "Quero te dar todo o carinho que você merece 😘"
         )
     },
     "en": {
         "choose_lang": "🌍 Choose your language:",
         "limit": "💔 Your daily limit is over.\nCome back tomorrow or become VIP 💖",
         "vip_success": "💖 Payment approved!\nVIP active for 15 days 😘",
-        "photo_block": "😘 Full photos only for VIPs 💖",
+        "photo_block": (
+            "😘 Love… full photos are only for VIPs 💖\n"
+            "Become VIP and I’ll show you more of me ✨"
+        ),
         "lang_ok": "✅ Language set!",
         "after_lang": (
-            "💕 All set, my love! You’re my favorite today ❤️\n\n"
-            "How are you feeling now? 😘"
+            "💕 All set, my love! Now it’s official: you’re my favorite today ❤️\n\n"
+            "How are you feeling right now?\n"
+            "I want to give you all the affection you deserve 😘"
         )
     }
 }
 
-# ================= PROMPT =================
+# ================= PROMPT (ORIGINAL) =================
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
-        return "You are Sophia, a loving virtual girlfriend ❤️"
-    return "Você é Sophia, uma namorada virtual carinhosa ❤️"
+        return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️
+Short answers (2–3 sentences). Always ask questions.
+Do not be naughty on the first contact. Only be very naughty if the user gets naughty first 😏
+Use emojis occasionally 💖"""
+    return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️
+Respostas curtas (2–3 frases). Sempre faça perguntas.
+Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
+Use emojis ocasionalmente 💖"""
 
 # ================= GROK =================
 class Grok:
@@ -197,7 +208,7 @@ grok = Grok()
 
 # ================= REGEX =================
 PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|vip|nude)", re.IGNORECASE
+    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)", re.IGNORECASE
 )
 
 # ================= START =================
@@ -219,19 +230,30 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
         set_lang(uid, lang)
+
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
-        await asyncio.sleep(1)
-        await context.bot.send_message(query.message.chat_id, TEXTS[lang]["after_lang"])
+        await asyncio.sleep(0.8)
+
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=TEXTS[lang]["after_lang"]
+        )
+
+        if lang == "pt":
+            await asyncio.sleep(1.5)
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
+            await asyncio.sleep(2.0)
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
 
     elif query.data == "buy_vip":
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title="💖 VIP Sophia",
-            description="15 dias VIP 💎",
+            description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
             payload=f"vip_{uid}",
             provider_token="",
             currency="XTR",
-            prices=[LabeledPrice("VIP 15 dias", PRECO_VIP_STARS)],
+            prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)],
             start_parameter="vip"
         )
 
@@ -264,7 +286,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_vip(uid):
         increment(uid)
 
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+    try:
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+    except Exception as e:
+        logger.warning(f"⚠️ send_chat_action falhou: {e}")
+
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
 
@@ -274,7 +300,8 @@ async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    r.set(vip_key(uid), (datetime.now() + timedelta(days=DIAS_VIP)).isoformat())
+    vip_until = datetime.now() + timedelta(days=DIAS_VIP)
+    r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
 # ================= MAIN =================
