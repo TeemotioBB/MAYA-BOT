@@ -205,7 +205,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-# ================= CALLBACK =================
+# ================= CALLBACK (COM DELAY) =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -216,19 +216,28 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         set_lang(uid, lang)
 
+        # 1️⃣ Confirma idioma
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
+
+        await asyncio.sleep(0.8)
+
+        # 2️⃣ Mensagem carinhosa
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=TEXTS[lang]["after_lang"]
         )
 
-        # 🔊 ÁUDIOS SOMENTE PARA PT-BR (CORREÇÃO AQUI)
+        # 🔊 Áudios somente para PT-BR
         if lang == "pt":
+            await asyncio.sleep(1.5)
+
             await context.bot.send_audio(
                 chat_id=query.message.chat_id,
                 audio=AUDIO_PT_1
             )
-            await asyncio.sleep(1.2)
+
+            await asyncio.sleep(2.0)
+
             await context.bot.send_audio(
                 chat_id=query.message.chat_id,
                 audio=AUDIO_PT_2
