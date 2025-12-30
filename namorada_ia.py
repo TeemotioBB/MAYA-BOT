@@ -57,12 +57,15 @@ r = redis.from_url(REDIS_URL, decode_responses=True)
 LIMITE_DIARIO = 15
 DIAS_VIP = 15
 PRECO_VIP_STARS = 250
-
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= ADMIN =================
 ADMIN_IDS = {1293602874}
+
+# ================= ÁUDIOS PT-BR =================
+AUDIO_PT_1 = "CQACAgEAAxkBAAEC_-NpU_w1-00YgEJL-4wpp-ZuA85lCAAChgYAAhnBoUbzxkqKPx_D3zgE"
+AUDIO_PT_2 = "CQACAgEAAxkBAAEC_-dpU_xseVVAm20oulK6viSv8w_pwwAChwYAAhnBoUaQgRFGZGg96zgE"
 
 # ================= FOTO TEASER =================
 FOTO_TEASE_FILE_ID = (
@@ -86,8 +89,7 @@ def is_vip(uid):
     until = r.get(vip_key(uid))
     return until and datetime.fromisoformat(until) > datetime.now()
 
-def today_count(uid):
-    return int(r.get(count_key(uid)) or 0)
+def today_count(uid): return int(r.get(count_key(uid)) or 0)
 
 def increment(uid):
     r.incr(count_key(uid))
@@ -115,7 +117,7 @@ TEXTS = {
         "lang_ok": "✅ Idioma configurado!",
         "after_lang": (
             "💕 Prontinho, meu amor! Agora é oficial: você é meu favorito do dia ❤️\n\n"
-            "Como você está se sentindo agora? "
+            "Como você está se sentindo agora?\n"
             "Quero te dar todo o carinho que você merece 😘"
         )
     },
@@ -130,7 +132,7 @@ TEXTS = {
         "lang_ok": "✅ Language set!",
         "after_lang": (
             "💕 All set, my love! Now it’s official: you’re my favorite today ❤️\n\n"
-            "How are you feeling right now? "
+            "How are you feeling right now?\n"
             "I want to give you all the affection you deserve 😘"
         )
     }
@@ -141,17 +143,12 @@ def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
         return (
             "You are Sophia, a 23-year-old girlfriend.\n"
-            + ("The user is VIP.\nBe more intimate.\n"
-               if is_vip_user else
-               "The user is NOT VIP.\nNever send photos.\n")
+            + ("The user is VIP.\nBe more intimate.\n" if is_vip_user else "The user is NOT VIP.\nNever send photos.\n")
             + "Short answers (2–3 sentences). Always ask questions."
         )
-
     return (
         "Você é Sophia, uma namorada de 23 anos.\n"
-        + ("O usuário é VIP.\nSeja mais próxima.\n"
-           if is_vip_user else
-           "O usuário NÃO é VIP.\nNunca envie fotos.\n")
+        + ("O usuário é VIP.\nSeja mais próxima.\n" if is_vip_user else "O usuário NÃO é VIP.\nNunca envie fotos.\n")
         + "Respostas curtas (2–3 frases). Sempre faça perguntas."
     )
 
@@ -208,55 +205,33 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-# ================= /RESET =================
-async def reset_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("❌ Você não tem permissão.")
-        return
+# ================= CALLBACK =================
+async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-    if not context.args:
-        await update.message.reply_text("Uso correto: /reset <id_do_usuario>")
-        return
+    if query.data.startswith("lang_"):
+        lang = query.data.split("_")[1]
+        uid = query.from_user.id
 
-    try:
-        uid = int(context.args[0])
-        reset_daily_count(uid)
-        await update.message.reply_text(
-            f"✅ Contador diário resetado para o usuário `{uid}`",
-            parse_mode="Markdown"
+        set_lang(uid, lang)
+
+        await query.message.edit_text(TEXTS[lang]["lang_ok"])
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=TEXTS[lang]["after_lang"]
         )
-    except ValueError:
-        await update.message.reply_text("❌ ID inválido.")
 
-# ================= /RESETARVIP =================
-async def resetarvip_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("❌ Você não tem permissão.")
-        return
-
-    if not context.args:
-        await update.message.reply_text("Uso correto: /resetarvip <id_do_usuario>")
-        return
-
-    try:
-        uid = int(context.args[0])
-
-        if not r.exists(vip_key(uid)):
-            await update.message.reply_text(
-                f"ℹ️ O usuário `{uid}` não possui VIP ativo.",
-                parse_mode="Markdown"
+        # 🔊 ÁUDIOS APENAS PARA PT-BR
+        if lang == "pt":
+            await context.bot.send_voice(
+                chat_id=query.message.chat_id,
+                voice=AUDIO_PT_1
             )
-            return
-
-        r.delete(vip_key(uid))
-
-        await update.message.reply_text(
-            f"❌ VIP removido com sucesso do usuário `{uid}`.",
-            parse_mode="Markdown"
-        )
-
-    except ValueError:
-        await update.message.reply_text("❌ ID inválido.")
+            await context.bot.send_voice(
+                chat_id=query.message.chat_id,
+                voice=AUDIO_PT_2
+            )
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -291,48 +266,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
 
-# ================= CALLBACK =================
-async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    uid = query.from_user.id
-
-    if query.data.startswith("lang_"):
-        lang = query.data.split("_")[1]
-        set_lang(uid, lang)
-
-        # Confirma idioma
-        await query.message.edit_text(TEXTS[lang]["lang_ok"])
-
-        # Mensagem principal
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=TEXTS[lang]["after_lang"]
-        )
-
-        # 🔊 ÁUDIOS APENAS PARA PT-BR
-        if lang == "pt":
-            await context.bot.send_voice(
-                chat_id=query.message.chat_id,
-                voice=AUDIO_PT_1
-            )
-            await context.bot.send_voice(
-                chat_id=query.message.chat_id,
-                voice=AUDIO_PT_2
-            )
-
-        return
-
-    # Compra VIP
-    await context.bot.send_invoice(
-        chat_id=query.message.chat_id,
-        title="VIP Sophia 💖",
-        description="Conversas ilimitadas por 15 dias",
-        payload="vip_15",
-        provider_token="",
-        currency="XTR",
-        prices=[LabeledPrice("VIP 15 dias", PRECO_VIP_STARS)]
-    )
-
 # ================= PAGAMENTO =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.pre_checkout_query.answer(ok=True)
@@ -345,9 +278,8 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
+
 application.add_handler(CommandHandler("start", start_handler))
-application.add_handler(CommandHandler("reset", reset_handler))
-application.add_handler(CommandHandler("resetarvip", resetarvip_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
