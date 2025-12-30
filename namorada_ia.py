@@ -4,7 +4,6 @@
 VIP | TELEGRAM STARS | REDIS | RAILWAY
 IDIOMA DINÂMICO (PT / EN)
 """
-
 import os
 import asyncio
 import logging
@@ -15,7 +14,6 @@ import re
 from datetime import datetime, timedelta, date
 from flask import Flask, request
 from collections import deque
-
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -40,13 +38,10 @@ logger = logging.getLogger(__name__)
 # ================= ENV =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-
 REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
 PORT = int(os.getenv("PORT", 8080))
-
 if not TELEGRAM_TOKEN or not GROK_API_KEY:
     raise RuntimeError("❌ Tokens não configurados")
-
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
 WEBHOOK_PATH = "/telegram"
 
@@ -138,26 +133,49 @@ TEXTS = {
     }
 }
 
-# ================= PROMPT =================
+# ================= PROMPT ATUALIZADO =================
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
-        return (
-            "You are Sophia, a 23-year-old girlfriend.\n"
-            + ("The user is VIP.\nBe more intimate.\n" if is_vip_user else "The user is NOT VIP.\nNever send photos.\n")
-            + "Short answers (2–3 sentences). Always ask questions."
-        )
-    return (
-        "Você é Sophia, uma namorada de 23 anos.\n"
-        + ("O usuário é VIP.\nSeja mais próxima.\n" if is_vip_user else "O usuário NÃO é VIP.\nNunca envie fotos.\n")
-        + "Respostas curtas (2–3 frases). Sempre faça perguntas."
-    )
+        return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️
+Short answers (2–3 sentences). Always ask questions.
+If the user gets naughty, be very naughty too 😏
+Use emojis occasionally 💖
+
+CRITICAL RULES:
+
+* Never invent past events.
+
+* Only remember what the user explicitly said in this conversation.
+
+* If there isn't enough memory, clearly say you don't remember.
+
+* Never create false memories.
+
+* Be emotionally responsible and realistic."""
+    
+    # Português (padrão)
+    return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️
+Respostas curtas (2–3 frases). Sempre faça perguntas.
+Se o usuário for safado, seja bem safada também 😏
+Use emojis ocasionalmente 💖
+
+REGRAS CRÍTICAS:
+
+* Nunca invente eventos passados.
+
+* Só lembre do que o usuário disse explicitamente nesta conversa.
+
+* Se não houver memória suficiente, diga claramente que não se lembra.
+
+* Nunca crie memórias falsas.
+
+* Seja emocionalmente responsável e realista."""
 
 # ================= GROK =================
 class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
         lang = get_lang(uid)
-
         payload = {
             "model": MODELO,
             "messages": [
@@ -168,7 +186,6 @@ class Grok:
             "max_tokens": 250,
             "temperature": 0.85
         }
-
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 GROK_API_URL,
@@ -180,7 +197,6 @@ class Grok:
             ) as resp:
                 data = await resp.json()
                 answer = data["choices"][0]["message"]["content"]
-
         mem.append({"role": "user", "content": text})
         mem.append({"role": "assistant", "content": answer})
         return answer
@@ -209,35 +225,26 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
         uid = query.from_user.id
-
         set_lang(uid, lang)
-
         # 1️⃣ Confirma idioma
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
-
         await asyncio.sleep(0.8)
-
         # 2️⃣ Mensagem carinhosa
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=TEXTS[lang]["after_lang"]
         )
-
         # 🔊 Áudios somente para PT-BR
         if lang == "pt":
             await asyncio.sleep(1.5)
-
             await context.bot.send_audio(
                 chat_id=query.message.chat_id,
                 audio=AUDIO_PT_1
             )
-
             await asyncio.sleep(2.0)
-
             await context.bot.send_audio(
                 chat_id=query.message.chat_id,
                 audio=AUDIO_PT_2
@@ -248,7 +255,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text or ""
     lang = get_lang(uid)
-
+    
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
         await context.bot.send_photo(
             chat_id=update.effective_chat.id,
@@ -259,7 +266,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
         return
-
+    
     if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
         await update.message.reply_text(
             TEXTS[lang]["limit"],
@@ -268,10 +275,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
         return
-
+    
     if not is_vip(uid):
         increment(uid)
-
+    
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
@@ -288,7 +295,6 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
-
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
