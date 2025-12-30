@@ -13,6 +13,8 @@ import threading
 import aiohttp
 import redis
 import re
+import base64
+from io import BytesIO
 from datetime import datetime, timedelta, date
 from flask import Flask, request
 from collections import deque
@@ -39,9 +41,9 @@ logger = logging.getLogger(__name__)
 # ================= ENV =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-PUSHINPAY_TOKEN = ("57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5")
-
+PUSHINPAY_TOKEN = os.getenv("PUSHINPAY_TOKEN")
 REDIS_URL = os.getenv("REDIS_URL")
+
 PORT = int(os.getenv("PORT", 8080))
 
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
@@ -203,10 +205,10 @@ async def criar_pix_pushinpay(uid: int):
     async with aiohttp.ClientSession() as session:
         async with session.post(url, json=payload, headers=headers) as resp:
             data = await resp.json()
-
             if resp.status != 200:
                 raise RuntimeError(data)
 
+            # vincula pix -> usuario por 1h
             r.set(f"pix:{data['id']}", uid, ex=3600)
             return data
 
@@ -227,7 +229,7 @@ async def reset_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     uid = int(context.args[0])
     reset_daily_count(uid)
-    await update.message.reply_text("✅ Resetado.")
+    await update.message.reply_text("✅ Contador resetado.")
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -274,13 +276,26 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "buy_vip":
         pix = await criar_pix_pushinpay(uid)
+
+        # ===== CORREÇÃO BASE64 =====
+        base64_img = pix["qr_code_base64"].split(",")[1]
+        img_bytes = base64.b64decode(base64_img)
+
+        photo = BytesIO(img_bytes)
+        photo.name = "pix.png"
+
         await query.message.reply_photo(
-            pix["qr_code_base64"],
+            photo=photo,
             caption=(
                 "💖 Pague via PIX\n\n"
                 "Após o pagamento, seu VIP será liberado automaticamente.\n\n"
                 "⚠️ A PushinPay atua apenas como processadora de pagamentos."
             )
+        )
+
+        # opcional: copia e cola
+        await query.message.reply_text(
+            f"📋 PIX copia e cola:\n\n{pix['qr_code']}"
         )
 
 # ================= APP =================
