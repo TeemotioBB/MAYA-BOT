@@ -89,7 +89,8 @@ def is_vip(uid):
     until = r.get(vip_key(uid))
     return until and datetime.fromisoformat(until) > datetime.now()
 
-def today_count(uid): return int(r.get(count_key(uid)) or 0)
+def today_count(uid):
+    return int(r.get(count_key(uid)) or 0)
 
 def increment(uid):
     r.incr(count_key(uid))
@@ -103,6 +104,38 @@ def get_lang(uid):
 
 def set_lang(uid, lang):
     r.set(lang_key(uid), lang)
+
+# ================= COMANDOS ADMIN =================
+async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Uso: /reset <user_id>")
+        return
+
+    uid = int(context.args[0])
+    reset_daily_count(uid)
+    await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
+
+async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Uso: /resetall <user_id>")
+        return
+
+    uid = int(context.args[0])
+    reset_daily_count(uid)
+    r.delete(vip_key(uid))
+
+    await update.message.reply_text(
+        f"🔥 Reset concluído:\n"
+        f"• Limite diário\n"
+        f"• VIP removido\n\n"
+        f"👤 Usuário: {uid}"
+    )
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -141,16 +174,14 @@ TEXTS = {
 # ================= PROMPT =================
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
-        return (
-            "You are Sophia, a 23-year-old girlfriend.\n"
-            + ("The user is VIP.\nBe more intimate.\n" if is_vip_user else "The user is NOT VIP.\nNever send photos.\n")
-            + "Short answers (2–3 sentences). Always ask questions."
-        )
-    return (
-        "Você é Sophia, uma namorada de 23 anos.\n"
-        + ("O usuário é VIP.\nSeja mais próxima.\n" if is_vip_user else "O usuário NÃO é VIP.\nNunca envie fotos.\n")
-        + "Respostas curtas (2–3 frases). Sempre faça perguntas."
-    )
+        return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️
+Short answers (2–3 sentences). Always ask questions.
+Do not be naughty on the first contact. Only be very naughty if the user gets naughty first 😏
+Use emojis occasionally 💖"""
+    return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️
+Respostas curtas (2–3 frases). Sempre faça perguntas.
+Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
+Use emojis ocasionalmente 💖"""
 
 # ================= GROK =================
 class Grok:
@@ -189,11 +220,10 @@ grok = Grok()
 
 # ================= REGEX =================
 PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)",
-    re.IGNORECASE
+    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)", re.IGNORECASE
 )
 
-# ================= /START =================
+# ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         TEXTS["pt"]["choose_lang"],
@@ -205,7 +235,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-# ================= CALLBACK (COM DELAY) =================
+# ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -213,35 +243,21 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
         uid = query.from_user.id
-
         set_lang(uid, lang)
 
-        # 1️⃣ Confirma idioma
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
-
         await asyncio.sleep(0.8)
 
-        # 2️⃣ Mensagem carinhosa
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=TEXTS[lang]["after_lang"]
         )
 
-        # 🔊 Áudios somente para PT-BR
         if lang == "pt":
             await asyncio.sleep(1.5)
-
-            await context.bot.send_audio(
-                chat_id=query.message.chat_id,
-                audio=AUDIO_PT_1
-            )
-
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
             await asyncio.sleep(2.0)
-
-            await context.bot.send_audio(
-                chat_id=query.message.chat_id,
-                audio=AUDIO_PT_2
-            )
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -272,7 +288,15 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_vip(uid):
         increment(uid)
 
-    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+    # 🔒 CORREÇÃO DO TIMEOUT (NÃO DERRUBA O BOT)
+    try:
+        await context.bot.send_chat_action(
+            update.effective_chat.id,
+            ChatAction.TYPING
+        )
+    except Exception as e:
+        logger.warning(f"⚠️ send_chat_action falhou: {e}")
+
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
 
@@ -290,6 +314,8 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
 application.add_handler(CommandHandler("start", start_handler))
+application.add_handler(CommandHandler("reset", reset_cmd))
+application.add_handler(CommandHandler("resetall", resetall_cmd))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
