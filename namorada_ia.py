@@ -50,6 +50,9 @@ if not TELEGRAM_TOKEN or not GROK_API_KEY:
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
 WEBHOOK_PATH = "/telegram"
 
+# ================= ADMIN =================
+ADMIN_IDS = {123456789}  # ⬅️ COLOQUE SEU ID AQUI
+
 # ================= REDIS =================
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
@@ -95,6 +98,17 @@ def get_lang(uid):
 
 def set_lang(uid, lang):
     r.set(lang_key(uid), lang)
+
+# ================= ADMIN HELPERS =================
+def reset_daily_limit(uid):
+    r.delete(count_key(uid))
+
+def remove_vip(uid):
+    r.delete(vip_key(uid))
+
+def set_vip(uid, days=DIAS_VIP):
+    vip_until = datetime.now() + timedelta(days=days)
+    r.set(vip_key(uid), vip_until.isoformat())
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -267,13 +281,38 @@ async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    vip_until = datetime.now() + timedelta(days=DIAS_VIP)
-    r.set(vip_key(uid), vip_until.isoformat())
+    set_vip(uid)
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
+
+# ================= ADMIN COMMANDS =================
+async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    uid = int(context.args[0])
+    reset_daily_limit(uid)
+    await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
+
+async def removevip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    uid = int(context.args[0])
+    remove_vip(uid)
+    await update.message.reply_text(f"💔 VIP removido do usuário {uid}")
+
+async def addvip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    uid = int(context.args[0])
+    days = int(context.args[1]) if len(context.args) > 1 else DIAS_VIP
+    set_vip(uid, days)
+    await update.message.reply_text(f"💖 VIP ativado para {uid} por {days} dias")
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start_handler))
+application.add_handler(CommandHandler("reset", reset_command))
+application.add_handler(CommandHandler("removevip", removevip_command))
+application.add_handler(CommandHandler("addvip", addvip_command))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
