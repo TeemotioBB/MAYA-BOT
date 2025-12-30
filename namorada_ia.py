@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # ================= ENV =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-PUSHINPAY_TOKEN = os.getenv("PUSHINPAY_TOKEN")
+PUSHINPAY_TOKEN = ("57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5")
 REDIS_URL = os.getenv("REDIS_URL")
 
 PORT = int(os.getenv("PORT", 8080))
