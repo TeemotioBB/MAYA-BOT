@@ -175,13 +175,9 @@ TEXTS = {
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
         return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️
-Short answers (2–3 sentences). Always ask questions.
-Do not be naughty on the first contact. Only be very naughty if the user gets naughty first 😏
-Use emojis occasionally 💖"""
+Short answers (2–3 sentences). Always ask questions."""
     return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️
-Respostas curtas (2–3 frases). Sempre faça perguntas.
-Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
-Use emojis ocasionalmente 💖"""
+Respostas curtas (2–3 frases). Sempre faça perguntas."""
 
 # ================= GROK =================
 class Grok:
@@ -244,7 +240,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     uid = query.from_user.id
-    chat_id = query.message.chat_id  # 🔒 FIX CRÍTICO
+    chat_id = query.message.chat_id
 
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
@@ -253,22 +249,19 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
         await asyncio.sleep(0.8)
 
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=TEXTS[lang]["after_lang"]
-        )
+        await context.bot.send_message(chat_id, TEXTS[lang]["after_lang"])
 
         if lang == "pt":
             await asyncio.sleep(1.2)
-            await context.bot.send_audio(chat_id=chat_id, audio=AUDIO_PT_1)
+            await context.bot.send_audio(chat_id, AUDIO_PT_1)
             await asyncio.sleep(1.8)
-            await context.bot.send_audio(chat_id=chat_id, audio=AUDIO_PT_2)
+            await context.bot.send_audio(chat_id, AUDIO_PT_2)
 
     elif query.data == "buy_vip":
         await context.bot.send_invoice(
             chat_id=chat_id,
             title="💖 VIP Sophia",
-            description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
+            description="Acesso VIP por 15 dias 💎",
             payload=f"vip_{uid}",
             currency="XTR",
             prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)]
@@ -282,8 +275,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
         await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=FOTO_TEASE_FILE_ID,
+            update.effective_chat.id,
+            FOTO_TEASE_FILE_ID,
             caption=TEXTS[lang]["photo_block"],
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
@@ -303,11 +296,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_vip(uid):
         increment(uid)
 
-    try:
-        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-    except Exception as e:
-        logger.warning(f"⚠️ send_chat_action falhou: {e}")
-
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
 
@@ -338,6 +327,7 @@ threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
     await application.initialize()
+    await application.bot.initialize()  # 🔥 FIX DEFINITIVO
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
 
