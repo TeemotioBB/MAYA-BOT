@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-🔥 Maya Bot — Telegram + Grok 4 Fast Reasoning
+🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
 VIP | TELEGRAM STARS | REDIS | RAILWAY
-IDIOMA DINÂMICO + TELA DE BOAS-VINDAS
+IDIOMA DINÂMICO (PT / EN)
 """
 
 import os
@@ -78,7 +78,6 @@ def get_memory(uid):
 def vip_key(uid): return f"vip:{uid}"
 def count_key(uid): return f"count:{uid}:{date.today()}"
 def lang_key(uid): return f"lang:{uid}"
-def started_key(uid): return f"started:{uid}"
 
 def is_vip(uid):
     until = r.get(vip_key(uid))
@@ -97,50 +96,36 @@ def get_lang(uid):
 def set_lang(uid, lang):
     r.set(lang_key(uid), lang)
 
-def has_started(uid):
-    return r.get(started_key(uid)) == "1"
-
-def set_started(uid):
-    r.set(started_key(uid), "1")
-
 # ================= TEXTOS =================
 TEXTS = {
     "pt": {
         "choose_lang": "🌍 Escolha seu idioma:",
-        "welcome": (
-            "💕 Prontinho, meu amor! Agora é oficial: você é meu favorito do dia ❤️\n\n"
-            "Como você está se sentindo agora? Quero te dar todo o carinho que você merece 😘\n\n"
-            "🔥 *Maya — sua namorada virtual, 23 anos*\n\n"
-            "Carinhosa, safada na medida certa e sempre pronta pra te ouvir 💬❤️\n\n"
-            "🆓 15 mensagens grátis por dia\n"
-            "💎 VIP 250 ⭐ → conversas ilimitadas + fotos exclusivas só pros meus favoritos 😘\n\n"
-            "Vamos começar?"
-        ),
-        "start_chat": "💬 Pode falar comigo, meu amor… estou te ouvindo 😘",
         "limit": "💔 Seu limite diário acabou.\nVolte amanhã ou vire VIP 💖",
         "vip_success": "💖 Pagamento aprovado!\nVIP ativo por 15 dias 😘",
         "photo_block": (
             "😘 Amor… fotos completas são só para meus VIPs 💖\n"
             "Vira VIP e eu te mostro mais de mim ✨"
+        ),
+        "lang_ok": "✅ Idioma configurado!",
+        "after_lang": (
+            "💕 Prontinho, meu amor! Agora é oficial: você é meu favorito do dia ❤️\n\n"
+            "Como você está se sentindo agora? "
+            "Quero te dar todo o carinho que você merece 😘"
         )
     },
     "en": {
         "choose_lang": "🌍 Choose your language:",
-        "welcome": (
-            "💕 All set, my love! Now it’s official: you’re my favorite today ❤️\n\n"
-            "How are you feeling right now? I want to give you all the affection you deserve 😘\n\n"
-            "🔥 *Maya — your virtual girlfriend, 23 years old*\n\n"
-            "Sweet, naughty in the right measure, and always ready to listen 💬❤️\n\n"
-            "🆓 15 free messages per day\n"
-            "💎 VIP 250 ⭐ → unlimited chats + exclusive photos just for my favorites 😘\n\n"
-            "Shall we start?"
-        ),
-        "start_chat": "💬 You can talk to me now, love… I’m listening 😘",
         "limit": "💔 Your daily limit is over.\nCome back tomorrow or become VIP 💖",
         "vip_success": "💖 Payment approved!\nVIP active for 15 days 😘",
         "photo_block": (
             "😘 Love… full photos are only for VIPs 💖\n"
             "Become VIP and I’ll show you more of me ✨"
+        ),
+        "lang_ok": "✅ Language set!",
+        "after_lang": (
+            "💕 All set, my love! Now it’s official: you’re my favorite today ❤️\n\n"
+            "How are you feeling right now? "
+            "I want to give you all the affection you deserve 😘"
         )
     }
 }
@@ -149,18 +134,18 @@ TEXTS = {
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
         return (
-            "You are Maya, a 23-year-old virtual girlfriend.\n"
-            + ("The user is VIP.\nBe more intimate and engaging.\n"
+            "You are Sophia, a 23-year-old virtual girlfriend.\n"
+            + ("The user is VIP.\nBe more intimate.\n"
                if is_vip_user else
-               "The user is NOT VIP.\nNever send photos.\nPhotos are VIP only.\n")
+               "The user is NOT VIP.\nNever send photos.\n")
             + "Short answers (2–3 sentences). Always ask questions."
         )
 
     return (
-        "Você é Maya, uma namorada virtual de 23 anos.\n"
-        + ("O usuário é VIP 💖.\nSeja mais próxima e envolvente.\n"
+        "Você é Sophia, uma namorada virtual de 23 anos.\n"
+        + ("O usuário é VIP.\nSeja mais próxima.\n"
            if is_vip_user else
-           "O usuário NÃO é VIP.\nNunca envie fotos.\nFotos são apenas para VIPs.\n")
+           "O usuário NÃO é VIP.\nNunca envie fotos.\n")
         + "Respostas curtas (2–3 frases). Sempre faça perguntas."
     )
 
@@ -207,9 +192,6 @@ PEDIDO_FOTO_REGEX = re.compile(
 
 # ================= /START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    r.delete(started_key(uid))
-
     await update.message.reply_text(
         TEXTS["pt"]["choose_lang"],
         reply_markup=InlineKeyboardMarkup([
@@ -220,51 +202,11 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     )
 
-# ================= CALLBACK =================
-async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    uid = query.from_user.id
-
-    if query.data.startswith("lang_"):
-        lang = query.data.split("_")[1]
-        set_lang(uid, lang)
-
-        await query.message.edit_text(
-            TEXTS[lang]["welcome"],
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔥 /start", callback_data="begin_chat")]
-            ])
-        )
-        return
-
-    if query.data == "begin_chat":
-        set_started(uid)
-        await query.message.delete()
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=TEXTS[get_lang(uid)]["start_chat"]
-        )
-        return
-
-    await context.bot.send_invoice(
-        chat_id=query.message.chat_id,
-        title="VIP Maya 💖",
-        description="Conversas ilimitadas por 15 dias",
-        payload="vip_15",
-        provider_token="",
-        currency="XTR",
-        prices=[LabeledPrice("VIP 15 dias", PRECO_VIP_STARS)]
-    )
-
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text or ""
     lang = get_lang(uid)
-
-    if not has_started(uid):
-        return
 
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
         await context.bot.send_photo(
@@ -278,7 +220,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
-        await update.message.reply_text(TEXTS[lang]["limit"])
+        await update.message.reply_text(
+            TEXTS[lang]["limit"],
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+            ])
+        )
         return
 
     if not is_vip(uid):
@@ -287,6 +234,32 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
+
+# ================= CALLBACK =================
+async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    uid = query.from_user.id
+
+    if query.data.startswith("lang_"):
+        lang = query.data.split("_")[1]
+        set_lang(uid, lang)
+
+        await query.message.edit_text(TEXTS[lang]["lang_ok"])
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=TEXTS[lang]["after_lang"]
+        )
+        return
+
+    await context.bot.send_invoice(
+        chat_id=query.message.chat_id,
+        title="VIP Sophia 💖",
+        description="Conversas ilimitadas por 15 dias",
+        payload="vip_15",
+        provider_token="",
+        currency="XTR",
+        prices=[LabeledPrice("VIP 15 dias", PRECO_VIP_STARS)]
+    )
 
 # ================= PAGAMENTO =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
