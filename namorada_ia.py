@@ -109,9 +109,11 @@ def set_lang(uid, lang):
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
+
     if not context.args:
         await update.message.reply_text("Uso: /reset <user_id>")
         return
+
     uid = int(context.args[0])
     reset_daily_count(uid)
     await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
@@ -119,12 +121,15 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
+
     if not context.args:
         await update.message.reply_text("Uso: /resetall <user_id>")
         return
+
     uid = int(context.args[0])
     reset_daily_count(uid)
     r.delete(vip_key(uid))
+
     await update.message.reply_text(
         f"🔥 Reset concluído:\n"
         f"• Limite diário\n"
@@ -183,6 +188,7 @@ class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
         lang = get_lang(uid)
+
         payload = {
             "model": MODELO,
             "messages": [
@@ -193,6 +199,7 @@ class Grok:
             "max_tokens": 250,
             "temperature": 0.85
         }
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 GROK_API_URL,
@@ -204,6 +211,7 @@ class Grok:
             ) as resp:
                 data = await resp.json()
                 answer = data["choices"][0]["message"]["content"]
+
         mem.append({"role": "user", "content": text})
         mem.append({"role": "assistant", "content": answer})
         return answer
@@ -231,35 +239,25 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
         uid = query.from_user.id
         set_lang(uid, lang)
+
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
         await asyncio.sleep(0.8)
+
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=TEXTS[lang]["after_lang"]
         )
+
         if lang == "pt":
             await asyncio.sleep(1.5)
             await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
             await asyncio.sleep(2.0)
             await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
-
-# ================= BUY VIP (ADICIONADO – NÃO REMOVE NADA) =================
-async def buy_vip_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    await context.bot.send_invoice(
-        chat_id=query.from_user.id,
-        title="💖 VIP Sophia",
-        description="Conversas ilimitadas por 15 dias 💕",
-        payload="vip_250",
-        currency="XTR",  # Telegram Stars
-        prices=[LabeledPrice("VIP 15 dias", PRECO_VIP_STARS)]
-    )
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -290,8 +288,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_vip(uid):
         increment(uid)
 
+    # 🔒 CORREÇÃO DO TIMEOUT (NÃO DERRUBA O BOT)
     try:
-        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+        await context.bot.send_chat_action(
+            update.effective_chat.id,
+            ChatAction.TYPING
+        )
     except Exception as e:
         logger.warning(f"⚠️ send_chat_action falhou: {e}")
 
@@ -314,7 +316,6 @@ application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
-application.add_handler(CallbackQueryHandler(buy_vip_handler, pattern="^buy_vip$"))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
