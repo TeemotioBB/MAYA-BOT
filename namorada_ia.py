@@ -87,11 +87,14 @@ def is_vip(uid):
     return until and datetime.fromisoformat(until) > datetime.now()
 
 def today_count(uid):
-    return int(r.get(count_key(uid)) or 0)
+    # soma todos os contadores do dia (seguro)
+    keys = r.keys(f"count:{uid}:*")
+    return sum(int(r.get(k) or 0) for k in keys)
 
 def increment(uid):
-    r.incr(count_key(uid))
-    r.expire(count_key(uid), 86400)
+    key = count_key(uid)
+    r.incr(key)
+    r.expire(key, 86400)
 
 def get_lang(uid):
     return r.get(lang_key(uid)) or "pt"
@@ -101,7 +104,10 @@ def set_lang(uid, lang):
 
 # ================= ADMIN HELPERS =================
 def reset_daily_limit(uid):
-    r.delete(count_key(uid))
+    # 🔥 APAGA TODOS OS CONTADORES DO USUÁRIO (timezone-safe)
+    keys = r.keys(f"count:{uid}:*")
+    if keys:
+        r.delete(*keys)
 
 def remove_vip(uid):
     r.delete(vip_key(uid))
@@ -294,7 +300,7 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_limit(uid)
 
     await update.message.reply_text(
-        f"✅ Limite diário resetado para:\n{uid}"
+        f"✅ Limite diário RESETADO com sucesso para:\n{uid}"
     )
 
 async def removevip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
