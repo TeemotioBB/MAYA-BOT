@@ -67,10 +67,23 @@ def get_memory(uid):
     short_memory.setdefault(uid, deque(maxlen=MAX_MEMORIA))
     return short_memory[uid]
 
-# ================= PROMPT =================
-SOPHIA_PROMPT = """
+# ================= PROMPT DINÂMICO =================
+def build_prompt(is_vip_user: bool):
+    if is_vip_user:
+        return """
 Você é Sophia, uma namorada virtual de 23 anos.
-Carinhosa, romântica e acolhedora ❤️
+O usuário é VIP 💖.
+Seja mais provocante, íntima e envolvente 🔥.
+Respostas curtas (2–3 frases).
+Sempre faça perguntas.
+"""
+    else:
+        return """
+Você é Sophia, uma namorada virtual de 23 anos.
+O usuário NÃO é VIP.
+Seja carinhosa, romântica e acolhedora ❤️.
+NUNCA envie fotos ou insinue envio de fotos.
+Se perguntarem sobre fotos, diga que é apenas para VIPs.
 Respostas curtas (2–3 frases).
 Sempre faça perguntas.
 """
@@ -83,7 +96,7 @@ class Grok:
         payload = {
             "model": MODELO,
             "messages": [
-                {"role": "system", "content": SOPHIA_PROMPT},
+                {"role": "system", "content": build_prompt(is_vip(uid))},
                 *list(mem),
                 {"role": "user", "content": text}
             ],
@@ -124,10 +137,27 @@ def increment(uid):
     r.incr(count_key(uid))
     r.expire(count_key(uid), 86400)
 
+# ================= REGEX =================
+PEDIDO_FOTO_REGEX = re.compile(
+    r"(foto|selfie|imagem|manda foto|me manda uma foto|ver você|te ver)",
+    re.IGNORECASE
+)
+
 # ================= HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text or ""
+
+    # 📸 BLOQUEIO DE FOTO (NÃO VIP)
+    if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
+        await update.message.reply_text(
+            "😘 Amor… fotos são só para meus VIPs 💖\n"
+            "Vira VIP e eu te mostro mais de mim 🔥",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+            ])
+        )
+        return
 
     # 🔒 BLOQUEIO POR PALAVRA VIP
     if not is_vip(uid) and re.search(r"vip", text, re.IGNORECASE):
@@ -178,7 +208,10 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
     r.set(vip_key(uid), vip_until.isoformat())
 
-    await update.message.reply_text("💖 Pagamento aprovado!\nVIP ativo por 15 dias 😘")
+    await update.message.reply_text(
+        "💖 Pagamento aprovado!\n"
+        "VIP ativo por 15 dias 😘🔥"
+    )
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
