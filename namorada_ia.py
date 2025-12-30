@@ -44,6 +44,9 @@ GROK_API_KEY = os.getenv("GROK_API_KEY")
 PUSHINPAY_TOKEN = ("57758|Fd6yYTFbVw3meItiYnLjxnRN9W7i4jF467f4GfJj0fc9a3f5")
 REDIS_URL = os.getenv("REDIS_URL")
 
+# 🔥 DEFINA: "production" ou "sandbox"
+PUSHINPAY_ENV = os.getenv("PUSHINPAY_ENV", "production")
+
 PORT = int(os.getenv("PORT", 8080))
 
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
@@ -52,13 +55,23 @@ WEBHOOK_PATH = "/telegram"
 if not all([TELEGRAM_TOKEN, GROK_API_KEY, PUSHINPAY_TOKEN, REDIS_URL]):
     raise RuntimeError("❌ Variáveis de ambiente não configuradas")
 
+# ================= PUSHINPAY URL =================
+if PUSHINPAY_ENV == "sandbox":
+    PUSHINPAY_PIX_URL = "https://api-sandbox.pushinpay.com.br/api/pix/cashIn"
+else:
+    PUSHINPAY_PIX_URL = "https://api.pushinpay.com.br/api/pix/cashIn"
+
+logger.info(f"💳 PushinPay ambiente: {PUSHINPAY_ENV.upper()}")
+
 # ================= REDIS =================
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
 # ================= CONFIG =================
 LIMITE_DIARIO = 15
 DIAS_VIP = 15
-VALOR_PIX_CENTAVOS = 2990  # R$29,90
+
+# ⚠️ Valor seguro para evitar rejeição bancária
+VALOR_PIX_CENTAVOS = 5000  # R$ 50,00
 
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
@@ -188,8 +201,6 @@ PEDIDO_FOTO_REGEX = re.compile(r"(foto|selfie|imagem|photo|pic)", re.I)
 
 # ================= PUSHINPAY =================
 async def criar_pix_pushinpay(uid: int):
-    url = "https://api.pushinpay.com.br/api/pix/cashIn"
-
     payload = {
         "value": VALOR_PIX_CENTAVOS,
         "webhook_url": f"{WEBHOOK_BASE_URL}/pushinpay/webhook",
@@ -203,12 +214,14 @@ async def criar_pix_pushinpay(uid: int):
     }
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=payload, headers=headers) as resp:
+        async with session.post(PUSHINPAY_PIX_URL, json=payload, headers=headers) as resp:
             data = await resp.json()
+
+            logger.info(f"💳 PIX criado: {data}")
+
             if resp.status != 200:
                 raise RuntimeError(data)
 
-            # vincula pix -> usuario por 1h
             r.set(f"pix:{data['id']}", uid, ex=3600)
             return data
 
@@ -223,13 +236,6 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         ])
     )
-
-async def reset_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    uid = int(context.args[0])
-    reset_daily_count(uid)
-    await update.message.reply_text("✅ Contador resetado.")
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -277,7 +283,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "buy_vip":
         pix = await criar_pix_pushinpay(uid)
 
-        # ===== CORREÇÃO BASE64 =====
         base64_img = pix["qr_code_base64"].split(",")[1]
         img_bytes = base64.b64decode(base64_img)
 
@@ -293,7 +298,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         )
 
-        # opcional: copia e cola
         await query.message.reply_text(
             f"📋 PIX copia e cola:\n\n{pix['qr_code']}"
         )
@@ -301,7 +305,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start_handler))
-application.add_handler(CommandHandler("reset", reset_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 
