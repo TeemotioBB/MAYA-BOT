@@ -105,6 +105,20 @@ def get_lang(uid):
 def set_lang(uid, lang):
     r.set(lang_key(uid), lang)
 
+# ================= FUNÇÃO ÁUDIOS (FIX DEFINITIVO) =================
+async def send_welcome_audios(bot, chat_id):
+    try:
+        await asyncio.sleep(1.5)
+        await bot.send_audio(chat_id=chat_id, audio=AUDIO_PT_1)
+
+        await asyncio.sleep(2.0)
+        await bot.send_audio(chat_id=chat_id, audio=AUDIO_PT_2)
+
+        logger.info(f"🔊 Áudios enviados com sucesso para {chat_id}")
+
+    except Exception as e:
+        logger.error(f"❌ Falha ao enviar áudios: {e}")
+
 # ================= COMANDOS ADMIN =================
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
@@ -171,59 +185,6 @@ TEXTS = {
     }
 }
 
-# ================= PROMPT =================
-def build_prompt(is_vip_user: bool, lang: str):
-    if lang == "en":
-        return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️
-Short answers (2–3 sentences). Always ask questions."""
-    return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️
-Respostas curtas (2–3 frases). Sempre faça perguntas."""
-
-# ================= GROK =================
-class Grok:
-    async def reply(self, uid, text):
-        mem = get_memory(uid)
-        lang = get_lang(uid)
-
-        payload = {
-            "model": MODELO,
-            "messages": [
-                {"role": "system", "content": build_prompt(is_vip(uid), lang)},
-                *list(mem),
-                {"role": "user", "content": text}
-            ],
-            "max_tokens": 250,
-            "temperature": 0.85
-        }
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                GROK_API_URL,
-                headers={
-                    "Authorization": f"Bearer {GROK_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json=payload
-            ) as resp:
-                data = await resp.json()
-
-                if "choices" not in data:
-                    logger.error(f"GROK ERROR: {data}")
-                    return "Amor… hoje estou meio confusa 😔 tenta de novo daqui a pouco 💕"
-
-                answer = data["choices"][0]["message"]["content"]
-
-        mem.append({"role": "user", "content": text})
-        mem.append({"role": "assistant", "content": answer})
-        return answer
-
-grok = Grok()
-
-# ================= REGEX =================
-PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)", re.IGNORECASE
-)
-
 # ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -252,10 +213,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id, TEXTS[lang]["after_lang"])
 
         if lang == "pt":
-            await asyncio.sleep(1.2)
-            await context.bot.send_audio(chat_id, AUDIO_PT_1)
-            await asyncio.sleep(1.8)
-            await context.bot.send_audio(chat_id, AUDIO_PT_2)
+            asyncio.create_task(
+                send_welcome_audios(context.bot, chat_id)
+            )
 
     elif query.data == "buy_vip":
         await context.bot.send_invoice(
@@ -327,7 +287,7 @@ threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
     await application.initialize()
-    await application.bot.initialize()  # 🔥 FIX DEFINITIVO
+    await application.bot.initialize()
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
 
