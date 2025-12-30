@@ -222,15 +222,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=TEXTS[lang]["after_lang"]
         )
 
-        # 🔊 ÁUDIOS APENAS PARA PT-BR
+        # 🔊 ÁUDIOS SOMENTE PARA PT-BR (CORREÇÃO AQUI)
         if lang == "pt":
-            await context.bot.send_voice(
+            await context.bot.send_audio(
                 chat_id=query.message.chat_id,
-                voice=AUDIO_PT_1
+                audio=AUDIO_PT_1
             )
-            await context.bot.send_voice(
+            await asyncio.sleep(1.2)
+            await context.bot.send_audio(
                 chat_id=query.message.chat_id,
-                voice=AUDIO_PT_2
+                audio=AUDIO_PT_2
             )
 
 # ================= MENSAGENS =================
