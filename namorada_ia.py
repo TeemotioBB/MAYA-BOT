@@ -553,40 +553,39 @@ threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
     try:
-        logger.info("🔧 Configurando webhook...")
+        logger.info("🔧 Iniciando application...")
         await application.initialize()
         logger.info("✅ Application inicializado")
         
-        # Timeout maior para delete_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.delete_webhook(drop_pending_updates=True),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook antigo removido")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
-        
-        # Timeout maior para set_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook configurado")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
-        
+        # CRÍTICO: Inicia o application ANTES de configurar webhook
         await application.start()
-        logger.info("✅ Bot iniciado com sucesso!")
+        logger.info("✅ Application iniciado")
+        
+        # Configura webhook em background (não bloqueia)
+        async def configure_webhook():
+            await asyncio.sleep(3)  # Aguarda tudo estar pronto
+            try:
+                logger.info("🔧 Configurando webhook...")
+                await asyncio.wait_for(
+                    application.bot.delete_webhook(drop_pending_updates=True),
+                    timeout=8.0
+                )
+                logger.info("✅ Webhook antigo removido")
+                
+                await asyncio.wait_for(
+                    application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
+                    timeout=8.0
+                )
+                logger.info("✅ Webhook configurado com sucesso!")
+            except Exception as e:
+                logger.warning(f"⚠️ Webhook error (bot still works): {e}")
+        
+        # Executa webhook config em background
+        asyncio.create_task(configure_webhook())
+        logger.info("✅ Bot iniciado e pronto para receber mensagens!")
+        
     except Exception as e:
-        logger.error(f"❌ Erro no setup: {e}")
-        # Continua mesmo com erro
-        try:
-            await application.start()
-            logger.info("✅ Bot iniciado (sem webhook)")
-        except:
-            pass
+        logger.error(f"❌ Erro crítico no setup: {e}", exc_info=True)
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
