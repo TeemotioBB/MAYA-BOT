@@ -20,6 +20,7 @@ from telegram.ext import (
     Application, MessageHandler, ContextTypes, filters,
     CallbackQueryHandler, PreCheckoutQueryHandler, CommandHandler
 )
+from telegram.request import HTTPXRequest  # Importar HTTPXRequest
 
 # ================= LOG =================
 logging.basicConfig(
@@ -514,8 +515,16 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= APP =================
-application = Application.builder().token(TELEGRAM_TOKEN).build()
+# ================= APP COM TIMEOUT CONFIGURADO =================
+# Configurar request com timeout maior
+request = HTTPXRequest(
+    connect_timeout=30.0,
+    read_timeout=30.0,
+    write_timeout=30.0,
+    pool_timeout=30.0
+)
+
+application = Application.builder().token(TELEGRAM_TOKEN).request(request).build()
 
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
@@ -531,13 +540,51 @@ application.add_handler(MessageHandler(
 
 logger.info("✅ Handlers registrados")
 
-# ================= MODO WEBHOOK (OFICIAL) =================
+# ================= MODO WEBHOOK COM TRATAMENTO DE ERRO =================
+async def main():
+    """Função principal async para iniciar o bot"""
+    try:
+        logger.info("🚀 Iniciando webhook oficial do Telegram")
+        
+        # Inicializar a aplicação
+        await application.initialize()
+        logger.info("✅ Application inicializada")
+        
+        # Configurar webhook
+        await application.bot.set_webhook(
+            url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
+            drop_pending_updates=True
+        )
+        logger.info("✅ Webhook configurado")
+        
+        # Iniciar o servidor webhook
+        await application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=WEBHOOK_PATH,
+            webhook_url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
+            drop_pending_updates=True
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Erro crítico ao iniciar bot: {e}")
+        # Tentar método alternativo se webhook falhar
+        try:
+            logger.info("🔄 Tentando método alternativo...")
+            await application.run_polling(
+                drop_pending_updates=True,
+                allowed_updates=Update.ALL_TYPES
+            )
+        except Exception as e2:
+            logger.error(f"❌ Falha completa: {e2}")
+            raise
+
 if __name__ == "__main__":
-    logger.info("🚀 Iniciando webhook oficial do Telegram")
-    
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path=WEBHOOK_PATH,
-        webhook_url=WEBHOOK_BASE_URL + WEBHOOK_PATH
-    )
+    try:
+        # Rodar o bot com tratamento de exceções globais
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("⏹️ Bot interrompido pelo usuário")
+    except Exception as e:
+        logger.error(f"💥 Erro fatal: {e}")
+        raise
