@@ -547,50 +547,21 @@ logger.info("✅ Handlers registrados")
 # ================= START BOT (CORRETO PTB v20) =================
 def start_bot():
     async def _start():
-        logger.info("🔧 Inicializando Application...")
-        await application.initialize()
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
-        await application.start()
-        logger.info("✅ Bot pronto para receber updates")
-
-    asyncio.run(_start())
-
-
-async def setup():
-    logger.info("🔧 Configurando webhook...")
-
-    initialized = False
-
-    try:
-        await application.initialize()
-        initialized = True
-        logger.info("✅ Application inicializado")
+        logger.info("🤖 Pulando initialize/start no boot (Railway-safe)")
 
         try:
             await application.bot.delete_webhook(drop_pending_updates=True)
-            logger.info("✅ Webhook antigo removido")
         except Exception as e:
-            logger.warning(f"⚠️ delete_webhook falhou (continuando...): {e}")
+            logger.warning(f"⚠️ delete_webhook ignorado: {e}")
 
         try:
             await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
             logger.info("✅ Webhook configurado")
         except Exception as e:
-            logger.warning(f"⚠️ set_webhook falhou (continuando...): {e}")
+            logger.warning(f"⚠️ set_webhook falhou: {e}")
 
-        await application.start()
-        logger.info("✅ Bot iniciado com sucesso!")
+    asyncio.run(_start())
 
-    except Exception as e:
-        logger.error(f"❌ Erro no setup: {e}")
-
-        if initialized:
-            try:
-                await application.start()
-                logger.info("✅ Bot iniciado (fallback)")
-            except Exception as e2:
-                logger.error(f"❌ Fallback falhou: {e2}")
 
 # ================= FLASK =================
 app = Flask(__name__)
@@ -602,24 +573,26 @@ def health():
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     try:
-        logger.info(f"📨 Webhook recebido")
-        data = request.json
-        logger.info(f"📦 Data: {data.get('message', {}).get('text', 'N/A')[:50]}")
-        
-        update = Update.de_json(data, application.bot)
-        
-        # Força o processamento imediato
-        application.create_task(
-             application.process_update(update)
-     )
+        update = Update.de_json(request.json, application.bot)
 
+        async def process():
+            if not application.running:
+                logger.info("🚀 Inicializando Application sob demanda")
+                await application.initialize()
+                await application.start()
 
-            
+            await application.process_update(update)
+
+        application.create_task(process())
+
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
+
     return "ok", 200
+
 
 if __name__ == "__main__":
     start_bot()
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT)
+
