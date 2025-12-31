@@ -214,6 +214,19 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.warning(f"Não foi possível notificar usuário {uid}: {e}")
 
+async def ping_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comando de teste para verificar se o bot está vivo"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    
+    webhook_info = await context.bot.get_webhook_info()
+    await update.message.reply_text(
+        f"🏓 PONG!\n\n"
+        f"📡 Webhook: {webhook_info.url}\n"
+        f"⏰ Updates: {webhook_info.pending_update_count}\n"
+        f"✅ Bot está funcionando!"
+    )
+
 # ================= TEXTOS =================
 TEXTS = {
     "pt": {
@@ -518,6 +531,7 @@ application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
 application.add_handler(CommandHandler("setvip", setvip_cmd))
+application.add_handler(CommandHandler("ping", ping_cmd))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
