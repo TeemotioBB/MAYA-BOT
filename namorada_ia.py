@@ -575,11 +575,19 @@ def telegram_webhook():
             return "ok", 200
 
         update = Update.de_json(data, application.bot)
+
+        # 🔥 LINHA MAIS IMPORTANTE DO PROJETO
+        asyncio.run_coroutine_threadsafe(
+            application.process_update(update),
+            loop
+        )
+
         return "ok", 200
 
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
         return "error", 500
+
 
 async def setup_webhook():
     """Configura o webhook no Telegram"""
