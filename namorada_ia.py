@@ -551,7 +551,6 @@ async def setup():
         initialized = True
         logger.info("✅ Application inicializado")
 
-        # 🔥 SEM TIMEOUT (Railway-safe)
         try:
             await application.bot.delete_webhook(drop_pending_updates=True)
             logger.info("✅ Webhook antigo removido")
@@ -570,16 +569,12 @@ async def setup():
     except Exception as e:
         logger.error(f"❌ Erro no setup: {e}")
 
-        # ⚠️ SÓ tenta start se initialize deu certo
         if initialized:
             try:
                 await application.start()
                 logger.info("✅ Bot iniciado (fallback)")
             except Exception as e2:
                 logger.error(f"❌ Fallback falhou: {e2}")
-
-
-asyncio.run_coroutine_threadsafe(setup(), loop)
 
 # ================= FLASK =================
 app = Flask(__name__)
