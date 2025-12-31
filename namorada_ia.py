@@ -298,7 +298,7 @@ class Grok:
             "temperature": 0.85
         }
         try:
-            timeout = aiohttp.ClientTimeout(total=25)
+            timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     GROK_API_URL,
@@ -548,7 +548,7 @@ async def setup():
         try:
             await asyncio.wait_for(
                 application.bot.delete_webhook(drop_pending_updates=True),
-                timeout=10.0
+                timeout=20.0
             )
             logger.info("✅ Webhook antigo removido")
         except asyncio.TimeoutError:
@@ -558,7 +558,7 @@ async def setup():
         try:
             await asyncio.wait_for(
                 application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
-                timeout=10.0
+                timeout=20.0
             )
             logger.info("✅ Webhook configurado")
         except asyncio.TimeoutError:
@@ -603,7 +603,7 @@ def webhook():
         )
         
         # Aguarda até 5 segundos
-        future.result(timeout=5.0)
+        future.result(timeout=20.0)
         logger.info("✅ Update processado com sucesso")
         
     except asyncio.TimeoutError:
