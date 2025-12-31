@@ -586,21 +586,30 @@ def health():
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     try:
-        logger.info(f"📨 Webhook recebido")
         data = request.json
-        logger.info(f"📦 Data: {data.get('message', {}).get('text', 'N/A')[:50]}")
+        logger.info(f"📨 Webhook recebido: {data.get('message', {}).get('text', 'N/A')[:50]}")
+        
+        if not data:
+            logger.warning("⚠️ Webhook vazio")
+            return "ok", 200
         
         update = Update.de_json(data, application.bot)
         
-        # Força o processamento imediato
-        asyncio.run_coroutine_threadsafe(
+        # Processa o update e aguarda
+        future = asyncio.run_coroutine_threadsafe(
             application.process_update(update),
             loop
         )
-
-            
+        
+        # Aguarda até 5 segundos
+        future.result(timeout=5.0)
+        logger.info("✅ Update processado")
+        
+    except asyncio.TimeoutError:
+        logger.error("⏱️ Timeout processando update")
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
+    
     return "ok", 200
 
 if __name__ == "__main__":
