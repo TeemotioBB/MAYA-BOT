@@ -543,36 +543,31 @@ async def setup():
         await application.initialize()
         logger.info("✅ Application inicializado")
         
-        # Timeout maior para delete_webhook
+        # 🔥 SEM TIMEOUT (corrige o erro)
         try:
-            await asyncio.wait_for(
-                application.bot.delete_webhook(drop_pending_updates=True),
-                timeout=10.0
-            )
+            await application.bot.delete_webhook(drop_pending_updates=True)
             logger.info("✅ Webhook antigo removido")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
+        except Exception as e:
+            logger.warning(f"⚠️ delete_webhook falhou (continuando...): {e}")
         
-        # Timeout maior para set_webhook
         try:
-            await asyncio.wait_for(
-                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
-                timeout=10.0
-            )
+            await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
             logger.info("✅ Webhook configurado")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
+        except Exception as e:
+            logger.warning(f"⚠️ set_webhook falhou (continuando...): {e}")
         
         await application.start()
         logger.info("✅ Bot iniciado com sucesso!")
+        
     except Exception as e:
         logger.error(f"❌ Erro no setup: {e}")
         # Continua mesmo com erro
         try:
             await application.start()
             logger.info("✅ Bot iniciado (sem webhook)")
-        except:
-            pass
+        except Exception as e2:
+            logger.error(f"❌ Fallback falhou: {e2}")
+
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
