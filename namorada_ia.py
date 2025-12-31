@@ -547,7 +547,10 @@ logger.info("✅ Handlers registrados")
 # ================= START BOT (CORRETO PTB v20) =================
 def start_bot():
     async def _start():
-        logger.info("🤖 Pulando initialize/start no boot (Railway-safe)")
+        logger.info("🚀 Inicializando Application (uma única vez)")
+
+        await application.initialize()
+        await application.start()
 
         try:
             await application.bot.delete_webhook(drop_pending_updates=True)
@@ -563,6 +566,7 @@ def start_bot():
     asyncio.run(_start())
 
 
+
 # ================= FLASK =================
 app = Flask(__name__)
 
@@ -574,17 +578,7 @@ def health():
 def webhook():
     try:
         update = Update.de_json(request.json, application.bot)
-
-        async def process():
-            if not application.running:
-                logger.info("🚀 Inicializando Application sob demanda")
-                await application.initialize()
-                await application.start()
-
-            await application.process_update(update)
-
-        # 🔥 EXECUTA O ASYNC CORRETAMENTE NO FLASK
-        asyncio.run(process())
+        application.process_update(update)
 
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
