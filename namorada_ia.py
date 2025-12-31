@@ -597,9 +597,13 @@ async def setup_webhook():
         logger.error(f"❌ Erro ao configurar webhook: {e}")
 
 if __name__ == "__main__":
-    # Inicializa o bot (async) no loop já rodando
+    # Inicializa e STARTA o bot (ESSENCIAL)
     asyncio.run_coroutine_threadsafe(
         application.initialize(),
+        loop
+    )
+    asyncio.run_coroutine_threadsafe(
+        application.start(),
         loop
     )
 
