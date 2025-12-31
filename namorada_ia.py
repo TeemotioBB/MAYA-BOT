@@ -7,7 +7,6 @@ IDIOMA DINÂMICO (PT / EN)
 import os
 import asyncio
 import logging
-import threading
 import aiohttp
 import redis
 import re
@@ -63,8 +62,8 @@ MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= PIX CONFIG =================
-PIX_KEY = "mayaoficialbr@outlook.com"  # ⚠️ ALTERE PARA SUA CHAVE PIX REAL
-PIX_VALOR = "R$ 14,99"  # ⚠️ ALTERE PARA O VALOR DESEJADO
+PIX_KEY = "mayaoficialbr@outlook.com"
+PIX_VALOR = "R$ 14,99"
 
 # ================= ADMIN =================
 ADMIN_IDS = {1293602874}
@@ -185,7 +184,6 @@ async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ativa VIP manualmente (após confirmar pagamento PIX)"""
     logger.info(f"📥 /setvip de {update.effective_user.id}")
     if update.effective_user.id not in ADMIN_IDS:
         return
@@ -204,7 +202,6 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⏰ Válido até: {vip_until.strftime('%d/%m/%Y %H:%M')}"
     )
     
-    # Notifica o usuário
     try:
         await context.bot.send_message(
             chat_id=uid,
@@ -378,7 +375,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
         elif query.data == "pay_pix":
-            # Não pode editar foto, então envia nova mensagem
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=TEXTS["pt"]["pix_info"],
@@ -427,12 +423,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"📥 Mensagem de {uid}")
     
     try:
-        # Verifica se é comprovante PIX
         if is_pix_pending(uid) and (update.message.photo or update.message.document):
             logger.info(f"📸 Comprovante PIX de {uid}")
             lang = get_lang(uid)
             
-            # Encaminha para admin
             for admin_id in ADMIN_IDS:
                 try:
                     await context.bot.send_message(
@@ -512,24 +506,23 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= APP =================
-
+# ================= INIT APPLICATION =================
 tg_request = HTTPXRequest(
-    connect_timeout=20,
-    read_timeout=20,
-    write_timeout=20,
-    pool_timeout=20
+    connect_timeout=30,
+    read_timeout=30,
+    write_timeout=30,
+    pool_timeout=30
 )
 
-
+# Cria a application global
 application = (
-    Application
-    .builder()
+    Application.builder()
     .token(TELEGRAM_TOKEN)
     .request(tg_request)
     .build()
 )
 
+# Adiciona handlers
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
@@ -544,30 +537,7 @@ application.add_handler(MessageHandler(
 
 logger.info("✅ Handlers registrados")
 
-# ================= START BOT (CORRETO PTB v20) =================
-def start_bot():
-    async def _start():
-        logger.info("🚀 Inicializando Application (uma única vez)")
-
-        await application.initialize()
-        await application.start()
-
-        try:
-            await application.bot.delete_webhook(drop_pending_updates=True)
-        except Exception as e:
-            logger.warning(f"⚠️ delete_webhook ignorado: {e}")
-
-        try:
-            await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
-            logger.info("✅ Webhook configurado")
-        except Exception as e:
-            logger.warning(f"⚠️ set_webhook falhou: {e}")
-
-    asyncio.run(_start())
-
-
-
-# ================= FLASK =================
+# ================= FLASK APP =================
 app = Flask(__name__)
 
 @app.route("/", methods=["GET"])
@@ -578,17 +548,43 @@ def health():
 def webhook():
     try:
         update = Update.de_json(request.json, application.bot)
-        application.process_update(update)
-
+        application.update_queue.put_nowait(update)
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
-
     return "ok", 200
 
+# ================= INICIALIZAÇÃO =================
+async def initialize_bot():
+    """Inicializa o bot de forma assíncrona"""
+    try:
+        logger.info("🚀 Inicializando bot...")
+        
+        # Limpa webhook anterior e configura novo
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        await application.bot.set_webhook(
+            url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
+            max_connections=40
+        )
+        
+        logger.info(f"✅ Webhook configurado: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
+        logger.info("🤖 Bot inicializado com sucesso!")
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao inicializar bot: {e}")
+        raise
 
+def start_bot_async():
+    """Inicia o bot em uma thread separada"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(initialize_bot())
 
 if __name__ == "__main__":
-    start_bot()
+    # Inicia o bot em uma thread
+    import threading
+    bot_thread = threading.Thread(target=start_bot_async, daemon=True)
+    bot_thread.start()
+    
+    # Inicia o Flask
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
-    app.run(host="0.0.0.0", port=PORT)
-
+    app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
