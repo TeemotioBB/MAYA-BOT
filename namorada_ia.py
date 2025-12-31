@@ -554,40 +554,35 @@ threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
     try:
-        logger.info("🔧 Configurando webhook...")
+        logger.info("🔧 Iniciando application...")
         await application.initialize()
         logger.info("✅ Application inicializado")
-        
-        # Timeout maior para delete_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.delete_webhook(drop_pending_updates=True),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook antigo removido")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
-        
-        # Timeout maior para set_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook configurado")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
-        
         await application.start()
+        logger.info("✅ Application startado")
+        
+        # Configura webhook em background (não bloqueia)
+        async def setup_webhook():
+            try:
+                await asyncio.sleep(2)  # Espera o Flask subir
+                await application.bot.delete_webhook(drop_pending_updates=True)
+                logger.info("✅ Webhook antigo removido")
+                await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
+                logger.info("✅ Webhook configurado")
+            except Exception as e:
+                logger.warning(f"⚠️ Erro no webhook (continuando): {e}")
+        
+        # Executa webhook setup em background
+        asyncio.create_task(setup_webhook())
         logger.info("✅ Bot iniciado com sucesso!")
+        
     except Exception as e:
         logger.error(f"❌ Erro no setup: {e}")
-        # Continua mesmo com erro
+        # Tenta iniciar mesmo assim
         try:
             await application.start()
-            logger.info("✅ Bot iniciado (sem webhook)")
+            logger.info("✅ Bot iniciado (modo fallback)")
         except:
-            pass
+            logger.error("❌ Falha total no start")
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
@@ -607,17 +602,17 @@ def webhook():
         
         update = Update.de_json(data, application.bot)
         
-        # Força o processamento imediato
+        # Força o processamento imediato com timeout maior
         future = asyncio.run_coroutine_threadsafe(
             application.process_update(update),
             loop
         )
-        # Aguarda até 5 segundos
+        # Aguarda até 10 segundos
         try:
-            future.result(timeout=5)
+            future.result(timeout=10)
             logger.info(f"✅ Update processado")
-        except:
-            logger.warning(f"⚠️ Timeout no processamento")
+        except Exception as e:
+            logger.warning(f"⚠️ Timeout/Erro no processamento: {e}")
             
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
