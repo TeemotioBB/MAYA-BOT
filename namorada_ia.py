@@ -25,7 +25,10 @@ from telegram.ext import (
 )
 
 # ================= LOG =================
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # ================= ENV =================
@@ -216,6 +219,15 @@ async def pixpending_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message += "─" * 30 + "\n"
     
     await update.message.reply_text(message)
+
+async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comando para verificar se o bot está vivo"""
+    await update.message.reply_text("✅ Bot is alive!")
+
+# ================= HANDLER DE ERROS =================
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and send a telegram message to notify the developer."""
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -571,12 +583,16 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
+# Error handler
+application.add_error_handler(error_handler)
+
 # Handlers
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
 application.add_handler(CommandHandler("setvip", setvip_cmd))
 application.add_handler(CommandHandler("pixpending", pixpending_cmd))
+application.add_handler(CommandHandler("status", status_cmd))
 application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
@@ -586,14 +602,21 @@ application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_succe
 # ================= LOOP BLINDADO =================
 loop = asyncio.new_event_loop()
 def handle_exception(loop, context):
-    logger.error(f"🔥 Exceção global: {context}")
+    logger.error(f"Exceção no loop: {context}")
+
 loop.set_exception_handler(handle_exception)
-threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
+
+def run_loop():
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+threading.Thread(target=run_loop, daemon=True).start()
 
 async def setup():
     await application.initialize()
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
+    logger.info(f"Webhook set to {WEBHOOK_BASE_URL + WEBHOOK_PATH}")
     await application.start()
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
@@ -605,10 +628,15 @@ app = Flask(__name__)
 def health():
     return "ok", 200
 
+@app.route("/status", methods=["GET"])
+def status():
+    return {"status": "ok", "time": datetime.now().isoformat()}, 200
+
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     try:
         update = Update.de_json(request.json, application.bot)
+        logger.info(f"Update received: {update}")
         asyncio.run_coroutine_threadsafe(
             application.process_update(update),
             loop
