@@ -525,7 +525,18 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
 # ================= APP =================
-application = Application.builder().token(TELEGRAM_TOKEN).build()
+from telegram.request import HTTPXRequest
+
+# Request customizado com timeouts maiores
+request = HTTPXRequest(
+    connection_pool_size=8,
+    connect_timeout=30.0,
+    read_timeout=30.0,
+    write_timeout=30.0,
+    pool_timeout=30.0
+)
+
+application = Application.builder().token(TELEGRAM_TOKEN).request(request).build()
 
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
@@ -553,36 +564,41 @@ threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
     try:
-        logger.info("🔧 Iniciando application...")
-        await application.initialize()
-        logger.info("✅ Application inicializado")
+        logger.info("🔧 Iniciando application (modo simplificado)...")
         
-        # CRÍTICO: Inicia o application ANTES de configurar webhook
-        await application.start()
-        logger.info("✅ Application iniciado")
+        # Tenta inicializar com timeout curto
+        try:
+            await asyncio.wait_for(application.initialize(), timeout=15.0)
+            logger.info("✅ Application inicializado")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Initialize timeout - continuando mesmo assim...")
+        except Exception as e:
+            logger.warning(f"⚠️ Initialize error: {e} - continuando...")
         
-        # Configura webhook em background (não bloqueia)
+        # Inicia o application (CRÍTICO)
+        try:
+            await application.start()
+            logger.info("✅ Application INICIADO - bot está ONLINE!")
+        except Exception as e:
+            logger.error(f"❌ Erro ao iniciar application: {e}")
+            return
+        
+        # Configura webhook em background depois
         async def configure_webhook():
-            await asyncio.sleep(3)  # Aguarda tudo estar pronto
+            await asyncio.sleep(5)
             try:
-                logger.info("🔧 Configurando webhook...")
-                await asyncio.wait_for(
-                    application.bot.delete_webhook(drop_pending_updates=True),
-                    timeout=8.0
+                logger.info("🔧 Tentando configurar webhook...")
+                await application.bot.set_webhook(
+                    WEBHOOK_BASE_URL + WEBHOOK_PATH,
+                    connect_timeout=10,
+                    read_timeout=10
                 )
-                logger.info("✅ Webhook antigo removido")
-                
-                await asyncio.wait_for(
-                    application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
-                    timeout=8.0
-                )
-                logger.info("✅ Webhook configurado com sucesso!")
+                logger.info("✅ Webhook configurado!")
             except Exception as e:
-                logger.warning(f"⚠️ Webhook error (bot still works): {e}")
+                logger.warning(f"⚠️ Webhook falhou (bot ainda funciona): {e}")
         
-        # Executa webhook config em background
         asyncio.create_task(configure_webhook())
-        logger.info("✅ Bot iniciado e pronto para receber mensagens!")
+        logger.info("🚀 Bot pronto para processar mensagens!")
         
     except Exception as e:
         logger.error(f"❌ Erro crítico no setup: {e}", exc_info=True)
