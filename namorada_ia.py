@@ -49,6 +49,7 @@ if not TELEGRAM_TOKEN or not GROK_API_KEY:
 
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
 WEBHOOK_PATH = "/telegram"
+WEBHOOK_URL = WEBHOOK_BASE_URL + WEBHOOK_PATH
 
 # ================= REDIS =================
 r = redis.from_url(REDIS_URL, decode_responses=True)
@@ -80,10 +81,7 @@ def get_memory(uid):
 def vip_key(uid): return f"vip:{uid}"
 def count_key(uid): return f"count:{uid}:{date.today()}"
 def lang_key(uid): return f"lang:{uid}"
-
-# >>> ADICIONADO (PIX COMPROVANTE)
-def pix_wait_key(uid): 
-    return f"pix_wait:{uid}"
+def pix_wait_key(uid): return f"pix_wait:{uid}"
 
 def is_vip(uid):
     until = r.get(vip_key(uid))
@@ -95,9 +93,6 @@ def today_count(uid):
 def increment(uid):
     r.incr(count_key(uid))
     r.expire(count_key(uid), 86400)
-
-def reset_daily_count(uid):
-    r.delete(count_key(uid))
 
 def get_lang(uid):
     return r.get(lang_key(uid)) or "pt"
@@ -127,10 +122,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lang = query.data.split("_")[1]
         set_lang(uid, lang)
         await query.message.edit_text("✅ Idioma configurado!")
-        await context.bot.send_message(
-            query.message.chat_id,
-            "💕 Prontinho, meu amor! Agora é oficial ❤️"
-        )
+        await context.bot.send_message(query.message.chat_id, "💕 Prontinho, meu amor! ❤️")
 
     elif query.data == "buy_vip":
         await context.bot.send_invoice(
@@ -147,13 +139,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "pix_info":
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=(
-                "💳 *Pagamento via PIX*\n\n"
-                f"✨ Valor: {PIX_VALOR}\n\n"
-                "1️⃣ Copie a chave\n"
-                "2️⃣ Pague no app do banco\n"
-                "3️⃣ Envie o comprovante 💖"
-            ),
+            text=f"💳 *Pagamento via PIX*\n\n✨ Valor: {PIX_VALOR}\n\nEnvie o comprovante 💖",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📋 Copiar chave PIX", callback_data="pix_copy")]
@@ -169,7 +155,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         )
 
-    # >>> ADICIONADO (PIX COMPROVANTE)
     elif query.data == "pix_comprovante":
         r.set(pix_wait_key(uid), "1", ex=1800)
         await context.bot.send_message(
@@ -192,7 +177,7 @@ class Grok:
             "temperature": 0.85
         }
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=25)) as session:
                 async with session.post(
                     GROK_API_URL,
                     headers={
@@ -202,13 +187,9 @@ class Grok:
                     json=payload
                 ) as resp:
                     data = await resp.json()
-                    answer = data["choices"][0]["message"]["content"]
+                    return data["choices"][0]["message"]["content"]
         except Exception:
             return "😔 Amor… tive um probleminha agora 💕"
-
-        mem.append({"role": "user", "content": text})
-        mem.append({"role": "assistant", "content": answer})
-        return answer
 
 grok = Grok()
 
@@ -219,7 +200,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
         await update.message.reply_text(
-            "💔 Seu limite diário acabou.\nVolte amanhã ou vire VIP 💖",
+            "💔 Seu limite diário acabou.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💳 Pagar com PIX", callback_data="pix_info")],
                 [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
@@ -231,13 +212,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         increment(uid)
 
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-    reply = await grok.reply(uid, text)
-    await update.message.reply_text(reply)
+    await update.message.reply_text(await grok.reply(uid, text))
 
 # ================= COMPROVANTE =================
 async def comprovante_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-
     if not r.get(pix_wait_key(uid)):
         return
 
@@ -246,41 +225,26 @@ async def comprovante_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         "💰 *NOVO COMPROVANTE PIX*\n\n"
         f"🆔 ID: `{uid}`\n"
         f"👤 Nome: {user.full_name}\n"
-        f"🔗 Username: @{user.username if user.username else '—'}\n"
-        f"🕒 Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        f"🔗 Username: @{user.username if user.username else '—'}"
     )
 
     for admin in ADMIN_IDS:
         if update.message.photo:
-            await context.bot.send_photo(
-                admin,
-                update.message.photo[-1].file_id,
-                caption=caption,
-                parse_mode="Markdown"
-            )
+            await context.bot.send_photo(admin, update.message.photo[-1].file_id, caption=caption, parse_mode="Markdown")
         elif update.message.document:
-            await context.bot.send_document(
-                admin,
-                update.message.document.file_id,
-                caption=caption,
-                parse_mode="Markdown"
-            )
+            await context.bot.send_document(admin, update.message.document.file_id, caption=caption, parse_mode="Markdown")
 
     r.delete(pix_wait_key(uid))
+    await update.message.reply_text("💖 Recebi, amor! Vou conferir 😘")
 
-    await update.message.reply_text(
-        "💖 Recebi, amor! Vou conferir e já já libero seu VIP 😘"
-    )
-
-# ================= PAGAMENTO STARS =================
+# ================= STARS =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.pre_checkout_query.answer(ok=True)
 
 async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    vip_until = datetime.now() + timedelta(days=DIAS_VIP)
-    r.set(vip_key(uid), vip_until.isoformat())
-    await update.message.reply_text("💖 Pagamento aprovado! VIP ativo 😘")
+    r.set(vip_key(uid), (datetime.now() + timedelta(days=DIAS_VIP)).isoformat())
+    await update.message.reply_text("💖 VIP ativado com sucesso 😘")
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -292,30 +256,31 @@ application.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, com
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
-# ================= LOOP =================
-loop = asyncio.new_event_loop()
-threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
-
-async def setup():
-    await application.initialize()
-    await application.bot.delete_webhook(drop_pending_updates=True)
-    await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
-    await application.start()
-
-asyncio.run_coroutine_threadsafe(setup(), loop)
-
-# ================= FLASK =================
+# ================= FLASK + LOOP =================
 app = Flask(__name__)
+
+@app.route(WEBHOOK_PATH, methods=["POST"])
+def webhook():
+    logger.info("📩 UPDATE RECEBIDO")
+    update = Update.de_json(request.json, application.bot)
+    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+    return "ok", 200
 
 @app.route("/", methods=["GET"])
 def health():
     return "ok", 200
 
-@app.route(WEBHOOK_PATH, methods=["POST"])
-def webhook():
-    update = Update.de_json(request.json, application.bot)
-    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
-    return "ok", 200
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+def start_bot():
+    loop.run_until_complete(application.initialize())
+    loop.run_until_complete(application.bot.delete_webhook(drop_pending_updates=True))
+    loop.run_until_complete(application.bot.set_webhook(WEBHOOK_URL))
+    loop.run_until_complete(application.start())
+    loop.run_forever()
+
+threading.Thread(target=start_bot, daemon=True).start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT)
