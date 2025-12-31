@@ -177,7 +177,6 @@ TEXTS = {
             f"2️⃣ Abra seu app de pagamentos\n"
             f"3️⃣ Cole a chave e pague\n"
             f"4️⃣ Envie o comprovante aqui\n\n"
-            f"🔑 **Chave PIX:**\n"
             f"`{PIX_KEY}`\n\n"
             f"⚡ Aprovação em até 5 minutos!"
         ),
