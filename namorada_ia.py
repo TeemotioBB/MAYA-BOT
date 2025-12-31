@@ -7,12 +7,10 @@ IDIOMA DINÂMICO (PT / EN)
 import os
 import asyncio
 import logging
-import threading
 import aiohttp
 import redis
 import re
 from datetime import datetime, timedelta, date
-from flask import Flask, request
 from collections import deque
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
@@ -47,7 +45,12 @@ logger.info(f"📍 Webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
 
 # ================= REDIS =================
 try:
-    r = redis.from_url(REDIS_URL, decode_responses=True)
+    r = redis.from_url(
+        REDIS_URL,
+        decode_responses=True,
+        socket_timeout=3,
+        socket_connect_timeout=3
+    )
     r.ping()
     logger.info("✅ Redis conectado")
 except Exception as e:
@@ -298,7 +301,7 @@ class Grok:
             "temperature": 0.85
         }
         try:
-            timeout = aiohttp.ClientTimeout(total=25)
+            timeout = aiohttp.ClientTimeout(total=10)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     GROK_API_URL,
@@ -528,86 +531,13 @@ application.add_handler(MessageHandler(
 
 logger.info("✅ Handlers registrados")
 
-# ================= LOOP BLINDADO =================
-loop = asyncio.new_event_loop()
-
-def handle_exception(loop, context):
-    logger.error(f"🔥 Exceção global: {context}")
-
-loop.set_exception_handler(handle_exception)
-threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
-
-async def setup():
-    try:
-        logger.info("🔧 Configurando webhook...")
-        await application.initialize()
-        logger.info("✅ Application inicializado")
-        
-        # Timeout maior para delete_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.delete_webhook(drop_pending_updates=True),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook antigo removido")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
-        
-        # Timeout maior para set_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook configurado")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
-        
-        await application.start()
-        logger.info("✅ Bot iniciado com sucesso!")
-    except Exception as e:
-        logger.error(f"❌ Erro no setup: {e}")
-        # Continua mesmo com erro
-        try:
-            await application.start()
-            logger.info("✅ Bot iniciado (sem webhook)")
-        except:
-            pass
-
-asyncio.run_coroutine_threadsafe(setup(), loop)
-
-# ================= FLASK =================
-app = Flask(__name__)
-
-@app.route("/", methods=["GET"])
-def health():
-    return "ok", 200
-
-@app.route(WEBHOOK_PATH, methods=["POST"])
-def webhook():
-    try:
-        logger.info(f"📨 Webhook recebido")
-        data = request.json
-        logger.info(f"📦 Data: {data.get('message', {}).get('text', 'N/A')[:50]}")
-        
-        update = Update.de_json(data, application.bot)
-        
-        # Força o processamento imediato
-        future = asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            loop
-        )
-        # Aguarda até 5 segundos
-        try:
-            future.result(timeout=5)
-            logger.info(f"✅ Update processado")
-        except:
-            logger.warning(f"⚠️ Timeout no processamento")
-            
-    except Exception as e:
-        logger.exception(f"🔥 Erro no webhook: {e}")
-    return "ok", 200
-
+# ================= MODO WEBHOOK (OFICIAL) =================
 if __name__ == "__main__":
-    logger.info(f"🌐 Iniciando Flask na porta {PORT}")
-    app.run(host="0.0.0.0", port=PORT)
+    logger.info("🚀 Iniciando webhook oficial do Telegram")
+    
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=WEBHOOK_PATH,
+        webhook_url=WEBHOOK_BASE_URL + WEBHOOK_PATH
+    )
