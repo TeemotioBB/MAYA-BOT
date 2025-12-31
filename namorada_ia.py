@@ -7,6 +7,7 @@ IDIOMA DINÂMICO (PT / EN)
 import os
 import asyncio
 import logging
+import threading
 import aiohttp
 import redis
 import re
@@ -21,7 +22,6 @@ from telegram.ext import (
     Application, MessageHandler, ContextTypes, filters,
     CallbackQueryHandler, PreCheckoutQueryHandler, CommandHandler
 )
-from telegram.request import HTTPXRequest
 
 # ================= LOG =================
 logging.basicConfig(
@@ -45,57 +45,14 @@ WEBHOOK_PATH = "/telegram"
 logger.info(f"🚀 Iniciando bot...")
 logger.info(f"📍 Webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
 
-# ================= REDIS (COM FALLBACK) =================
-redis_client = None
+# ================= REDIS =================
 try:
-    redis_client = redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=5)
-    redis_client.ping()
+    r = redis.from_url(REDIS_URL, decode_responses=True)
+    r.ping()
     logger.info("✅ Redis conectado")
 except Exception as e:
     logger.error(f"❌ Redis erro: {e}")
-    logger.warning("⚠️ Continuando sem Redis (memória local)")
-
-def safe_redis_get(key, default=None):
-    """Fallback para Redis"""
-    if not redis_client:
-        return default
-    try:
-        return redis_client.get(key) or default
-    except Exception as e:
-        logger.error(f"Redis get erro: {e}")
-        return default
-
-def safe_redis_set(key, value, ex=None):
-    """Fallback para Redis"""
-    if not redis_client:
-        return False
-    try:
-        redis_client.set(key, value, ex=ex)
-        return True
-    except Exception as e:
-        logger.error(f"Redis set erro: {e}")
-        return False
-
-def safe_redis_delete(key):
-    """Fallback para Redis"""
-    if not redis_client:
-        return False
-    try:
-        redis_client.delete(key)
-        return True
-    except Exception as e:
-        logger.error(f"Redis delete erro: {e}")
-        return False
-
-def safe_redis_incr(key):
-    """Fallback para Redis"""
-    if not redis_client:
-        return 1
-    try:
-        return redis_client.incr(key)
-    except Exception as e:
-        logger.error(f"Redis incr erro: {e}")
-        return 1
+    raise
 
 # ================= CONFIG =================
 LIMITE_DIARIO = 15
@@ -105,8 +62,8 @@ MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= PIX CONFIG =================
-PIX_KEY = "mayaoficialbr@outlook.com"
-PIX_VALOR = "R$ 14,99"
+PIX_KEY = "mayaoficialbr@outlook.com"  # ⚠️ ALTERE PARA SUA CHAVE PIX REAL
+PIX_VALOR = "R$ 14,99"  # ⚠️ ALTERE PARA O VALOR DESEJADO
 
 # ================= ADMIN =================
 ADMIN_IDS = {1293602874}
@@ -143,41 +100,59 @@ def pix_pending_key(uid):
 
 def is_vip(uid):
     try:
-        until = safe_redis_get(vip_key(uid))
+        until = r.get(vip_key(uid))
         return until and datetime.fromisoformat(until) > datetime.now()
     except:
         return False
 
 def today_count(uid):
     try:
-        return int(safe_redis_get(count_key(uid), 0))
+        return int(r.get(count_key(uid)) or 0)
     except:
         return 0
 
 def increment(uid):
     try:
-        safe_redis_incr(count_key(uid))
-        safe_redis_set(count_key(uid), str(today_count(uid) + 1), ex=86400)
+        r.incr(count_key(uid))
+        r.expire(count_key(uid), 86400)
     except Exception as e:
         logger.error(f"Erro increment: {e}")
 
 def reset_daily_count(uid):
-    safe_redis_delete(count_key(uid))
+    try:
+        r.delete(count_key(uid))
+    except Exception as e:
+        logger.error(f"Erro reset: {e}")
 
 def get_lang(uid):
-    return safe_redis_get(lang_key(uid), "pt")
+    try:
+        return r.get(lang_key(uid)) or "pt"
+    except:
+        return "pt"
 
 def set_lang(uid, lang):
-    safe_redis_set(lang_key(uid), lang)
+    try:
+        r.set(lang_key(uid), lang)
+    except Exception as e:
+        logger.error(f"Erro set_lang: {e}")
 
 def set_pix_pending(uid):
-    safe_redis_set(pix_pending_key(uid), "1", ex=86400)
+    try:
+        r.set(pix_pending_key(uid), "1", ex=86400)
+    except Exception as e:
+        logger.error(f"Erro set_pix_pending: {e}")
 
 def is_pix_pending(uid):
-    return safe_redis_get(pix_pending_key(uid)) == "1"
+    try:
+        return r.get(pix_pending_key(uid)) == "1"
+    except:
+        return False
 
 def clear_pix_pending(uid):
-    safe_redis_delete(pix_pending_key(uid))
+    try:
+        r.delete(pix_pending_key(uid))
+    except Exception as e:
+        logger.error(f"Erro clear_pix_pending: {e}")
 
 # ================= COMANDOS ADMIN =================
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -200,7 +175,7 @@ async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     uid = int(context.args[0])
     reset_daily_count(uid)
-    safe_redis_delete(vip_key(uid))
+    r.delete(vip_key(uid))
     await update.message.reply_text(
         f"🔥 Reset concluído:\n"
         f"• Limite diário\n"
@@ -219,7 +194,7 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     uid = int(context.args[0])
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
-    safe_redis_set(vip_key(uid), vip_until.isoformat())
+    r.set(vip_key(uid), vip_until.isoformat())
     clear_pix_pending(uid)
     
     await update.message.reply_text(
@@ -238,10 +213,6 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logger.warning(f"Não foi possível notificar usuário {uid}: {e}")
-
-async def ping_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando de teste"""
-    await update.message.reply_text("🟢 Bot online e funcionando!")
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -327,7 +298,7 @@ class Grok:
             "temperature": 0.85
         }
         try:
-            timeout = aiohttp.ClientTimeout(total=30)
+            timeout = aiohttp.ClientTimeout(total=25)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     GROK_API_URL,
@@ -406,6 +377,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
         elif query.data == "pay_pix":
+            # Não pode editar foto, então envia nova mensagem
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=TEXTS["pt"]["pix_info"],
@@ -446,7 +418,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         logger.info(f"✅ Callback processado: {query.data}")
     except Exception as e:
-        logger.error(f"❌ Erro no callback: {e}", exc_info=True)
+        logger.error(f"❌ Erro no callback: {e}")
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -525,7 +497,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"✅ Resposta enviada para {uid}")
         
     except Exception as e:
-        logger.error(f"❌ Erro no message_handler: {e}", exc_info=True)
+        logger.error(f"❌ Erro no message_handler: {e}")
 
 # ================= PAGAMENTO =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -536,28 +508,13 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     logger.info(f"✅ Pagamento confirmado: {uid}")
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
-    safe_redis_set(vip_key(uid), vip_until.isoformat())
+    r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= APP COM TIMEOUT AUMENTADO =================
-# Cria request customizado com timeout maior
-tg_request = HTTPXRequest(
-    connection_pool_size=8,
-    connect_timeout=30.0,
-    read_timeout=30.0,
-    write_timeout=30.0,
-    pool_timeout=30.0
-)
-
-application = (
-    Application.builder()
-    .token(TELEGRAM_TOKEN)
-    .request(tg_request)
-    .build()
-)
+# ================= APP =================
+application = Application.builder().token(TELEGRAM_TOKEN).build()
 
 application.add_handler(CommandHandler("start", start_handler))
-application.add_handler(CommandHandler("ping", ping_cmd))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
 application.add_handler(CommandHandler("setvip", setvip_cmd))
@@ -571,6 +528,54 @@ application.add_handler(MessageHandler(
 
 logger.info("✅ Handlers registrados")
 
+# ================= LOOP BLINDADO =================
+loop = asyncio.new_event_loop()
+
+def handle_exception(loop, context):
+    logger.error(f"🔥 Exceção global: {context}")
+
+loop.set_exception_handler(handle_exception)
+threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
+
+async def setup():
+    try:
+        logger.info("🔧 Configurando webhook...")
+        await application.initialize()
+        logger.info("✅ Application inicializado")
+        
+        # Timeout maior para delete_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.delete_webhook(drop_pending_updates=True),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook antigo removido")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
+        
+        # Timeout maior para set_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook configurado")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
+        
+        await application.start()
+        logger.info("✅ Bot iniciado com sucesso!")
+    except Exception as e:
+        logger.error(f"❌ Erro no setup: {e}")
+        # Continua mesmo com erro
+        try:
+            await application.start()
+            logger.info("✅ Bot iniciado (sem webhook)")
+        except:
+            pass
+
+asyncio.run_coroutine_threadsafe(setup(), loop)
+
 # ================= FLASK =================
 app = Flask(__name__)
 
@@ -583,77 +588,26 @@ def webhook():
     try:
         logger.info(f"📨 Webhook recebido")
         data = request.json
-        
-        if not data:
-            logger.warning("⚠️ Webhook vazio")
-            return "ok", 200
-        
-        logger.info(f"📦 Data keys: {data.keys()}")
+        logger.info(f"📦 Data: {data.get('message', {}).get('text', 'N/A')[:50]}")
         
         update = Update.de_json(data, application.bot)
         
-        # Cria task para processar
-        asyncio.create_task(application.process_update(update))
-        
-        logger.info(f"✅ Update enfileirado")
+        # Força o processamento imediato
+        future = asyncio.run_coroutine_threadsafe(
+            application.process_update(update),
+            loop
+        )
+        # Aguarda até 5 segundos
+        try:
+            future.result(timeout=5)
+            logger.info(f"✅ Update processado")
+        except:
+            logger.warning(f"⚠️ Timeout no processamento")
             
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
-    
     return "ok", 200
 
-async def setup_bot():
-    """Setup completo do bot com retry"""
-    max_retries = 3
-    retry_delay = 5
-    
-    for attempt in range(max_retries):
-        try:
-            logger.info(f"🔧 Tentativa {attempt + 1}/{max_retries} - Inicializando application...")
-            
-            await application.initialize()
-            logger.info("✅ Application inicializado")
-            
-            logger.info("🗑️ Removendo webhook antigo...")
-            await application.bot.delete_webhook(drop_pending_updates=True)
-            logger.info("✅ Webhook antigo removido")
-            
-            logger.info(f"📡 Configurando novo webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
-            success = await application.bot.set_webhook(
-                url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
-                drop_pending_updates=True
-            )
-            
-            if success:
-                logger.info("✅ Webhook configurado com sucesso!")
-            else:
-                logger.error("❌ Falha ao configurar webhook")
-            
-            logger.info("🚀 Iniciando application...")
-            await application.start()
-            logger.info("✅ Bot 100% operacional!")
-            
-            return  # Sucesso, sai da função
-            
-        except Exception as e:
-            logger.error(f"❌ Erro na tentativa {attempt + 1}: {e}", exc_info=True)
-            
-            if attempt < max_retries - 1:
-                logger.info(f"⏳ Aguardando {retry_delay}s antes de tentar novamente...")
-                await asyncio.sleep(retry_delay)
-                retry_delay *= 2  # Backoff exponencial
-            else:
-                logger.error("❌ Todas as tentativas falharam")
-                # Continua mesmo assim para o bot aceitar webhooks
-                logger.warning("⚠️ Continuando em modo degradado...")
-
 if __name__ == "__main__":
-    logger.info(f"🌐 Iniciando servidor na porta {PORT}")
-    
-    # Setup assíncrono antes de iniciar Flask
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(setup_bot())
-    
-    # Inicia Flask
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    logger.info(f"🌐 Iniciando Flask na porta {PORT}")
+    app.run(host="0.0.0.0", port=PORT)
