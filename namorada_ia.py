@@ -12,6 +12,7 @@ import aiohttp
 import redis
 import re
 from datetime import datetime, timedelta, date
+from telegram.request import HTTPXRequest
 from flask import Flask, request
 from collections import deque
 from telegram import (
@@ -512,7 +513,22 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
 # ================= APP =================
-application = Application.builder().token(TELEGRAM_TOKEN).build()
+
+request = HTTPXRequest(
+    connect_timeout=20,
+    read_timeout=20,
+    write_timeout=20,
+    pool_timeout=20
+)
+
+
+application = (
+    Application
+    .builder()
+    .token(TELEGRAM_TOKEN)
+    .request(request)
+    .build()
+)
 
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
