@@ -514,7 +514,7 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= APP =================
 
-request = HTTPXRequest(
+tg_request = HTTPXRequest(
     connect_timeout=20,
     read_timeout=20,
     write_timeout=20,
@@ -526,7 +526,7 @@ application = (
     Application
     .builder()
     .token(TELEGRAM_TOKEN)
-    .request(request)
+    .request(tg_request)
     .build()
 )
 
