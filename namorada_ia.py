@@ -397,7 +397,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(
                     chat_id=query.message.chat_id,
                     text=f"🔑 Chave PIX:\n\n`{PIX_KEY}`",
-                    parse_mode="Markdown"
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
+                    ])
                 )
             except Exception as e:
                 logger.error(f"Erro copy_pix: {e}")
