@@ -529,53 +529,22 @@ application.add_handler(MessageHandler(
 
 logger.info("✅ Handlers registrados")
 
-# ================= LOOP BLINDADO =================
-loop = asyncio.new_event_loop()
-
-def handle_exception(loop, context):
-    logger.error(f"🔥 Exceção global: {context}")
-
-loop.set_exception_handler(handle_exception)
-threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
-
-async def setup():
+# ================= INICIALIZAÇÃO SIMPLIFICADA =================
+def initialize_bot():
+    """Inicializa o bot de forma síncrona"""
+    logger.info("🔧 Inicializando bot...")
+    
+    # Configura webhook (usando polling até que o webhook seja configurado)
     try:
-        logger.info("🔧 Configurando webhook...")
-        await application.initialize()
-        logger.info("✅ Application inicializado")
-        
-        # Timeout maior para delete_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.delete_webhook(drop_pending_updates=True),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook antigo removido")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
-        
-        # Timeout maior para set_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook configurado")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
-        
-        await application.start()
-        logger.info("✅ Bot iniciado com sucesso!")
+        # Usa run_async para chamadas assíncronas
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            close_loop=False
+        )
     except Exception as e:
-        logger.error(f"❌ Erro no setup: {e}")
-        # Continua mesmo com erro
-        try:
-            await application.start()
-            logger.info("✅ Bot iniciado (sem webhook)")
-        except:
-            pass
-
-asyncio.run_coroutine_threadsafe(setup(), loop)
+        logger.error(f"❌ Erro ao iniciar bot: {e}")
+        raise
 
 # ================= FLASK =================
 app = Flask(__name__)
@@ -596,26 +565,34 @@ def webhook():
         
         update = Update.de_json(data, application.bot)
         
-        # Processa o update e aguarda
-        future = asyncio.run_coroutine_threadsafe(
+        # Processa o update de forma síncrona
+        asyncio.run_coroutine_threadsafe(
             application.process_update(update),
-            loop
+            application.updater._network_loop
         )
         
-        # Aguarda até 5 segundos
-        future.result(timeout=5.0)
-        logger.info("✅ Update processado com sucesso")
-        
-    except asyncio.TimeoutError:
-        logger.error("⏱️ Timeout ao processar update")
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
     
     return "ok", 200
 
+# ================= THREAD DO BOT =================
+def start_bot_in_thread():
+    """Inicia o bot em uma thread separada"""
+    try:
+        logger.info("🤖 Iniciando bot em thread separada...")
+        initialize_bot()
+    except Exception as e:
+        logger.error(f"❌ Erro fatal no bot: {e}")
+
+# Inicia o bot em uma thread
+bot_thread = threading.Thread(target=start_bot_in_thread, daemon=True)
+bot_thread.start()
+
 if __name__ == "__main__":
-    logger.info(f"🤖 Bot iniciado com sucesso!")
-    logger.info(f"🌐 Webhook será configurado automaticamente pelo Railway")
+    logger.info(f"🤖 Bot iniciando...")
+    logger.info(f"🌐 Flask na porta {PORT}")
     logger.info(f"📞 Endpoint: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
-    logger.info(f"🌐 Iniciando Flask na porta {PORT}")
+    
+    # Mantém o Flask rodando
     app.run(host="0.0.0.0", port=PORT)
