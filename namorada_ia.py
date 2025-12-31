@@ -20,7 +20,7 @@ from telegram.ext import (
     Application, MessageHandler, ContextTypes, filters,
     CallbackQueryHandler, PreCheckoutQueryHandler, CommandHandler
 )
-from telegram.request import HTTPXRequest  # Importar HTTPXRequest
+from telegram.request import HTTPXRequest
 
 # ================= LOG =================
 logging.basicConfig(
@@ -515,7 +515,7 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= APP COM TIMEOUT CONFIGURADO =================
+# ================= APP COM CONFIGURAÇÃO SIMPLIFICADA =================
 # Configurar request com timeout maior
 request = HTTPXRequest(
     connect_timeout=30.0,
@@ -524,8 +524,10 @@ request = HTTPXRequest(
     pool_timeout=30.0
 )
 
+# Criar a aplicação com o token e request configurado
 application = Application.builder().token(TELEGRAM_TOKEN).request(request).build()
 
+# Adicionar handlers
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
@@ -540,51 +542,16 @@ application.add_handler(MessageHandler(
 
 logger.info("✅ Handlers registrados")
 
-# ================= MODO WEBHOOK COM TRATAMENTO DE ERRO =================
-async def main():
-    """Função principal async para iniciar o bot"""
-    try:
-        logger.info("🚀 Iniciando webhook oficial do Telegram")
-        
-        # Inicializar a aplicação
-        await application.initialize()
-        logger.info("✅ Application inicializada")
-        
-        # Configurar webhook
-        await application.bot.set_webhook(
-            url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
-            drop_pending_updates=True
-        )
-        logger.info("✅ Webhook configurado")
-        
-        # Iniciar o servidor webhook
-        await application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=WEBHOOK_PATH,
-            webhook_url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
-            drop_pending_updates=True
-        )
-        
-    except Exception as e:
-        logger.error(f"❌ Erro crítico ao iniciar bot: {e}")
-        # Tentar método alternativo se webhook falhar
-        try:
-            logger.info("🔄 Tentando método alternativo...")
-            await application.run_polling(
-                drop_pending_updates=True,
-                allowed_updates=Update.ALL_TYPES
-            )
-        except Exception as e2:
-            logger.error(f"❌ Falha completa: {e2}")
-            raise
-
+# ================= INICIALIZAÇÃO SIMPLES =================
+# Usar o método mais simples do python-telegram-bot
 if __name__ == "__main__":
-    try:
-        # Rodar o bot com tratamento de exceções globais
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("⏹️ Bot interrompido pelo usuário")
-    except Exception as e:
-        logger.error(f"💥 Erro fatal: {e}")
-        raise
+    logger.info("🚀 Iniciando bot em modo webhook...")
+    
+    # Método direto e simples que funciona no Railway
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=WEBHOOK_PATH,
+        webhook_url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
+        drop_pending_updates=True
+    )
