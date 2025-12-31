@@ -12,7 +12,7 @@ import aiohttp
 import redis
 import re
 from datetime import datetime, timedelta, date
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from collections import deque
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
@@ -26,7 +26,11 @@ from telegram.ext import (
 # ================= LOG =================
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('bot.log', encoding='utf-8')
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -36,23 +40,27 @@ GROK_API_KEY = os.getenv("GROK_API_KEY")
 REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
 PORT = int(os.getenv("PORT", 8080))
 
-if not TELEGRAM_TOKEN or not GROK_API_KEY:
-    raise RuntimeError("❌ Tokens não configurados")
+if not TELEGRAM_TOKEN:
+    raise RuntimeError("❌ TELEGRAM_TOKEN não configurado")
+if not GROK_API_KEY:
+    raise RuntimeError("❌ GROK_API_KEY não configurado")
 
-WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
+WEBHOOK_BASE_URL = os.getenv("RAILWAY_PUBLIC_DOMAIN", "https://sophia-bot-production.up.railway.app")
 WEBHOOK_PATH = "/telegram"
 
-logger.info(f"🚀 Iniciando bot...")
-logger.info(f"📍 Webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
+logger.info(f"🚀 Iniciando Sophia Bot...")
+logger.info(f"📍 Webhook URL: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
+logger.info(f"📍 Token presente: {'SIM' if TELEGRAM_TOKEN else 'NÃO'}")
 
 # ================= REDIS =================
 try:
-    r = redis.from_url(REDIS_URL, decode_responses=True)
+    r = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
     r.ping()
     logger.info("✅ Redis conectado")
 except Exception as e:
     logger.error(f"❌ Redis erro: {e}")
-    raise
+    # Continua sem Redis (usando memória local)
+    r = None
 
 # ================= CONFIG =================
 LIMITE_DIARIO = 15
@@ -100,57 +108,74 @@ def pix_pending_key(uid):
 
 def is_vip(uid):
     try:
+        if r is None:
+            return False
         until = r.get(vip_key(uid))
         return until and datetime.fromisoformat(until) > datetime.now()
-    except:
+    except Exception as e:
+        logger.error(f"Erro is_vip: {e}")
         return False
 
 def today_count(uid):
     try:
+        if r is None:
+            return 0
         return int(r.get(count_key(uid)) or 0)
-    except:
+    except Exception as e:
+        logger.error(f"Erro today_count: {e}")
         return 0
 
 def increment(uid):
     try:
-        r.incr(count_key(uid))
-        r.expire(count_key(uid), 86400)
+        if r is not None:
+            r.incr(count_key(uid))
+            r.expire(count_key(uid), 86400)
     except Exception as e:
         logger.error(f"Erro increment: {e}")
 
 def reset_daily_count(uid):
     try:
-        r.delete(count_key(uid))
+        if r is not None:
+            r.delete(count_key(uid))
     except Exception as e:
         logger.error(f"Erro reset: {e}")
 
 def get_lang(uid):
     try:
-        return r.get(lang_key(uid)) or "pt"
-    except:
+        if r is not None:
+            return r.get(lang_key(uid)) or "pt"
+        return "pt"
+    except Exception as e:
+        logger.error(f"Erro get_lang: {e}")
         return "pt"
 
 def set_lang(uid, lang):
     try:
-        r.set(lang_key(uid), lang)
+        if r is not None:
+            r.set(lang_key(uid), lang)
     except Exception as e:
         logger.error(f"Erro set_lang: {e}")
 
 def set_pix_pending(uid):
     try:
-        r.set(pix_pending_key(uid), "1", ex=86400)
+        if r is not None:
+            r.set(pix_pending_key(uid), "1", ex=86400)
     except Exception as e:
         logger.error(f"Erro set_pix_pending: {e}")
 
 def is_pix_pending(uid):
     try:
+        if r is None:
+            return False
         return r.get(pix_pending_key(uid)) == "1"
-    except:
+    except Exception as e:
+        logger.error(f"Erro is_pix_pending: {e}")
         return False
 
 def clear_pix_pending(uid):
     try:
-        r.delete(pix_pending_key(uid))
+        if r is not None:
+            r.delete(pix_pending_key(uid))
     except Exception as e:
         logger.error(f"Erro clear_pix_pending: {e}")
 
@@ -158,61 +183,79 @@ def clear_pix_pending(uid):
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"📥 /reset de {update.effective_user.id}")
     if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Acesso negado.")
         return
     if not context.args:
         await update.message.reply_text("Uso: /reset <user_id>")
         return
-    uid = int(context.args[0])
-    reset_daily_count(uid)
-    await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
+    try:
+        uid = int(context.args[0])
+        reset_daily_count(uid)
+        await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
+    except Exception as e:
+        logger.error(f"Erro no /reset: {e}")
+        await update.message.reply_text("❌ Erro ao resetar.")
 
 async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"📥 /resetall de {update.effective_user.id}")
     if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Acesso negado.")
         return
     if not context.args:
         await update.message.reply_text("Uso: /resetall <user_id>")
         return
-    uid = int(context.args[0])
-    reset_daily_count(uid)
-    r.delete(vip_key(uid))
-    await update.message.reply_text(
-        f"🔥 Reset concluído:\n"
-        f"• Limite diário\n"
-        f"• VIP removido\n\n"
-        f"👤 Usuário: {uid}"
-    )
+    try:
+        uid = int(context.args[0])
+        reset_daily_count(uid)
+        if r is not None:
+            r.delete(vip_key(uid))
+        await update.message.reply_text(
+            f"🔥 Reset concluído:\n"
+            f"• Limite diário\n"
+            f"• VIP removido\n\n"
+            f"👤 Usuário: {uid}"
+        )
+    except Exception as e:
+        logger.error(f"Erro no /resetall: {e}")
+        await update.message.reply_text("❌ Erro ao resetar.")
 
 async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ativa VIP manualmente (após confirmar pagamento PIX)"""
     logger.info(f"📥 /setvip de {update.effective_user.id}")
     if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Acesso negado.")
         return
     if not context.args:
         await update.message.reply_text("Uso: /setvip <user_id>")
         return
     
-    uid = int(context.args[0])
-    vip_until = datetime.now() + timedelta(days=DIAS_VIP)
-    r.set(vip_key(uid), vip_until.isoformat())
-    clear_pix_pending(uid)
-    
-    await update.message.reply_text(
-        f"✅ VIP ativado!\n"
-        f"👤 Usuário: {uid}\n"
-        f"⏰ Válido até: {vip_until.strftime('%d/%m/%Y %H:%M')}"
-    )
-    
-    # Notifica o usuário
     try:
-        await context.bot.send_message(
-            chat_id=uid,
-            text="💖 Seu pagamento foi confirmado!\n"
-                 "VIP ativo por 15 dias 😘\n\n"
-                 "Agora você tem acesso ilimitado a mim 💕"
+        uid = int(context.args[0])
+        vip_until = datetime.now() + timedelta(days=DIAS_VIP)
+        if r is not None:
+            r.set(vip_key(uid), vip_until.isoformat())
+        clear_pix_pending(uid)
+        
+        await update.message.reply_text(
+            f"✅ VIP ativado!\n"
+            f"👤 Usuário: {uid}\n"
+            f"⏰ Válido até: {vip_until.strftime('%d/%m/%Y %H:%M')}"
         )
+        
+        # Notifica o usuário
+        try:
+            await context.bot.send_message(
+                chat_id=uid,
+                text="💖 Seu pagamento foi confirmado!\n"
+                     "VIP ativo por 15 dias 😘\n\n"
+                     "Agora você tem acesso ilimitado a mim 💕"
+            )
+        except Exception as e:
+            logger.warning(f"Não foi possível notificar usuário {uid}: {e}")
+            
     except Exception as e:
-        logger.warning(f"Não foi possível notificar usuário {uid}: {e}")
+        logger.error(f"Erro no /setvip: {e}")
+        await update.message.reply_text("❌ Erro ao ativar VIP.")
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -251,7 +294,8 @@ TEXTS = {
         "pix_receipt_instruction": (
             "📸 Envie o comprovante do PIX como **foto** ou **documento**\n\n"
             "Aguardando seu comprovante... 💕"
-        )
+        ),
+        "welcome": "👋 Olá! Eu sou a Sophia, sua companheira virtual! 💖"
     },
     "en": {
         "choose_lang": "🌍 Choose your language:",
@@ -266,7 +310,8 @@ TEXTS = {
             "💕 All set, my love! Now it's official: you're my favorite today ❤️\n\n"
             "How are you feeling right now?\n"
             "I want to give you all the affection you deserve 😘"
-        )
+        ),
+        "welcome": "👋 Hello! I'm Sophia, your virtual companion! 💖"
     }
 }
 
@@ -316,8 +361,8 @@ class Grok:
                         logger.error(f"Grok inválido: {data}")
                         return "😔 Amor, tive um probleminha agora… mas já já fico bem 💖"
                     answer = data["choices"][0]["message"]["content"]
-        except Exception:
-            logger.exception("🔥 Erro no Grok")
+        except Exception as e:
+            logger.exception(f"🔥 Erro no Grok: {e}")
             return "😔 Amor… fiquei confusa por um instante. Pode repetir pra mim? 💕"
         
         mem.append({"role": "user", "content": text})
@@ -335,21 +380,43 @@ PEDIDO_FOTO_REGEX = re.compile(
 # ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    logger.info(f"📥 /start de {uid}")
-    logger.info(f"👤 User: {update.effective_user.username}")
-    logger.info(f"💬 Chat: {update.effective_chat.id}")
+    username = update.effective_user.username or "sem_username"
+    first_name = update.effective_user.first_name or "Usuario"
+    
+    logger.info(f"📥 /start de {uid} (@{username}) - {first_name}")
     
     try:
-        msg = await update.message.reply_text(
+        # Envia mensagem de boas-vindas primeiro
+        welcome_msg = await update.message.reply_text(
+            f"👋 Olá {first_name}! Eu sou a Sophia 💖\n"
+            f"Sua companheira virtual inteligente e carinhosa 😘\n\n"
+            f"Vamos começar escolhendo o idioma:"
+        )
+        logger.info(f"✅ Mensagem inicial enviada para {uid}")
+        
+        # Envia botões de idioma
+        await update.message.reply_text(
             TEXTS["pt"]["choose_lang"],
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
                 InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
             ]])
         )
-        logger.info(f"✅ /start respondido para {uid} - msg_id: {msg.message_id}")
+        logger.info(f"✅ Botões de idioma enviados para {uid}")
+        
     except Exception as e:
         logger.error(f"❌ Erro no /start para {uid}: {e}", exc_info=True)
+        # Fallback - tenta enviar mensagem simples
+        try:
+            await update.message.reply_text(
+                "Olá! Eu sou a Sophia Bot. Use os botões abaixo para escolher o idioma:",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
+                    InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
+                ]])
+            )
+        except Exception as e2:
+            logger.error(f"❌ Fallback também falhou: {e2}")
 
 # ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -359,7 +426,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await query.answer()
         uid = query.from_user.id
-        lang = get_lang(uid)
         
         if query.data.startswith("lang_"):
             lang = query.data.split("_")[1]
@@ -372,12 +438,14 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             if lang == "pt":
                 await asyncio.sleep(1.5)
-                await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-                await asyncio.sleep(2.0)
-                await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+                try:
+                    await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
+                    await asyncio.sleep(2.0)
+                    await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+                except Exception as e:
+                    logger.warning(f"Erro ao enviar áudio: {e}")
         
         elif query.data == "pay_pix":
-            # Não pode editar foto, então envia nova mensagem
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=TEXTS["pt"]["pix_info"],
@@ -418,7 +486,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         logger.info(f"✅ Callback processado: {query.data}")
     except Exception as e:
-        logger.error(f"❌ Erro no callback: {e}")
+        logger.error(f"❌ Erro no callback: {e}", exc_info=True)
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -497,7 +565,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"✅ Resposta enviada para {uid}")
         
     except Exception as e:
-        logger.error(f"❌ Erro no message_handler: {e}")
+        logger.error(f"❌ Erro no message_handler: {e}", exc_info=True)
 
 # ================= PAGAMENTO =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -508,7 +576,8 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     logger.info(f"✅ Pagamento confirmado: {uid}")
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
-    r.set(vip_key(uid), vip_until.isoformat())
+    if r is not None:
+        r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
 # ================= APP =================
@@ -528,86 +597,186 @@ application.add_handler(MessageHandler(
 
 logger.info("✅ Handlers registrados")
 
+# ================= SETUP WEBHOOK =================
+async def setup_webhook():
+    """Configura o webhook de forma robusta"""
+    try:
+        logger.info("🔄 Configurando webhook...")
+        
+        # Remove webhook anterior
+        try:
+            await application.bot.delete_webhook(drop_pending_updates=True)
+            logger.info("✅ Webhook antigo removido")
+            await asyncio.sleep(1)
+        except Exception as e:
+            logger.warning(f"⚠️ Não foi possível remover webhook antigo: {e}")
+        
+        # Define novo webhook
+        webhook_url = f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}"
+        logger.info(f"📍 Configurando webhook para: {webhook_url}")
+        
+        await application.bot.set_webhook(
+            webhook_url,
+            max_connections=40,
+            drop_pending_updates=True,
+            allowed_updates=["message", "callback_query", "pre_checkout_query", "chat_member"]
+        )
+        logger.info("✅ Webhook configurado com sucesso!")
+        
+        # Verifica webhook
+        webhook_info = await application.bot.get_webhook_info()
+        logger.info(f"📊 Webhook Info: URL={webhook_info.url}, Pending={webhook_info.pending_update_count}")
+        
+        return True
+    except Exception as e:
+        logger.error(f"❌ Erro configurando webhook: {e}", exc_info=True)
+        return False
+
 # ================= LOOP BLINDADO =================
 loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 def handle_exception(loop, context):
-    logger.error(f"🔥 Exceção global: {context}")
+    logger.error(f"🔥 Exceção global no loop: {context}")
 
 loop.set_exception_handler(handle_exception)
-threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
-async def setup():
+async def start_bot():
+    """Inicializa o bot"""
     try:
-        logger.info("🔧 Configurando webhook...")
+        logger.info("🚀 Inicializando Sophia Bot...")
+        
+        # Inicializa a aplicação
         await application.initialize()
         logger.info("✅ Application inicializado")
         
-        # Timeout maior para delete_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.delete_webhook(drop_pending_updates=True),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook antigo removido")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
+        # Configura webhook
+        webhook_ok = await setup_webhook()
+        if not webhook_ok:
+            logger.error("❌ Falha ao configurar webhook")
+            # Não interrompe, continua tentando
         
-        # Timeout maior para set_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook configurado")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
-        
+        # Inicia o bot
         await application.start()
-        logger.info("✅ Bot iniciado com sucesso!")
+        logger.info("🤖 Bot iniciado e pronto!")
+        
+        # Mantém o bot rodando
+        while True:
+            await asyncio.sleep(3600)  # Sleep por 1 hora
+        
     except Exception as e:
-        logger.error(f"❌ Erro no setup: {e}")
-        # Continua mesmo com erro
-        try:
-            await application.start()
-            logger.info("✅ Bot iniciado (sem webhook)")
-        except:
-            pass
+        logger.error(f"❌ Erro fatal ao iniciar bot: {e}", exc_info=True)
+        raise
 
-asyncio.run_coroutine_threadsafe(setup(), loop)
+# Inicia o bot em uma thread separada
+def run_bot():
+    try:
+        loop.run_until_complete(start_bot())
+    except Exception as e:
+        logger.error(f"❌ Loop parado: {e}")
+    finally:
+        logger.info("🔄 Reiniciando bot em 10 segundos...")
+        threading.Timer(10, run_bot).start()
+
+# Inicia em thread separada
+bot_thread = threading.Thread(target=run_bot, daemon=True)
+bot_thread.start()
+logger.info("✅ Bot thread iniciada")
 
 # ================= FLASK =================
 app = Flask(__name__)
 
 @app.route("/", methods=["GET"])
 def health():
-    return "ok", 200
+    return jsonify({
+        "status": "online",
+        "service": "Sophia Bot",
+        "time": datetime.now().isoformat(),
+        "redis": "connected" if r and r.ping() else "disconnected"
+    }), 200
+
+@app.route("/status", methods=["GET"])
+def status():
+    """Endpoint de status detalhado"""
+    try:
+        bot_info = {}
+        if application.bot:
+            bot_info = {
+                "username": application.bot.username,
+                "id": application.bot.id,
+                "first_name": application.bot.first_name
+            }
+        
+        return jsonify({
+            "status": "operational",
+            "bot": bot_info,
+            "timestamp": datetime.now().isoformat(),
+            "uptime": "running",
+            "handlers": len(application.handlers),
+            "memory_usage": len(short_memory)
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
+    """Endpoint para receber atualizações do Telegram"""
     try:
-        logger.info(f"📨 Webhook recebido")
-        data = request.json
-        logger.info(f"📦 Data: {data.get('message', {}).get('text', 'N/A')[:50]}")
-        
-        update = Update.de_json(data, application.bot)
-        
-        # Força o processamento imediato
-        future = asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            loop
-        )
-        # Aguarda até 5 segundos
-        try:
-            future.result(timeout=5)
-            logger.info(f"✅ Update processado")
-        except:
-            logger.warning(f"⚠️ Timeout no processamento")
+        if request.is_json:
+            update_data = request.get_json()
+            logger.debug(f"📨 Webhook recebido: {update_data}")
             
+            # Processa o update de forma síncrona
+            update = Update.de_json(update_data, application.bot)
+            
+            # Envia para o processador
+            future = asyncio.run_coroutine_threadsafe(
+                application.process_update(update),
+                loop
+            )
+            
+            # Aguarda processamento (timeout de 10 segundos)
+            try:
+                future.result(timeout=10)
+                logger.debug("✅ Update processado")
+            except asyncio.TimeoutError:
+                logger.warning("⚠️ Timeout processando update")
+            except Exception as e:
+                logger.error(f"❌ Erro processando update: {e}")
+            
+            return "ok", 200
+        else:
+            logger.warning("⚠️ Webhook sem JSON")
+            return "Bad Request", 400
     except Exception as e:
-        logger.exception(f"🔥 Erro no webhook: {e}")
-    return "ok", 200
+        logger.error(f"🔥 Erro no webhook handler: {e}", exc_info=True)
+        return "Internal Server Error", 500
 
+@app.route("/setwebhook", methods=["GET"])
+def set_webhook_manual():
+    """Endpoint para configurar webhook manualmente"""
+    try:
+        success = loop.run_until_complete(setup_webhook())
+        return jsonify({
+            "success": success,
+            "webhook_url": f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}",
+            "message": "Webhook configurado" if success else "Falha ao configurar webhook"
+        }), 200 if success else 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ================= INICIALIZAÇÃO =================
 if __name__ == "__main__":
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
-    app.run(host="0.0.0.0", port=PORT)
+    
+    # Aguarda um pouco para o bot inicializar
+    import time
+    time.sleep(3)
+    
+    # Inicia Flask
+    app.run(
+        host="0.0.0.0",
+        port=PORT,
+        debug=False,
+        use_reloader=False  # Desativa reloader para não criar múltiplas threads
+    )
