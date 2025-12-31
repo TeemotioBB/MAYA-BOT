@@ -214,19 +214,6 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.warning(f"Não foi possível notificar usuário {uid}: {e}")
 
-async def ping_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando de teste para verificar se o bot está vivo"""
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    
-    webhook_info = await context.bot.get_webhook_info()
-    await update.message.reply_text(
-        f"🏓 PONG!\n\n"
-        f"📡 Webhook: {webhook_info.url}\n"
-        f"⏰ Updates: {webhook_info.pending_update_count}\n"
-        f"✅ Bot está funcionando!"
-    )
-
 # ================= TEXTOS =================
 TEXTS = {
     "pt": {
@@ -525,24 +512,12 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
 # ================= APP =================
-from telegram.request import HTTPXRequest
-
-# Request customizado com timeouts maiores
-telegram_request = HTTPXRequest(
-    connection_pool_size=8,
-    connect_timeout=30.0,
-    read_timeout=30.0,
-    write_timeout=30.0,
-    pool_timeout=30.0
-)
-
-application = Application.builder().token(TELEGRAM_TOKEN).request(telegram_request).build()
+application = Application.builder().token(TELEGRAM_TOKEN).build()
 
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
 application.add_handler(CommandHandler("setvip", setvip_cmd))
-application.add_handler(CommandHandler("ping", ping_cmd))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
@@ -564,44 +539,40 @@ threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
     try:
-        logger.info("🔧 Iniciando application (modo simplificado)...")
+        logger.info("🔧 Configurando webhook...")
+        await application.initialize()
+        logger.info("✅ Application inicializado")
         
-        # Tenta inicializar com timeout curto
+        # Timeout maior para delete_webhook
         try:
-            await asyncio.wait_for(application.initialize(), timeout=15.0)
-            logger.info("✅ Application inicializado")
+            await asyncio.wait_for(
+                application.bot.delete_webhook(drop_pending_updates=True),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook antigo removido")
         except asyncio.TimeoutError:
-            logger.warning("⚠️ Initialize timeout - continuando mesmo assim...")
-        except Exception as e:
-            logger.warning(f"⚠️ Initialize error: {e} - continuando...")
+            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
         
-        # Inicia o application (CRÍTICO)
+        # Timeout maior para set_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook configurado")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
+        
+        await application.start()
+        logger.info("✅ Bot iniciado com sucesso!")
+    except Exception as e:
+        logger.error(f"❌ Erro no setup: {e}")
+        # Continua mesmo com erro
         try:
             await application.start()
-            logger.info("✅ Application INICIADO - bot está ONLINE!")
-        except Exception as e:
-            logger.error(f"❌ Erro ao iniciar application: {e}")
-            return
-        
-        # Configura webhook em background depois
-        async def configure_webhook():
-            await asyncio.sleep(5)
-            try:
-                logger.info("🔧 Tentando configurar webhook...")
-                await application.bot.set_webhook(
-                    WEBHOOK_BASE_URL + WEBHOOK_PATH,
-                    connect_timeout=10,
-                    read_timeout=10
-                )
-                logger.info("✅ Webhook configurado!")
-            except Exception as e:
-                logger.warning(f"⚠️ Webhook falhou (bot ainda funciona): {e}")
-        
-        asyncio.create_task(configure_webhook())
-        logger.info("🚀 Bot pronto para processar mensagens!")
-        
-    except Exception as e:
-        logger.error(f"❌ Erro crítico no setup: {e}", exc_info=True)
+            logger.info("✅ Bot iniciado (sem webhook)")
+        except:
+            pass
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
