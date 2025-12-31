@@ -334,18 +334,22 @@ PEDIDO_FOTO_REGEX = re.compile(
 
 # ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"📥 /start de {update.effective_user.id}")
+    uid = update.effective_user.id
+    logger.info(f"📥 /start de {uid}")
+    logger.info(f"👤 User: {update.effective_user.username}")
+    logger.info(f"💬 Chat: {update.effective_chat.id}")
+    
     try:
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             TEXTS["pt"]["choose_lang"],
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
                 InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
             ]])
         )
-        logger.info(f"✅ /start respondido para {update.effective_user.id}")
+        logger.info(f"✅ /start respondido para {uid} - msg_id: {msg.message_id}")
     except Exception as e:
-        logger.error(f"❌ Erro no /start: {e}")
+        logger.error(f"❌ Erro no /start para {uid}: {e}", exc_info=True)
 
 # ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -535,12 +539,38 @@ async def setup():
     try:
         logger.info("🔧 Configurando webhook...")
         await application.initialize()
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
+        logger.info("✅ Application inicializado")
+        
+        # Timeout maior para delete_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.delete_webhook(drop_pending_updates=True),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook antigo removido")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
+        
+        # Timeout maior para set_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook configurado")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
+        
         await application.start()
         logger.info("✅ Bot iniciado com sucesso!")
     except Exception as e:
         logger.error(f"❌ Erro no setup: {e}")
+        # Continua mesmo com erro
+        try:
+            await application.start()
+            logger.info("✅ Bot iniciado (sem webhook)")
+        except:
+            pass
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
@@ -555,12 +585,23 @@ def health():
 def webhook():
     try:
         logger.info(f"📨 Webhook recebido")
-        update = Update.de_json(request.json, application.bot)
-        asyncio.run_coroutine_threadsafe(
+        data = request.json
+        logger.info(f"📦 Data: {data.get('message', {}).get('text', 'N/A')[:50]}")
+        
+        update = Update.de_json(data, application.bot)
+        
+        # Força o processamento imediato
+        future = asyncio.run_coroutine_threadsafe(
             application.process_update(update),
             loop
         )
-        logger.info(f"✅ Update processado")
+        # Aguarda até 5 segundos
+        try:
+            future.result(timeout=5)
+            logger.info(f"✅ Update processado")
+        except:
+            logger.warning(f"⚠️ Timeout no processamento")
+            
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
     return "ok", 200
