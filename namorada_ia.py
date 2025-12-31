@@ -556,6 +556,15 @@ threading.Thread(target=start_loop, daemon=True).start()
 def health():
     return "ok", 200
 
+@app.route("/set-webhook", methods=["GET"])
+def set_webhook_route():
+    asyncio.run_coroutine_threadsafe(
+        setup_webhook(),
+        loop
+    )
+    return "Webhook configurado", 200
+
+
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def telegram_webhook():
     try:
@@ -566,12 +575,6 @@ def telegram_webhook():
             return "ok", 200
 
         update = Update.de_json(data, application.bot)
-
-        asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            loop
-        )
-
         return "ok", 200
 
     except Exception as e:
@@ -594,17 +597,11 @@ async def setup_webhook():
         logger.error(f"❌ Erro ao configurar webhook: {e}")
 
 if __name__ == "__main__":
-    # Inicializa o bot de forma segura no loop já em execução
+    # Inicializa o bot (async) no loop já rodando
     asyncio.run_coroutine_threadsafe(
         application.initialize(),
         loop
     )
 
-    asyncio.run_coroutine_threadsafe(
-        setup_webhook(),
-        loop
-    )
-
-    # Inicia o Flask
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
