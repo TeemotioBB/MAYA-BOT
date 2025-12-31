@@ -60,10 +60,12 @@ PRECO_VIP_STARS = 250
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
-# ================= PIX =================
+# ================= PIX (ADICIONADO) =================
 PIX_VALOR = "R$ 29,90"
 PIX_CHAVE = "SUA_CHAVE_PIX_AQUI"
-PIX_NOME = "Sophia VIP"
+
+def aguardando_pix_key(uid):
+    return f"pix_wait:{uid}"
 
 # ================= ADMIN =================
 ADMIN_IDS = {1293602874}
@@ -114,9 +116,6 @@ def set_lang(uid, lang):
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
-    if not context.args:
-        await update.message.reply_text("Uso: /reset <user_id>")
-        return
     uid = int(context.args[0])
     reset_daily_count(uid)
     await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
@@ -124,15 +123,10 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
-    if not context.args:
-        await update.message.reply_text("Uso: /resetall <user_id>")
-        return
     uid = int(context.args[0])
     reset_daily_count(uid)
     r.delete(vip_key(uid))
-    await update.message.reply_text(
-        f"🔥 Reset concluído:\n• Limite diário\n• VIP removido\n\n👤 Usuário: {uid}"
-    )
+    await update.message.reply_text(f"🔥 Reset total para {uid}")
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -146,19 +140,14 @@ TEXTS = {
         ),
         "lang_ok": "✅ Idioma configurado!",
         "after_lang": (
-            "💕 Prontinho, meu amor! Agora é oficial: você é meu favorito do dia ❤️\n\n"
-            "Como você está se sentindo agora?\n"
-            "Quero te dar todo o carinho que você merece 😘"
+            "💕 Prontinho, meu amor! Agora é oficial ❤️\n"
+            "Como você está se sentindo agora? 😘"
         ),
+        # ===== PIX (ADICIONADO) =====
         "pix_info": (
             "💳 *Pagamento via PIX*\n\n"
-            f"✨ Valor: {PIX_VALOR}\n"
-            "⏱ Liberação manual após pagamento\n\n"
-            "📌 *Como pagar:*\n"
-            "1️⃣ Clique em copiar chave PIX\n"
-            "2️⃣ Cole no app do seu banco\n"
-            "3️⃣ Pague o valor exato\n"
-            "4️⃣ Envie o comprovante aqui 💖"
+            f"✨ Valor: {PIX_VALOR}\n\n"
+            "Clique abaixo para copiar a chave PIX 👇"
         )
     },
     "en": {
@@ -171,9 +160,7 @@ TEXTS = {
         ),
         "lang_ok": "✅ Language set!",
         "after_lang": (
-            "💕 All set, my love! Now it’s official: you’re my favorite today ❤️\n\n"
-            "How are you feeling right now?\n"
-            "I want to give you all the affection you deserve 😘"
+            "💕 All set, my love! ❤️\nHow are you feeling now? 😘"
         )
     }
 }
@@ -181,8 +168,8 @@ TEXTS = {
 # ================= PROMPT =================
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
-        return "You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️"
-    return "Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️"
+        return "You are Sophia, a 23-year-old virtual girlfriend. Affectionate ❤️"
+    return "Você é Sophia, uma namorada virtual carinhosa ❤️"
 
 # ================= GROK =================
 class Grok:
@@ -195,24 +182,19 @@ class Grok:
                 {"role": "system", "content": build_prompt(is_vip(uid), lang)},
                 *list(mem),
                 {"role": "user", "content": text}
-            ],
-            "max_tokens": 250,
-            "temperature": 0.85
+            ]
         }
-        try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=25)) as session:
-                async with session.post(
-                    GROK_API_URL,
-                    headers={
-                        "Authorization": f"Bearer {GROK_API_KEY}",
-                        "Content-Type": "application/json"
-                    },
-                    json=payload
-                ) as resp:
-                    data = await resp.json()
-                    answer = data["choices"][0]["message"]["content"]
-        except Exception:
-            return "😔 Amor… tive um probleminha agora 💕"
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                GROK_API_URL,
+                headers={
+                    "Authorization": f"Bearer {GROK_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json=payload
+            ) as resp:
+                data = await resp.json()
+                answer = data["choices"][0]["message"]["content"]
         mem.append({"role": "user", "content": text})
         mem.append({"role": "assistant", "content": answer})
         return answer
@@ -261,10 +243,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             start_parameter="vip"
         )
 
+    # ===== PIX (ADICIONADO) =====
     elif query.data == "pix_info":
         await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=TEXTS["pt"]["pix_info"],
+            query.message.chat_id,
+            TEXTS["pt"]["pix_info"],
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📋 Copiar chave PIX", callback_data="pix_copy")]
@@ -273,18 +256,53 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "pix_copy":
         await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=PIX_CHAVE,
+            query.message.chat_id,
+            PIX_CHAVE,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📤 Enviar comprovante", callback_data="pix_comprovante")]
             ])
         )
 
     elif query.data == "pix_comprovante":
+        r.setex(aguardando_pix_key(uid), 600, "1")
         await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text="📸 Amor, me envia o comprovante aqui 💖\nAssim que eu confirmar, libero seu VIP 😘"
+            query.message.chat_id,
+            "📸 Agora me envie o comprovante aqui 💖"
         )
+
+# ================= COMPROVANTE PIX (ADICIONADO) =================
+async def comprovante_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if not r.get(aguardando_pix_key(uid)):
+        return
+
+    user = update.effective_user
+    admin_id = list(ADMIN_IDS)[0]
+
+    caption = (
+        "💳 *COMPROVANTE PIX*\n\n"
+        f"🆔 ID: `{user.id}`\n"
+        f"👤 Nome: {user.first_name}\n"
+        f"🔗 Username: @{user.username if user.username else 'N/A'}"
+    )
+
+    if update.message.photo:
+        await context.bot.send_photo(
+            admin_id,
+            update.message.photo[-1].file_id,
+            caption=caption,
+            parse_mode="Markdown"
+        )
+    elif update.message.document:
+        await context.bot.send_document(
+            admin_id,
+            update.message.document.file_id,
+            caption=caption,
+            parse_mode="Markdown"
+        )
+
+    r.delete(aguardando_pix_key(uid))
+    await update.message.reply_text("✅ Comprovante recebido! Agora é só aguardar 😘")
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -296,7 +314,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         buttons = [[InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]]
         if lang == "pt":
             buttons.insert(0, [InlineKeyboardButton("💳 Pagar com PIX", callback_data="pix_info")])
-
         await context.bot.send_photo(
             update.effective_chat.id,
             FOTO_TEASE_FILE_ID,
@@ -309,11 +326,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         buttons = [[InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]]
         if lang == "pt":
             buttons.insert(0, [InlineKeyboardButton("💳 Pagar com PIX", callback_data="pix_info")])
-
-        await update.message.reply_text(
-            TEXTS[lang]["limit"],
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
+        await update.message.reply_text(TEXTS[lang]["limit"], reply_markup=InlineKeyboardMarkup(buttons))
         return
 
     if not is_vip(uid):
@@ -323,7 +336,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
 
-# ================= PAGAMENTO =================
+# ================= PAGAMENTO STARS =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.pre_checkout_query.answer(ok=True)
 
@@ -339,12 +352,15 @@ application = Application.builder().token(TELEGRAM_TOKEN).build()
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
+application.add_handler(
+    MessageHandler(filters.PHOTO | filters.Document.ALL, comprovante_handler)
+)
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
-# ================= LOOP =================
+# ================= LOOP BLINDADO =================
 loop = asyncio.new_event_loop()
 threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
