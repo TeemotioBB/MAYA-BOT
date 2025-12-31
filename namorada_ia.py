@@ -377,8 +377,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
         elif query.data == "pay_pix":
-            await query.message.edit_text(
-                TEXTS["pt"]["pix_info"],
+            # Não pode editar foto, então envia nova mensagem
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=TEXTS["pt"]["pix_info"],
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("📋 COPIAR CHAVE", callback_data="copy_pix")],
@@ -403,6 +405,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         
         elif query.data == "buy_vip":
+            # Envia invoice em nova mensagem
             await context.bot.send_invoice(
                 chat_id=query.message.chat_id,
                 title="💖 VIP Sophia",
@@ -413,6 +416,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)],
                 start_parameter="vip"
             )
+            await query.answer("💖 Fatura enviada!", show_alert=False)
         
         logger.info(f"✅ Callback processado: {query.data}")
     except Exception as e:
