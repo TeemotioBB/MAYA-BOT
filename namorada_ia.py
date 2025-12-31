@@ -594,13 +594,17 @@ async def setup_webhook():
         logger.error(f"❌ Erro ao configurar webhook: {e}")
 
 if __name__ == "__main__":
-    # Inicializa o bot (sem iniciar polling)
-    loop.run_until_complete(application.initialize())
-    loop.run_until_complete(setup_webhook())
-    
-    # Configura o webhook
-    loop.run_until_complete(setup_webhook())
-    
+    # Inicializa o bot de forma segura no loop já em execução
+    asyncio.run_coroutine_threadsafe(
+        application.initialize(),
+        loop
+    )
+
+    asyncio.run_coroutine_threadsafe(
+        setup_webhook(),
+        loop
+    )
+
     # Inicia o Flask
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
