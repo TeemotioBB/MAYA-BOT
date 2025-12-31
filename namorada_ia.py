@@ -528,7 +528,7 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 from telegram.request import HTTPXRequest
 
 # Request customizado com timeouts maiores
-request = HTTPXRequest(
+telegram_request = HTTPXRequest(
     connection_pool_size=8,
     connect_timeout=30.0,
     read_timeout=30.0,
@@ -536,7 +536,7 @@ request = HTTPXRequest(
     pool_timeout=30.0
 )
 
-application = Application.builder().token(TELEGRAM_TOKEN).request(request).build()
+application = Application.builder().token(TELEGRAM_TOKEN).request(telegram_request).build()
 
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
