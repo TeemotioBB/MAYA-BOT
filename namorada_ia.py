@@ -3,6 +3,7 @@
 🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
 VIP | TELEGRAM STARS | PIX | REDIS | RAILWAY
 IDIOMA DINÂMICO (PT / EN)
+Versão Corrigida para Railway
 """
 import os
 import asyncio
@@ -553,38 +554,29 @@ def webhook():
         logger.exception(f"🔥 Erro no webhook: {e}")
     return "ok", 200
 
-# ================= INICIALIZAÇÃO =================
-async def initialize_bot():
-    """Inicializa o bot de forma assíncrona"""
-    try:
-        logger.info("🚀 Inicializando bot...")
-        
-        # Limpa webhook anterior e configura novo
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        await application.bot.set_webhook(
-            url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
-            max_connections=40
-        )
-        
-        logger.info(f"✅ Webhook configurado: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
-        logger.info("🤖 Bot inicializado com sucesso!")
-        
-    except Exception as e:
-        logger.error(f"❌ Erro ao inicializar bot: {e}")
-        raise
+# ================= CONFIGURAÇÃO DO WEBHOOK VIA RAILWAY =================
+# NO RAILWAY, CONFIGURE O WEBHOOK MANUALMENTE:
+# 1. Vá nas variáveis de ambiente do seu projeto no Railway
+# 2. Adicione uma variável chamada "RAILWAY_WEBHOOK_URL" com o valor:
+#    https://maya-bot-production.up.railway.app/telegram
+# 3. O Railway automaticamente configurará o webhook quando o bot iniciar
 
-def start_bot_async():
-    """Inicia o bot em uma thread separada"""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(initialize_bot())
+# ================= INICIALIZAÇÃO SIMPLIFICADA =================
+def setup_webhook_on_startup():
+    """Configura o webhook apenas uma vez ao iniciar"""
+    try:
+        # Importante: No Railway, não tentamos configurar webhook via código
+        # O Railway fará isso automaticamente através da variável RAILWAY_WEBHOOK_URL
+        logger.info("🤖 Bot iniciado com sucesso!")
+        logger.info("🌐 Webhook será configurado automaticamente pelo Railway")
+        logger.info(f"📞 Endpoint: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
+    except Exception as e:
+        logger.warning(f"⚠️ Não foi possível configurar webhook: {e}")
+        logger.info("🔄 Continuando sem webhook...")
+
+# Chama a configuração do webhook
+setup_webhook_on_startup()
 
 if __name__ == "__main__":
-    # Inicia o bot em uma thread
-    import threading
-    bot_thread = threading.Thread(target=start_bot_async, daemon=True)
-    bot_thread.start()
-    
-    # Inicia o Flask
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
