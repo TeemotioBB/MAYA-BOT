@@ -583,12 +583,14 @@ def webhook():
 
             await application.process_update(update)
 
-        application.create_task(process())
+        # 🔥 EXECUTA O ASYNC CORRETAMENTE NO FLASK
+        asyncio.run(process())
 
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
 
     return "ok", 200
+
 
 
 if __name__ == "__main__":
