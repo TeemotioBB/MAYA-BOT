@@ -21,6 +21,7 @@ from telegram.ext import (
     Application, MessageHandler, ContextTypes, filters,
     CallbackQueryHandler, PreCheckoutQueryHandler, CommandHandler
 )
+from telegram.request import HTTPXRequest
 
 # ================= LOG =================
 logging.basicConfig(
@@ -237,6 +238,10 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         logger.warning(f"Não foi possível notificar usuário {uid}: {e}")
+
+async def ping_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comando de teste"""
+    await update.message.reply_text("🟢 Bot online e funcionando!")
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -534,10 +539,29 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     safe_redis_set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= APP =================
-application = Application.builder().token(TELEGRAM_TOKEN).build()
+# ================= APP COM TIMEOUT AUMENTADO =================
+# Cria request customizado com timeout maior
+request = HTTPXRequest(
+    connection_pool_size=8,
+    connect_timeout=30.0,  # 30s para conectar
+    read_timeout=30.0,     # 30s para ler
+    write_timeout=30.0,    # 30s para escrever
+    pool_timeout=30.0      # 30s para pool
+)
+
+application = (
+    Application.builder()
+    .token(TELEGRAM_TOKEN)
+    .request(request)
+    .connect_timeout(30.0)
+    .read_timeout(30.0)
+    .write_timeout(30.0)
+    .pool_timeout(30.0)
+    .build()
+)
 
 application.add_handler(CommandHandler("start", start_handler))
+application.add_handler(CommandHandler("ping", ping_cmd))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
 application.add_handler(CommandHandler("setvip", setvip_cmd))
@@ -583,34 +607,49 @@ def webhook():
     return "ok", 200
 
 async def setup_bot():
-    """Setup completo do bot"""
-    try:
-        logger.info("🔧 Inicializando application...")
-        await application.initialize()
-        logger.info("✅ Application inicializado")
-        
-        logger.info("🗑️ Removendo webhook antigo...")
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Webhook antigo removido")
-        
-        logger.info(f"📡 Configurando novo webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
-        success = await application.bot.set_webhook(
-            url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
-            drop_pending_updates=True
-        )
-        
-        if success:
-            logger.info("✅ Webhook configurado com sucesso!")
-        else:
-            logger.error("❌ Falha ao configurar webhook")
-        
-        logger.info("🚀 Iniciando application...")
-        await application.start()
-        logger.info("✅ Bot 100% operacional!")
-        
-    except Exception as e:
-        logger.error(f"❌ Erro crítico no setup: {e}", exc_info=True)
-        raise
+    """Setup completo do bot com retry"""
+    max_retries = 3
+    retry_delay = 5
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"🔧 Tentativa {attempt + 1}/{max_retries} - Inicializando application...")
+            
+            await application.initialize()
+            logger.info("✅ Application inicializado")
+            
+            logger.info("🗑️ Removendo webhook antigo...")
+            await application.bot.delete_webhook(drop_pending_updates=True)
+            logger.info("✅ Webhook antigo removido")
+            
+            logger.info(f"📡 Configurando novo webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
+            success = await application.bot.set_webhook(
+                url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
+                drop_pending_updates=True
+            )
+            
+            if success:
+                logger.info("✅ Webhook configurado com sucesso!")
+            else:
+                logger.error("❌ Falha ao configurar webhook")
+            
+            logger.info("🚀 Iniciando application...")
+            await application.start()
+            logger.info("✅ Bot 100% operacional!")
+            
+            return  # Sucesso, sai da função
+            
+        except Exception as e:
+            logger.error(f"❌ Erro na tentativa {attempt + 1}: {e}", exc_info=True)
+            
+            if attempt < max_retries - 1:
+                logger.info(f"⏳ Aguardando {retry_delay}s antes de tentar novamente...")
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2  # Backoff exponencial
+            else:
+                logger.error("❌ Todas as tentativas falharam")
+                # Continua mesmo assim para o bot aceitar webhooks
+                logger.warning("⚠️ Continuando em modo degradado...")
 
 if __name__ == "__main__":
     logger.info(f"🌐 Iniciando servidor na porta {PORT}")
