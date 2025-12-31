@@ -238,7 +238,6 @@ TEXTS = {
             f"2️⃣ Abra seu app de pagamentos\n"
             f"3️⃣ Cole a chave e pague\n"
             f"4️⃣ Envie o comprovante aqui\n\n"
-            f"🔑 **Chave PIX:**\n"
             f"`{PIX_KEY}`\n\n"
             f"⚡ Aprovação em até 5 minutos!"
         ),
@@ -335,6 +334,7 @@ PEDIDO_FOTO_REGEX = re.compile(
 # ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    logger.info(f"🎯 START_HANDLER EXECUTADO! UID: {uid}")
     logger.info(f"📥 /start de {uid}")
     logger.info(f"👤 User: {update.effective_user.username}")
     logger.info(f"💬 Chat: {update.effective_chat.id}")
@@ -601,17 +601,20 @@ def webhook():
             loop
         )
         
-        # Aguarda até 5 segundos
-        future.result(timeout=5.0)
-        logger.info("✅ Update processado")
+        # Aguarda até 10 segundos (por causa dos áudios)
+        future.result(timeout=10.0)
+        logger.info("✅ Update processado com sucesso")
         
     except asyncio.TimeoutError:
-        logger.error("⏱️ Timeout processando update")
+        logger.error("⏱️ Timeout ao processar update")
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
     
     return "ok", 200
 
 if __name__ == "__main__":
+    logger.info(f"🤖 Bot iniciado com sucesso!")
+    logger.info(f"🌐 Webhook será configurado automaticamente pelo Railway")
+    logger.info(f"📞 Endpoint: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT)
