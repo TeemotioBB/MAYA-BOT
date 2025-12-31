@@ -377,56 +377,44 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
         elif query.data == "pay_pix":
-            try:
-                # Não pode editar foto, então envia nova mensagem
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=TEXTS["pt"]["pix_info"],
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("📋 COPIAR CHAVE", callback_data="copy_pix")],
-                        [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
-                    ])
-                )
-            except Exception as e:
-                logger.error(f"Erro pay_pix: {e}")
+            # Não pode editar foto, então envia nova mensagem
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=TEXTS["pt"]["pix_info"],
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📋 COPIAR CHAVE", callback_data="copy_pix")],
+                    [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
+                ])
+            )
         
         elif query.data == "copy_pix":
-            try:
-                await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=f"🔑 Chave PIX:\n\n`{PIX_KEY}`",
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                logger.error(f"Erro copy_pix: {e}")
+            await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"🔑 Chave PIX:\n\n`{PIX_KEY}`",
+                parse_mode="Markdown"
+            )
         
         elif query.data == "send_receipt":
-            try:
-                set_pix_pending(uid)
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=TEXTS["pt"]["pix_receipt_instruction"],
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                logger.error(f"Erro send_receipt: {e}")
+            set_pix_pending(uid)
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=TEXTS["pt"]["pix_receipt_instruction"],
+                parse_mode="Markdown"
+            )
         
         elif query.data == "buy_vip":
-            try:
-                await context.bot.send_invoice(
-                    chat_id=query.message.chat_id,
-                    title="💖 VIP Sophia",
-                    description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
-                    payload=f"vip_{uid}",
-                    provider_token="",
-                    currency="XTR",
-                    prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)],
-                    start_parameter="vip"
-                )
-            except Exception as e:
-                logger.error(f"Erro buy_vip: {e}")
+            await context.bot.send_invoice(
+                chat_id=query.message.chat_id,
+                title="💖 VIP Sophia",
+                description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
+                payload=f"vip_{uid}",
+                provider_token="",
+                currency="XTR",
+                prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)],
+                start_parameter="vip"
+            )
         
         logger.info(f"✅ Callback processado: {query.data}")
     except Exception as e:
