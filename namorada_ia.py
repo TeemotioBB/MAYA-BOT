@@ -588,21 +588,30 @@ def health():
 def webhook():
     try:
         data = request.json
+        logger.info(f"📨 Webhook recebido: {data.get('message', {}).get('text', 'N/A')[:50]}")
+        
         if not data:
+            logger.warning("⚠️ Webhook vazio")
             return "ok", 200
-
+        
         update = Update.de_json(data, application.bot)
-
-        asyncio.run_coroutine_threadsafe(
+        
+        # Processa o update e aguarda
+        future = asyncio.run_coroutine_threadsafe(
             application.process_update(update),
             loop
         )
-
+        
+        # Aguarda até 5 segundos
+        future.result(timeout=5.0)
+        logger.info("✅ Update processado com sucesso")
+        
+    except asyncio.TimeoutError:
+        logger.error("⏱️ Timeout ao processar update")
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
-
+    
     return "ok", 200
-
 
 if __name__ == "__main__":
     logger.info(f"🤖 Bot iniciado com sucesso!")
