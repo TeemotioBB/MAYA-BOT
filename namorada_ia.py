@@ -177,6 +177,7 @@ TEXTS = {
             f"2️⃣ Abra seu app de pagamentos\n"
             f"3️⃣ Cole a chave e pague\n"
             f"4️⃣ Envie o comprovante aqui\n\n"
+            f"🔑 **Chave PIX:**\n"
             f"`{PIX_KEY}`\n\n"
             f"⚡ Aprovação em até 5 minutos!"
         ),
@@ -335,6 +336,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
+                text=f"🔑 Chave PIX:\n\n`{PIX_KEY}`",
                 parse_mode="Markdown"
             )
         
