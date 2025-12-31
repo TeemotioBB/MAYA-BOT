@@ -335,6 +335,7 @@ PEDIDO_FOTO_REGEX = re.compile(
 # ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    logger.info(f"🎯 START_HANDLER EXECUTADO! UID: {uid}")
     logger.info(f"📥 /start de {uid}")
     logger.info(f"👤 User: {update.effective_user.username}")
     logger.info(f"💬 Chat: {update.effective_chat.id}")
@@ -543,34 +544,22 @@ async def setup():
         await application.initialize()
         logger.info("✅ Application inicializado")
         
-        # Timeout maior para delete_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.delete_webhook(drop_pending_updates=True),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook antigo removido")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
+        # Sem timeout - deixa o Telegram responder no tempo dele
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        logger.info("✅ Webhook antigo removido")
         
-        # Timeout maior para set_webhook
-        try:
-            await asyncio.wait_for(
-                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
-                timeout=10.0
-            )
-            logger.info("✅ Webhook configurado")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
+        await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
+        logger.info("✅ Webhook configurado")
         
         await application.start()
         logger.info("✅ Bot iniciado com sucesso!")
     except Exception as e:
         logger.error(f"❌ Erro no setup: {e}")
-        # Continua mesmo com erro
+        # Tenta iniciar mesmo assim
         try:
-            await application.start()
-            logger.info("✅ Bot iniciado (sem webhook)")
+            if not application.running:
+                await application.start()
+                logger.info("✅ Bot iniciado (recuperação)")
         except:
             pass
 
@@ -601,17 +590,20 @@ def webhook():
             loop
         )
         
-        # Aguarda até 5 segundos
-        future.result(timeout=5.0)
-        logger.info("✅ Update processado")
+        # Aguarda até 10 segundos (por causa dos áudios)
+        future.result(timeout=10.0)
+        logger.info("✅ Update processado com sucesso")
         
     except asyncio.TimeoutError:
-        logger.error("⏱️ Timeout processando update")
+        logger.error("⏱️ Timeout ao processar update")
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
     
     return "ok", 200
 
 if __name__ == "__main__":
+    logger.info(f"🤖 Bot iniciado com sucesso!")
+    logger.info(f"🌐 Webhook será configurado automaticamente pelo Railway")
+    logger.info(f"📞 Endpoint: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT)
