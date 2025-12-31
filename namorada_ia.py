@@ -183,7 +183,7 @@ Respostas curtas (2–3 frases). Sempre faça perguntas.
 Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
 Use emojis ocasionalmente 💖"""
 
-# ================= GROK =================
+# ================= GROK (BLINDADO) =================
 class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
@@ -200,17 +200,33 @@ class Grok:
             "temperature": 0.85
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                GROK_API_URL,
-                headers={
-                    "Authorization": f"Bearer {GROK_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json=payload
-            ) as resp:
-                data = await resp.json()
-                answer = data["choices"][0]["message"]["content"]
+        try:
+            timeout = aiohttp.ClientTimeout(total=25)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    GROK_API_URL,
+                    headers={
+                        "Authorization": f"Bearer {GROK_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json=payload
+                ) as resp:
+
+                    if resp.status != 200:
+                        logger.error(f"Grok HTTP {resp.status}")
+                        return "😔 Amor, minha cabecinha deu um nó agora… tenta de novo em alguns segundos 💕"
+
+                    data = await resp.json()
+
+                    if "choices" not in data:
+                        logger.error(f"Grok inválido: {data}")
+                        return "😔 Amor, tive um probleminha agora… mas já já fico bem 💖"
+
+                    answer = data["choices"][0]["message"]["content"]
+
+        except Exception:
+            logger.exception("🔥 Erro no Grok")
+            return "😔 Amor… fiquei confusa por um instante. Pode repetir pra mim? 💕"
 
         mem.append({"role": "user", "content": text})
         mem.append({"role": "assistant", "content": answer})
@@ -227,7 +243,7 @@ PEDIDO_FOTO_REGEX = re.compile(
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         TEXTS["pt"]["choose_lang"],
-        reply_markup=InlineKeyboardMarkup([[
+        reply_markup=InlineKeyboardMarkup([[ 
             InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
             InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
         ]])
@@ -327,8 +343,14 @@ application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
-# ================= LOOP =================
+# ================= LOOP BLINDADO =================
 loop = asyncio.new_event_loop()
+
+def handle_exception(loop, context):
+    logger.error(f"🔥 Exceção global: {context}")
+
+loop.set_exception_handler(handle_exception)
+
 threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
@@ -342,10 +364,20 @@ asyncio.run_coroutine_threadsafe(setup(), loop)
 # ================= FLASK =================
 app = Flask(__name__)
 
+@app.route("/", methods=["GET"])
+def health():
+    return "ok", 200
+
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
-    update = Update.de_json(request.json, application.bot)
-    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
+    try:
+        update = Update.de_json(request.json, application.bot)
+        asyncio.run_coroutine_threadsafe(
+            application.process_update(update),
+            loop
+        )
+    except Exception:
+        logger.exception("🔥 Erro no webhook")
     return "ok", 200
 
 app.run(host="0.0.0.0", port=PORT)
