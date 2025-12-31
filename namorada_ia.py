@@ -552,11 +552,7 @@ request = HTTPXRequest(
 application = (
     Application.builder()
     .token(TELEGRAM_TOKEN)
-    .request(request)
-    .connect_timeout(30.0)
-    .read_timeout(30.0)
-    .write_timeout(30.0)
-    .pool_timeout(30.0)
+    .request(request)  # ✅ timeouts já estão aqui
     .build()
 )
 
