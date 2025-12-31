@@ -24,7 +24,10 @@ from telegram.ext import (
 )
 
 # ================= LOG =================
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # ================= ENV =================
@@ -39,8 +42,17 @@ if not TELEGRAM_TOKEN or not GROK_API_KEY:
 WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
 WEBHOOK_PATH = "/telegram"
 
+logger.info(f"🚀 Iniciando bot...")
+logger.info(f"📍 Webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
+
 # ================= REDIS =================
-r = redis.from_url(REDIS_URL, decode_responses=True)
+try:
+    r = redis.from_url(REDIS_URL, decode_responses=True)
+    r.ping()
+    logger.info("✅ Redis conectado")
+except Exception as e:
+    logger.error(f"❌ Redis erro: {e}")
+    raise
 
 # ================= CONFIG =================
 LIMITE_DIARIO = 15
@@ -87,36 +99,64 @@ def pix_pending_key(uid):
     return f"pix_pending:{uid}"
 
 def is_vip(uid):
-    until = r.get(vip_key(uid))
-    return until and datetime.fromisoformat(until) > datetime.now()
+    try:
+        until = r.get(vip_key(uid))
+        return until and datetime.fromisoformat(until) > datetime.now()
+    except:
+        return False
 
 def today_count(uid):
-    return int(r.get(count_key(uid)) or 0)
+    try:
+        return int(r.get(count_key(uid)) or 0)
+    except:
+        return 0
 
 def increment(uid):
-    r.incr(count_key(uid))
-    r.expire(count_key(uid), 86400)
+    try:
+        r.incr(count_key(uid))
+        r.expire(count_key(uid), 86400)
+    except Exception as e:
+        logger.error(f"Erro increment: {e}")
 
 def reset_daily_count(uid):
-    r.delete(count_key(uid))
+    try:
+        r.delete(count_key(uid))
+    except Exception as e:
+        logger.error(f"Erro reset: {e}")
 
 def get_lang(uid):
-    return r.get(lang_key(uid)) or "pt"
+    try:
+        return r.get(lang_key(uid)) or "pt"
+    except:
+        return "pt"
 
 def set_lang(uid, lang):
-    r.set(lang_key(uid), lang)
+    try:
+        r.set(lang_key(uid), lang)
+    except Exception as e:
+        logger.error(f"Erro set_lang: {e}")
 
 def set_pix_pending(uid):
-    r.set(pix_pending_key(uid), "1", ex=86400)  # Expira em 24h
+    try:
+        r.set(pix_pending_key(uid), "1", ex=86400)
+    except Exception as e:
+        logger.error(f"Erro set_pix_pending: {e}")
 
 def is_pix_pending(uid):
-    return r.get(pix_pending_key(uid)) == "1"
+    try:
+        return r.get(pix_pending_key(uid)) == "1"
+    except:
+        return False
 
 def clear_pix_pending(uid):
-    r.delete(pix_pending_key(uid))
+    try:
+        r.delete(pix_pending_key(uid))
+    except Exception as e:
+        logger.error(f"Erro clear_pix_pending: {e}")
 
 # ================= COMANDOS ADMIN =================
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"📥 /reset de {update.effective_user.id}")
     if update.effective_user.id not in ADMIN_IDS:
         return
     if not context.args:
@@ -127,6 +167,7 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
 
 async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"📥 /resetall de {update.effective_user.id}")
     if update.effective_user.id not in ADMIN_IDS:
         return
     if not context.args:
@@ -144,6 +185,7 @@ async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ativa VIP manualmente (após confirmar pagamento PIX)"""
+    logger.info(f"📥 /setvip de {update.effective_user.id}")
     if update.effective_user.id not in ADMIN_IDS:
         return
     if not context.args:
@@ -292,157 +334,173 @@ PEDIDO_FOTO_REGEX = re.compile(
 
 # ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        TEXTS["pt"]["choose_lang"],
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
-            InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
-        ]])
-    )
+    logger.info(f"📥 /start de {update.effective_user.id}")
+    try:
+        await update.message.reply_text(
+            TEXTS["pt"]["choose_lang"],
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
+                InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
+            ]])
+        )
+        logger.info(f"✅ /start respondido para {update.effective_user.id}")
+    except Exception as e:
+        logger.error(f"❌ Erro no /start: {e}")
 
 # ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    uid = query.from_user.id
-    lang = get_lang(uid)
+    logger.info(f"📥 Callback: {query.data} de {query.from_user.id}")
     
-    if query.data.startswith("lang_"):
-        lang = query.data.split("_")[1]
-        set_lang(uid, lang)
-        await query.message.edit_text(TEXTS[lang]["lang_ok"])
-        await asyncio.sleep(0.8)
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=TEXTS[lang]["after_lang"]
-        )
-        if lang == "pt":
-            await asyncio.sleep(1.5)
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-            await asyncio.sleep(2.0)
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
-    
-    elif query.data == "pay_pix":
-        await query.message.edit_text(
-            TEXTS["pt"]["pix_info"],
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📋 COPIAR CHAVE", callback_data="copy_pix")],
-                [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
-            ])
-        )
-    
-    elif query.data == "copy_pix":
-        await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
-        # Envia a chave como mensagem para facilitar cópia
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=f"🔑 Chave PIX:\n\n`{PIX_KEY}`",
-            parse_mode="Markdown"
-        )
-    
-    elif query.data == "send_receipt":
-        set_pix_pending(uid)
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=TEXTS["pt"]["pix_receipt_instruction"],
-            parse_mode="Markdown"
-        )
-    
-    elif query.data == "buy_vip":
-        await context.bot.send_invoice(
-            chat_id=query.message.chat_id,
-            title="💖 VIP Sophia",
-            description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
-            payload=f"vip_{uid}",
-            provider_token="",
-            currency="XTR",
-            prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)],
-            start_parameter="vip"
-        )
-
-# ================= HANDLER DE COMPROVANTE PIX =================
-async def pix_receipt_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler específico para comprovantes PIX"""
-    uid = update.effective_user.id
-    lang = get_lang(uid)
-    
-    if not is_pix_pending(uid):
-        # Se não está esperando comprovante, ignora
-        return
-    
-    # Encaminha comprovante para o admin
-    for admin_id in ADMIN_IDS:
-        try:
+    try:
+        await query.answer()
+        uid = query.from_user.id
+        lang = get_lang(uid)
+        
+        if query.data.startswith("lang_"):
+            lang = query.data.split("_")[1]
+            set_lang(uid, lang)
+            await query.message.edit_text(TEXTS[lang]["lang_ok"])
+            await asyncio.sleep(0.8)
             await context.bot.send_message(
-                chat_id=admin_id,
-                text=f"💳 **NOVO COMPROVANTE PIX**\n\n"
-                     f"👤 Usuário: `{uid}`\n"
-                     f"📱 Username: @{update.effective_user.username or 'N/A'}\n"
-                     f"📝 Nome: {update.effective_user.first_name}\n\n"
-                     f"Use: `/setvip {uid}`",
+                chat_id=query.message.chat_id,
+                text=TEXTS[lang]["after_lang"]
+            )
+            if lang == "pt":
+                await asyncio.sleep(1.5)
+                await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
+                await asyncio.sleep(2.0)
+                await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+        
+        elif query.data == "pay_pix":
+            await query.message.edit_text(
+                TEXTS["pt"]["pix_info"],
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📋 COPIAR CHAVE", callback_data="copy_pix")],
+                    [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
+                ])
+            )
+        
+        elif query.data == "copy_pix":
+            await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"🔑 Chave PIX:\n\n`{PIX_KEY}`",
                 parse_mode="Markdown"
             )
-            if update.message.photo:
-                await context.bot.send_photo(
-                    chat_id=admin_id,
-                    photo=update.message.photo[-1].file_id
-                )
-            elif update.message.document:
-                await context.bot.send_document(
-                    chat_id=admin_id,
-                    document=update.message.document.file_id
-                )
-        except Exception as e:
-            logger.error(f"Erro ao enviar comprovante para admin: {e}")
-    
-    await update.message.reply_text(TEXTS[lang]["pix_receipt_sent"])
+        
+        elif query.data == "send_receipt":
+            set_pix_pending(uid)
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=TEXTS["pt"]["pix_receipt_instruction"],
+                parse_mode="Markdown"
+            )
+        
+        elif query.data == "buy_vip":
+            await context.bot.send_invoice(
+                chat_id=query.message.chat_id,
+                title="💖 VIP Sophia",
+                description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
+                payload=f"vip_{uid}",
+                provider_token="",
+                currency="XTR",
+                prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)],
+                start_parameter="vip"
+            )
+        
+        logger.info(f"✅ Callback processado: {query.data}")
+    except Exception as e:
+        logger.error(f"❌ Erro no callback: {e}")
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    text = update.message.text or ""
-    lang = get_lang(uid)
-    
-    if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-        await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=FOTO_TEASE_FILE_ID,
-            caption=TEXTS[lang]["photo_block"],
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💳 PAGAR COM PIX", callback_data="pay_pix")],
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
-            ])
-        )
-        return
-    
-    if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
-        await update.message.reply_text(
-            TEXTS[lang]["limit"],
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💳 PAGAR COM PIX", callback_data="pay_pix")],
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
-            ])
-        )
-        return
-    
-    if not is_vip(uid):
-        increment(uid)
+    logger.info(f"📥 Mensagem de {uid}")
     
     try:
-        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+        # Verifica se é comprovante PIX
+        if is_pix_pending(uid) and (update.message.photo or update.message.document):
+            logger.info(f"📸 Comprovante PIX de {uid}")
+            lang = get_lang(uid)
+            
+            # Encaminha para admin
+            for admin_id in ADMIN_IDS:
+                try:
+                    await context.bot.send_message(
+                        chat_id=admin_id,
+                        text=f"💳 **NOVO COMPROVANTE PIX**\n\n"
+                             f"👤 Usuário: `{uid}`\n"
+                             f"📱 Username: @{update.effective_user.username or 'N/A'}\n"
+                             f"📝 Nome: {update.effective_user.first_name}\n\n"
+                             f"Use: `/setvip {uid}`",
+                        parse_mode="Markdown"
+                    )
+                    if update.message.photo:
+                        await context.bot.send_photo(
+                            chat_id=admin_id,
+                            photo=update.message.photo[-1].file_id
+                        )
+                    elif update.message.document:
+                        await context.bot.send_document(
+                            chat_id=admin_id,
+                            document=update.message.document.file_id
+                        )
+                except Exception as e:
+                    logger.error(f"Erro ao enviar para admin: {e}")
+            
+            await update.message.reply_text(TEXTS[lang]["pix_receipt_sent"])
+            return
+        
+        text = update.message.text or ""
+        lang = get_lang(uid)
+        
+        if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=FOTO_TEASE_FILE_ID,
+                caption=TEXTS[lang]["photo_block"],
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💳 PAGAR COM PIX", callback_data="pay_pix")],
+                    [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+                ])
+            )
+            return
+        
+        if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
+            await update.message.reply_text(
+                TEXTS[lang]["limit"],
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💳 PAGAR COM PIX", callback_data="pay_pix")],
+                    [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+                ])
+            )
+            return
+        
+        if not is_vip(uid):
+            increment(uid)
+        
+        try:
+            await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+        except Exception as e:
+            logger.warning(f"⚠️ send_chat_action falhou: {e}")
+        
+        reply = await grok.reply(uid, text)
+        await update.message.reply_text(reply)
+        logger.info(f"✅ Resposta enviada para {uid}")
+        
     except Exception as e:
-        logger.warning(f"⚠️ send_chat_action falhou: {e}")
-    
-    reply = await grok.reply(uid, text)
-    await update.message.reply_text(reply)
+        logger.error(f"❌ Erro no message_handler: {e}")
 
 # ================= PAGAMENTO =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"💳 Pre-checkout de {update.pre_checkout_query.from_user.id}")
     await update.pre_checkout_query.answer(ok=True)
 
 async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    logger.info(f"✅ Pagamento confirmado: {uid}")
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
     r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
@@ -450,27 +508,19 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-# ORDEM IMPORTANTE: handlers específicos ANTES dos genéricos
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
 application.add_handler(CommandHandler("setvip", setvip_cmd))
-
-# Handler de comprovante PIX (foto/documento) - ANTES do handler de texto
-application.add_handler(MessageHandler(
-    (filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND,
-    pix_receipt_handler
-))
-
-# Handler de pagamento bem-sucedido
-application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
-
-# Handler de texto - POR ÚLTIMO
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-
-# Callbacks e checkout
 application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
+application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
+application.add_handler(MessageHandler(
+    (filters.TEXT | filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND,
+    message_handler
+))
+
+logger.info("✅ Handlers registrados")
 
 # ================= LOOP BLINDADO =================
 loop = asyncio.new_event_loop()
@@ -482,10 +532,15 @@ loop.set_exception_handler(handle_exception)
 threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
-    await application.initialize()
-    await application.bot.delete_webhook(drop_pending_updates=True)
-    await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
-    await application.start()
+    try:
+        logger.info("🔧 Configurando webhook...")
+        await application.initialize()
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
+        await application.start()
+        logger.info("✅ Bot iniciado com sucesso!")
+    except Exception as e:
+        logger.error(f"❌ Erro no setup: {e}")
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
@@ -499,13 +554,17 @@ def health():
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     try:
+        logger.info(f"📨 Webhook recebido")
         update = Update.de_json(request.json, application.bot)
         asyncio.run_coroutine_threadsafe(
             application.process_update(update),
             loop
         )
-    except Exception:
-        logger.exception("🔥 Erro no webhook")
+        logger.info(f"✅ Update processado")
+    except Exception as e:
+        logger.exception(f"🔥 Erro no webhook: {e}")
     return "ok", 200
 
-app.run(host="0.0.0.0", port=PORT)
+if __name__ == "__main__":
+    logger.info(f"🌐 Iniciando Flask na porta {PORT}")
+    app.run(host="0.0.0.0", port=PORT)
