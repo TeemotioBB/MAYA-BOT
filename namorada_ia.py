@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-🔥 Sophia Bot — Telegram + Grok 4 Fast Reasoning
+🔥 Sophia Bot — Telegram + Groq 4 Fast Reasoning
 VIP | TELEGRAM STARS | PIX | REDIS | RAILWAY
 IDIOMA DINÂMICO (PT / EN)
 """
 import os
 import asyncio
 import logging
-import threading
 import aiohttp
 import redis
 import re
@@ -512,49 +511,39 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= APP =================
-application = Application.builder().token(TELEGRAM_TOKEN).build()
-
-application.add_handler(CommandHandler("start", start_handler))
-application.add_handler(CommandHandler("reset", reset_cmd))
-application.add_handler(CommandHandler("resetall", resetall_cmd))
-application.add_handler(CommandHandler("setvip", setvip_cmd))
-application.add_handler(CallbackQueryHandler(callback_handler))
-application.add_handler(PreCheckoutQueryHandler(pre_checkout))
-application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
-application.add_handler(MessageHandler(
-    (filters.TEXT | filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND,
-    message_handler
-))
-
-logger.info("✅ Handlers registrados")
-
-# ================= INICIALIZAÇÃO SIMPLIFICADA =================
-def initialize_bot():
-    """Inicializa o bot de forma síncrona"""
-    logger.info("🔧 Inicializando bot...")
+# ================= INICIALIZAÇÃO =================
+async def setup_application() -> Application:
+    """Configura e retorna a aplicação do bot"""
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
     
-    # Configura webhook (usando polling até que o webhook seja configurado)
-    try:
-        # Usa run_async para chamadas assíncronas
-        application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,
-            close_loop=False
-        )
-    except Exception as e:
-        logger.error(f"❌ Erro ao iniciar bot: {e}")
-        raise
+    # Adiciona handlers
+    application.add_handler(CommandHandler("start", start_handler))
+    application.add_handler(CommandHandler("reset", reset_cmd))
+    application.add_handler(CommandHandler("resetall", resetall_cmd))
+    application.add_handler(CommandHandler("setvip", setvip_cmd))
+    application.add_handler(CallbackQueryHandler(callback_handler))
+    application.add_handler(PreCheckoutQueryHandler(pre_checkout))
+    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
+    application.add_handler(MessageHandler(
+        (filters.TEXT | filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND,
+        message_handler
+    ))
+    
+    logger.info("✅ Handlers registrados")
+    return application
 
-# ================= FLASK =================
+# ================= FLASK APP =================
 app = Flask(__name__)
+application_instance = None
+update_queue = None
 
 @app.route("/", methods=["GET"])
 def health():
     return "ok", 200
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
-def webhook():
+def telegram_webhook():
+    """Endpoint para receber atualizações do Telegram"""
     try:
         data = request.json
         logger.info(f"📨 Webhook recebido: {data.get('message', {}).get('text', 'N/A')[:50]}")
@@ -563,36 +552,74 @@ def webhook():
             logger.warning("⚠️ Webhook vazio")
             return "ok", 200
         
-        update = Update.de_json(data, application.bot)
+        # Processa o update de forma assíncrona
+        update = Update.de_json(data, application_instance.bot)
+        asyncio.create_task(application_instance.process_update(update))
         
-        # Processa o update de forma síncrona
-        asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            application.updater._network_loop
-        )
+        return "ok", 200
         
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
+        return "error", 500
+
+async def main():
+    """Função principal assíncrona"""
+    global application_instance
     
-    return "ok", 200
-
-# ================= THREAD DO BOT =================
-def start_bot_in_thread():
-    """Inicia o bot em uma thread separada"""
     try:
-        logger.info("🤖 Iniciando bot em thread separada...")
-        initialize_bot()
+        # Inicializa a aplicação
+        application_instance = await setup_application()
+        
+        # Inicializa a aplicação
+        await application_instance.initialize()
+        logger.info("✅ Application inicializado")
+        
+        # Configura webhook
+        webhook_url = f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}"
+        
+        # Remove webhook antigo
+        try:
+            await application_instance.bot.delete_webhook(drop_pending_updates=True)
+            logger.info("✅ Webhook antigo removido")
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao remover webhook antigo: {e}")
+        
+        # Configura novo webhook
+        try:
+            await application_instance.bot.set_webhook(webhook_url)
+            logger.info(f"✅ Webhook configurado para: {webhook_url}")
+        except Exception as e:
+            logger.error(f"❌ Erro ao configurar webhook: {e}")
+        
+        # Inicia a aplicação
+        await application_instance.start()
+        logger.info("✅ Bot iniciado com sucesso!")
+        
+        # Mantém a aplicação rodando
+        await asyncio.Event().wait()
+        
     except Exception as e:
-        logger.error(f"❌ Erro fatal no bot: {e}")
+        logger.error(f"❌ Erro fatal: {e}")
+        raise
 
-# Inicia o bot em uma thread
-bot_thread = threading.Thread(target=start_bot_in_thread, daemon=True)
-bot_thread.start()
+def start_bot():
+    """Inicia o bot em um loop asyncio separado"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        logger.info("👋 Bot encerrado pelo usuário")
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
-    logger.info(f"🤖 Bot iniciando...")
-    logger.info(f"🌐 Flask na porta {PORT}")
-    logger.info(f"📞 Endpoint: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
+    # Inicia o bot em uma thread separada
+    import threading
+    bot_thread = threading.Thread(target=start_bot, daemon=True)
+    bot_thread.start()
     
-    # Mantém o Flask rodando
-    app.run(host="0.0.0.0", port=PORT)
+    # Inicia o Flask
+    logger.info(f"🌐 Iniciando Flask na porta {PORT}")
+    app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
