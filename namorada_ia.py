@@ -528,14 +528,18 @@ application.add_handler(MessageHandler(
 
 logger.info("✅ Handlers registrados")
 
-# ================= LOOP BLINDADO =================
-loop = asyncio.new_event_loop()
+# ================= START BOT (CORRETO PTB v20) =================
+def start_bot():
+    async def _start():
+        logger.info("🔧 Inicializando Application...")
+        await application.initialize()
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
+        await application.start()
+        logger.info("✅ Bot pronto para receber updates")
 
-def handle_exception(loop, context):
-    logger.error(f"🔥 Exceção global: {context}")
+    asyncio.run(_start())
 
-loop.set_exception_handler(handle_exception)
-threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
     logger.info("🔧 Configurando webhook...")
@@ -594,10 +598,10 @@ def webhook():
         update = Update.de_json(data, application.bot)
         
         # Força o processamento imediato
-        asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            loop
-        )
+        application.create_task(
+             application.process_update(update)
+     )
+
 
             
     except Exception as e:
@@ -605,5 +609,6 @@ def webhook():
     return "ok", 200
 
 if __name__ == "__main__":
+    start_bot()
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT)
