@@ -232,18 +232,15 @@ TEXTS = {
         ),
         "pix_info": (
             f"💳 **PAGAMENTO VIA PIX**\n\n"
-            f"👨‍👩‍👦 **Antes de tudo, amor:**\n"
-            f"Essa chave PIX é do **meu primo**, tá?\n"
-            f"Você pode pagar tranquilamente por ela 💖\n\n"
             f"💰 Valor: **{PIX_VALOR}**\n\n"
             f"📋 **Como pagar:**\n"
             f"1️⃣ Copie a chave PIX abaixo\n"
             f"2️⃣ Abra seu app de pagamentos\n"
-            f"3️⃣ Cole a chave e faça o pagamento\n"
-            f"4️⃣ Depois é só me enviar o comprovante aqui 💕\n\n"
+            f"3️⃣ Cole a chave e pague\n"
+            f"4️⃣ Envie o comprovante aqui\n\n"
             f"🔑 **Chave PIX:**\n"
             f"`{PIX_KEY}`\n\n"
-            f"⚡ Assim que pagar, me manda o comprovante que eu confiro rapidinho 😘"
+            f"⚡ Aprovação em até 5 minutos!"
         ),
         "pix_copied": "✅ Chave PIX copiada!\nAgora faça o pagamento e envie o comprovante.",
         "pix_receipt_sent": (
