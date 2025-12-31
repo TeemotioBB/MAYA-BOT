@@ -397,10 +397,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(
                     chat_id=query.message.chat_id,
                     text=f"🔑 Chave PIX:\n\n`{PIX_KEY}`",
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
-                    ])
+                    parse_mode="Markdown"
                 )
             except Exception as e:
                 logger.error(f"Erro copy_pix: {e}")
@@ -554,35 +551,40 @@ threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
     try:
-        logger.info("🔧 Iniciando application...")
+        logger.info("🔧 Configurando webhook...")
         await application.initialize()
         logger.info("✅ Application inicializado")
+        
+        # Timeout maior para delete_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.delete_webhook(drop_pending_updates=True),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook antigo removido")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
+        
+        # Timeout maior para set_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook configurado")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
+        
         await application.start()
-        logger.info("✅ Application startado")
-        
-        # Configura webhook em background (não bloqueia)
-        async def setup_webhook():
-            try:
-                await asyncio.sleep(2)  # Espera o Flask subir
-                await application.bot.delete_webhook(drop_pending_updates=True)
-                logger.info("✅ Webhook antigo removido")
-                await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
-                logger.info("✅ Webhook configurado")
-            except Exception as e:
-                logger.warning(f"⚠️ Erro no webhook (continuando): {e}")
-        
-        # Executa webhook setup em background
-        asyncio.create_task(setup_webhook())
         logger.info("✅ Bot iniciado com sucesso!")
-        
     except Exception as e:
         logger.error(f"❌ Erro no setup: {e}")
-        # Tenta iniciar mesmo assim
+        # Continua mesmo com erro
         try:
             await application.start()
-            logger.info("✅ Bot iniciado (modo fallback)")
+            logger.info("✅ Bot iniciado (sem webhook)")
         except:
-            logger.error("❌ Falha total no start")
+            pass
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
 
@@ -602,17 +604,17 @@ def webhook():
         
         update = Update.de_json(data, application.bot)
         
-        # Força o processamento imediato com timeout maior
+        # Força o processamento imediato
         future = asyncio.run_coroutine_threadsafe(
             application.process_update(update),
             loop
         )
-        # Aguarda até 10 segundos
+        # Aguarda até 5 segundos
         try:
-            future.result(timeout=10)
+            future.result(timeout=5)
             logger.info(f"✅ Update processado")
-        except Exception as e:
-            logger.warning(f"⚠️ Timeout/Erro no processamento: {e}")
+        except:
+            logger.warning(f"⚠️ Timeout no processamento")
             
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
