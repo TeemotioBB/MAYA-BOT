@@ -331,17 +331,14 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
                 ])
             )
-
-       elif query.data == "copy_pix":
-           await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
-           await context.bot.send_message(
-               chat_id=query.message.chat_id,
-               text=f"`{PIX_KEY}`",
-               parse_mode="Markdown"
-           )
-
-
         
+        elif query.data == "copy_pix":
+            await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"🔑 Chave PIX:\n\n`{PIX_KEY}`",
+                parse_mode="Markdown"
+            )
         
         elif query.data == "send_receipt":
             set_pix_pending(uid)
