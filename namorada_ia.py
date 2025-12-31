@@ -593,16 +593,11 @@ def webhook():
         update = Update.de_json(data, application.bot)
         
         # Força o processamento imediato
-        future = asyncio.run_coroutine_threadsafe(
+        asyncio.run_coroutine_threadsafe(
             application.process_update(update),
             loop
         )
-        # Aguarda até 5 segundos
-        try:
-            future.result(timeout=5)
-            logger.info(f"✅ Update processado")
-        except:
-            logger.warning(f"⚠️ Timeout no processamento")
+
             
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
