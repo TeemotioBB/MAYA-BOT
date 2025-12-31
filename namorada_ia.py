@@ -62,8 +62,8 @@ MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= PIX CONFIG =================
-PIX_KEY = "suachavepix@exemplo.com"  # ⚠️ ALTERE PARA SUA CHAVE PIX REAL
-PIX_VALOR = "R$ 25,00"  # ⚠️ ALTERE PARA O VALOR DESEJADO
+PIX_KEY = "mayaoficialbr@outlook.com"  # ⚠️ ALTERE PARA SUA CHAVE PIX REAL
+PIX_VALOR = "R$ 14.99"  # ⚠️ ALTERE PARA O VALOR DESEJADO
 
 # ================= ADMIN =================
 ADMIN_IDS = {1293602874}
