@@ -538,35 +538,41 @@ loop.set_exception_handler(handle_exception)
 threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
+    logger.info("🔧 Configurando webhook...")
+
+    initialized = False
+
     try:
-        logger.info("🔧 Configurando webhook...")
         await application.initialize()
+        initialized = True
         logger.info("✅ Application inicializado")
-        
-        # 🔥 SEM TIMEOUT (corrige o erro)
+
+        # 🔥 SEM TIMEOUT (Railway-safe)
         try:
             await application.bot.delete_webhook(drop_pending_updates=True)
             logger.info("✅ Webhook antigo removido")
         except Exception as e:
             logger.warning(f"⚠️ delete_webhook falhou (continuando...): {e}")
-        
+
         try:
             await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
             logger.info("✅ Webhook configurado")
         except Exception as e:
             logger.warning(f"⚠️ set_webhook falhou (continuando...): {e}")
-        
+
         await application.start()
         logger.info("✅ Bot iniciado com sucesso!")
-        
+
     except Exception as e:
         logger.error(f"❌ Erro no setup: {e}")
-        # Continua mesmo com erro
-        try:
-            await application.start()
-            logger.info("✅ Bot iniciado (sem webhook)")
-        except Exception as e2:
-            logger.error(f"❌ Fallback falhou: {e2}")
+
+        # ⚠️ SÓ tenta start se initialize deu certo
+        if initialized:
+            try:
+                await application.start()
+                logger.info("✅ Bot iniciado (fallback)")
+            except Exception as e2:
+                logger.error(f"❌ Fallback falhou: {e2}")
 
 
 asyncio.run_coroutine_threadsafe(setup(), loop)
