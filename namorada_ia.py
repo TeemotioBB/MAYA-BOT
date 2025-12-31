@@ -8,6 +8,7 @@ IDIOMA DINÂMICO (PT / EN)
 import os
 import asyncio
 import logging
+import threading
 import aiohttp
 import redis
 import re
@@ -31,7 +32,6 @@ from telegram.ext import (
     PreCheckoutQueryHandler,
     CommandHandler
 )
-from telegram.request import HTTPXRequest
 
 # ================= LOG =================
 logging.basicConfig(level=logging.INFO)
@@ -109,9 +109,11 @@ def set_lang(uid, lang):
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
+
     if not context.args:
         await update.message.reply_text("Uso: /reset <user_id>")
         return
+
     uid = int(context.args[0])
     reset_daily_count(uid)
     await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
@@ -119,12 +121,15 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
+
     if not context.args:
         await update.message.reply_text("Uso: /resetall <user_id>")
         return
+
     uid = int(context.args[0])
     reset_daily_count(uid)
     r.delete(vip_key(uid))
+
     await update.message.reply_text(
         f"🔥 Reset concluído:\n"
         f"• Limite diário\n"
@@ -178,7 +183,7 @@ Respostas curtas (2–3 frases). Sempre faça perguntas.
 Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
 Use emojis ocasionalmente 💖"""
 
-# ================= GROK =================
+# ================= GROK (BLINDADO) =================
 class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
@@ -196,9 +201,8 @@ class Grok:
         }
 
         try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as session:
+            timeout = aiohttp.ClientTimeout(total=25)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
                     GROK_API_URL,
                     headers={
@@ -208,8 +212,13 @@ class Grok:
                     json=payload
                 ) as resp:
 
+                    if resp.status != 200:
+                        logger.error(f"Grok HTTP {resp.status}")
+                        return "😔 Amor, minha cabecinha deu um nó agora… tenta de novo em alguns segundos 💕"
+
                     data = await resp.json()
-                    if resp.status != 200 or "choices" not in data:
+
+                    if "choices" not in data:
                         logger.error(f"Grok inválido: {data}")
                         return "😔 Amor, tive um probleminha agora… mas já já fico bem 💖"
 
@@ -323,20 +332,8 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= APPLICATION =================
-request_cfg = HTTPXRequest(
-    connect_timeout=20,
-    read_timeout=20,
-    write_timeout=20,
-    pool_timeout=20
-)
-
-application = (
-    Application.builder()
-    .token(TELEGRAM_TOKEN)
-    .request(request_cfg)
-    .build()
-)
+# ================= APP =================
+application = Application.builder().token(TELEGRAM_TOKEN).build()
 
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
@@ -346,16 +343,23 @@ application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
-# ================= INIT TELEGRAM =================
-async def init_telegram():
-    try:
-        await application.initialize()
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
-        await application.start()
-        logger.info("🤖 Bot inicializado com sucesso")
-    except Exception:
-        logger.exception("❌ Erro ao iniciar Telegram")
+# ================= LOOP BLINDADO =================
+loop = asyncio.new_event_loop()
+
+def handle_exception(loop, context):
+    logger.error(f"🔥 Exceção global: {context}")
+
+loop.set_exception_handler(handle_exception)
+
+threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
+
+async def setup():
+    await application.initialize()
+    await application.bot.delete_webhook(drop_pending_updates=True)
+    await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
+    await application.start()
+
+asyncio.run_coroutine_threadsafe(setup(), loop)
 
 # ================= FLASK =================
 app = Flask(__name__)
@@ -366,11 +370,14 @@ def health():
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
-    update = Update.de_json(request.json, application.bot)
-    asyncio.get_event_loop().create_task(application.process_update(update))
+    try:
+        update = Update.de_json(request.json, application.bot)
+        asyncio.run_coroutine_threadsafe(
+            application.process_update(update),
+            loop
+        )
+    except Exception:
+        logger.exception("🔥 Erro no webhook")
     return "ok", 200
 
-# ================= RUN =================
-if __name__ == "__main__":
-    asyncio.get_event_loop().create_task(init_telegram())
-    app.run(host="0.0.0.0", port=PORT)
+app.run(host="0.0.0.0", port=PORT)
