@@ -541,32 +541,39 @@ def setup_application():
 app = Flask(__name__)
 application = setup_application()
 
+# ================= EVENT LOOP GLOBAL =================
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+def start_loop():
+    loop.run_forever()
+
+import threading
+threading.Thread(target=start_loop, daemon=True).start()
+
+
 @app.route("/", methods=["GET"])
 def health():
     return "ok", 200
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def telegram_webhook():
-    """Endpoint para receber atualizações do Telegram"""
     try:
         data = request.json
-        logger.info(f"📨 Webhook recebido: {data.get('message', {}).get('text', 'N/A')[:50]}")
-        
+
         if not data:
             logger.warning("⚠️ Webhook vazio")
             return "ok", 200
-        
-        # Processa o update de forma síncrona usando o loop padrão
+
         update = Update.de_json(data, application.bot)
-        
-        # Cria uma nova tarefa no loop de eventos padrão
+
         asyncio.run_coroutine_threadsafe(
             application.process_update(update),
-            asyncio.get_event_loop()
+            loop
         )
-        
+
         return "ok", 200
-        
+
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
         return "error", 500
@@ -588,11 +595,10 @@ async def setup_webhook():
 
 if __name__ == "__main__":
     # Inicializa o bot (sem iniciar polling)
-    application.initialize()
+    loop.run_until_complete(application.initialize())
+    loop.run_until_complete(setup_webhook())
     
     # Configura o webhook
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     loop.run_until_complete(setup_webhook())
     
     # Inicia o Flask
