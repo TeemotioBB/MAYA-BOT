@@ -7,6 +7,7 @@ IDIOMA DINÂMICO (PT / EN)
 import os
 import asyncio
 import logging
+import threading
 import aiohttp
 import redis
 import re
@@ -61,8 +62,8 @@ MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= PIX CONFIG =================
-PIX_KEY = "mayaoficialbr@outlook.com"
-PIX_VALOR = "R$ 14,99"
+PIX_KEY = "suachavepix@exemplo.com"  # ⚠️ ALTERE PARA SUA CHAVE PIX REAL
+PIX_VALOR = "R$ 25,00"  # ⚠️ ALTERE PARA O VALOR DESEJADO
 
 # ================= ADMIN =================
 ADMIN_IDS = {1293602874}
@@ -281,7 +282,7 @@ Respostas curtas (2–3 frases). Sempre faça perguntas.
 Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
 Use emojis ocasionalmente 💖"""
 
-# ================= GROK =================
+# ================= GROK (BLINDADO) =================
 class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
@@ -376,6 +377,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
         elif query.data == "pay_pix":
+            # Não pode editar foto, então envia nova mensagem
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=TEXTS["pt"]["pix_info"],
@@ -416,7 +418,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         logger.info(f"✅ Callback processado: {query.data}")
     except Exception as e:
-        logger.error(f"❌ Erro no callback: {e}", exc_info=True)
+        logger.error(f"❌ Erro no callback: {e}")
 
 # ================= MENSAGENS =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -495,7 +497,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"✅ Resposta enviada para {uid}")
         
     except Exception as e:
-        logger.error(f"❌ Erro no message_handler: {e}", exc_info=True)
+        logger.error(f"❌ Erro no message_handler: {e}")
 
 # ================= PAGAMENTO =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -509,7 +511,7 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r.set(vip_key(uid), vip_until.isoformat())
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= APP TELEGRAM =================
+# ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
 
 application.add_handler(CommandHandler("start", start_handler))
@@ -526,6 +528,54 @@ application.add_handler(MessageHandler(
 
 logger.info("✅ Handlers registrados")
 
+# ================= LOOP BLINDADO =================
+loop = asyncio.new_event_loop()
+
+def handle_exception(loop, context):
+    logger.error(f"🔥 Exceção global: {context}")
+
+loop.set_exception_handler(handle_exception)
+threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
+
+async def setup():
+    try:
+        logger.info("🔧 Configurando webhook...")
+        await application.initialize()
+        logger.info("✅ Application inicializado")
+        
+        # Timeout maior para delete_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.delete_webhook(drop_pending_updates=True),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook antigo removido")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
+        
+        # Timeout maior para set_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook configurado")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
+        
+        await application.start()
+        logger.info("✅ Bot iniciado com sucesso!")
+    except Exception as e:
+        logger.error(f"❌ Erro no setup: {e}")
+        # Continua mesmo com erro
+        try:
+            await application.start()
+            logger.info("✅ Bot iniciado (sem webhook)")
+        except:
+            pass
+
+asyncio.run_coroutine_threadsafe(setup(), loop)
+
 # ================= FLASK =================
 app = Flask(__name__)
 
@@ -538,56 +588,26 @@ def webhook():
     try:
         logger.info(f"📨 Webhook recebido")
         data = request.json
-        
-        if not data:
-            logger.warning("⚠️ Webhook vazio")
-            return "ok", 200
-        
-        logger.info(f"📦 Update type: {list(data.keys())}")
+        logger.info(f"📦 Data: {data.get('message', {}).get('text', 'N/A')[:50]}")
         
         update = Update.de_json(data, application.bot)
         
-        # Process update in background using create_task
-        asyncio.create_task(application.process_update(update))
-        
-        logger.info(f"✅ Update enfileirado")
+        # Força o processamento imediato
+        future = asyncio.run_coroutine_threadsafe(
+            application.process_update(update),
+            loop
+        )
+        # Aguarda até 5 segundos
+        try:
+            future.result(timeout=5)
+            logger.info(f"✅ Update processado")
+        except:
+            logger.warning(f"⚠️ Timeout no processamento")
             
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
-    
     return "ok", 200
 
-# ================= INICIALIZAÇÃO =================
-async def init_app():
-    """Inicializa o bot de forma assíncrona"""
-    try:
-        logger.info("🔧 Inicializando application...")
-        await application.initialize()
-        logger.info("✅ Application inicializado")
-        
-        logger.info("🗑️ Removendo webhook antigo...")
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Webhook antigo removido")
-        
-        logger.info(f"📡 Configurando webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
-        webhook_info = await application.bot.set_webhook(
-            url=WEBHOOK_BASE_URL + WEBHOOK_PATH,
-            allowed_updates=Update.ALL_TYPES
-        )
-        logger.info(f"✅ Webhook configurado: {webhook_info}")
-        
-        await application.start()
-        logger.info("✅ Bot iniciado com sucesso!")
-        
-    except Exception as e:
-        logger.error(f"❌ Erro na inicialização: {e}", exc_info=True)
-        raise
-
 if __name__ == "__main__":
-    # Inicializa o bot antes de iniciar o Flask
-    logger.info("🚀 Iniciando bot...")
-    asyncio.run(init_app())
-    
-    # Inicia o servidor Flask
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT)
