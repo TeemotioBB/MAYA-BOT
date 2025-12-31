@@ -155,11 +155,10 @@ TEXTS = {
             f"✨ Valor: {PIX_VALOR}\n"
             "⏱ Liberação manual após pagamento\n\n"
             "📌 *Como pagar:*\n"
-            "1️⃣ Copie a chave PIX abaixo\n"
-            "2️⃣ Abra o app do seu banco\n"
+            "1️⃣ Clique em copiar chave PIX\n"
+            "2️⃣ Cole no app do seu banco\n"
             "3️⃣ Pague o valor exato\n"
-            "4️⃣ Envie o comprovante aqui 💖\n\n"
-            "🔑 *Chave PIX:*"
+            "4️⃣ Envie o comprovante aqui 💖"
         )
     },
     "en": {
@@ -182,8 +181,8 @@ TEXTS = {
 # ================= PROMPT =================
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
-        return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️"""
-    return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️"""
+        return "You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️"
+    return "Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️"
 
 # ================= GROK =================
 class Grok:
@@ -221,15 +220,20 @@ class Grok:
 grok = Grok()
 
 # ================= REGEX =================
-PEDIDO_FOTO_REGEX = re.compile(r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)", re.IGNORECASE)
+PEDIDO_FOTO_REGEX = re.compile(
+    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)",
+    re.IGNORECASE
+)
 
 # ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         TEXTS["pt"]["choose_lang"],
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
-             InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")]
+            [
+                InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
+                InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
+            ]
         ])
     )
 
@@ -260,7 +264,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "pix_info":
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=f"{TEXTS['pt']['pix_info']}\n\n`{PIX_CHAVE}`",
+            text=TEXTS["pt"]["pix_info"],
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📋 Copiar chave PIX", callback_data="pix_copy")]
@@ -270,8 +274,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "pix_copy":
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=f"🔑 Chave PIX:\n\n`{PIX_CHAVE}`",
-            parse_mode="Markdown"
+            text=PIX_CHAVE,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📤 Enviar comprovante", callback_data="pix_comprovante")]
+            ])
+        )
+
+    elif query.data == "pix_comprovante":
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="📸 Amor, me envia o comprovante aqui 💖\nAssim que eu confirmar, libero seu VIP 😘"
         )
 
 # ================= MENSAGENS =================
@@ -323,6 +335,7 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
+
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
