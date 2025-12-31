@@ -317,4 +317,5 @@ def webhook():
     asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
     return "ok", 200
 
-app.run(host="0.0.0.0", port=PORT)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=PORT)
