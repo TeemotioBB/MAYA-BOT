@@ -60,6 +60,11 @@ PRECO_VIP_STARS = 250
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
+# ================= PIX =================
+PIX_VALOR = "R$ 29,90"
+PIX_CHAVE = "SUA_CHAVE_PIX_AQUI"
+PIX_NOME = "Sophia VIP"
+
 # ================= ADMIN =================
 ADMIN_IDS = {1293602874}
 
@@ -109,11 +114,9 @@ def set_lang(uid, lang):
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
-
     if not context.args:
         await update.message.reply_text("Uso: /reset <user_id>")
         return
-
     uid = int(context.args[0])
     reset_daily_count(uid)
     await update.message.reply_text(f"✅ Limite diário resetado para {uid}")
@@ -121,20 +124,14 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
-
     if not context.args:
         await update.message.reply_text("Uso: /resetall <user_id>")
         return
-
     uid = int(context.args[0])
     reset_daily_count(uid)
     r.delete(vip_key(uid))
-
     await update.message.reply_text(
-        f"🔥 Reset concluído:\n"
-        f"• Limite diário\n"
-        f"• VIP removido\n\n"
-        f"👤 Usuário: {uid}"
+        f"🔥 Reset concluído:\n• Limite diário\n• VIP removido\n\n👤 Usuário: {uid}"
     )
 
 # ================= TEXTOS =================
@@ -152,6 +149,17 @@ TEXTS = {
             "💕 Prontinho, meu amor! Agora é oficial: você é meu favorito do dia ❤️\n\n"
             "Como você está se sentindo agora?\n"
             "Quero te dar todo o carinho que você merece 😘"
+        ),
+        "pix_info": (
+            "💳 *Pagamento via PIX*\n\n"
+            f"✨ Valor: {PIX_VALOR}\n"
+            "⏱ Liberação manual após pagamento\n\n"
+            "📌 *Como pagar:*\n"
+            "1️⃣ Copie a chave PIX abaixo\n"
+            "2️⃣ Abra o app do seu banco\n"
+            "3️⃣ Pague o valor exato\n"
+            "4️⃣ Envie o comprovante aqui 💖\n\n"
+            "🔑 *Chave PIX:*"
         )
     },
     "en": {
@@ -174,21 +182,14 @@ TEXTS = {
 # ================= PROMPT =================
 def build_prompt(is_vip_user: bool, lang: str):
     if lang == "en":
-        return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️
-Short answers (2–3 sentences). Always ask questions.
-Do not be naughty on the first contact. Only be very naughty if the user gets naughty first 😏
-Use emojis occasionally 💖"""
-    return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️
-Respostas curtas (2–3 frases). Sempre faça perguntas.
-Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
-Use emojis ocasionalmente 💖"""
+        return """You are Sophia, a 23-year-old virtual girlfriend. Affectionate, romantic and welcoming ❤️"""
+    return """Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️"""
 
-# ================= GROK (BLINDADO) =================
+# ================= GROK =================
 class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
         lang = get_lang(uid)
-
         payload = {
             "model": MODELO,
             "messages": [
@@ -199,10 +200,8 @@ class Grok:
             "max_tokens": 250,
             "temperature": 0.85
         }
-
         try:
-            timeout = aiohttp.ClientTimeout(total=25)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=25)) as session:
                 async with session.post(
                     GROK_API_URL,
                     headers={
@@ -211,23 +210,10 @@ class Grok:
                     },
                     json=payload
                 ) as resp:
-
-                    if resp.status != 200:
-                        logger.error(f"Grok HTTP {resp.status}")
-                        return "😔 Amor, minha cabecinha deu um nó agora… tenta de novo em alguns segundos 💕"
-
                     data = await resp.json()
-
-                    if "choices" not in data:
-                        logger.error(f"Grok inválido: {data}")
-                        return "😔 Amor, tive um probleminha agora… mas já já fico bem 💖"
-
                     answer = data["choices"][0]["message"]["content"]
-
         except Exception:
-            logger.exception("🔥 Erro no Grok")
-            return "😔 Amor… fiquei confusa por um instante. Pode repetir pra mim? 💕"
-
+            return "😔 Amor… tive um probleminha agora 💕"
         mem.append({"role": "user", "content": text})
         mem.append({"role": "assistant", "content": answer})
         return answer
@@ -235,18 +221,16 @@ class Grok:
 grok = Grok()
 
 # ================= REGEX =================
-PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)", re.IGNORECASE
-)
+PEDIDO_FOTO_REGEX = re.compile(r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)", re.IGNORECASE)
 
 # ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         TEXTS["pt"]["choose_lang"],
-        reply_markup=InlineKeyboardMarkup([[ 
-            InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
-            InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
-        ]])
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
+             InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")]
+        ])
     )
 
 # ================= CALLBACK =================
@@ -258,31 +242,36 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
         set_lang(uid, lang)
-
         await query.message.edit_text(TEXTS[lang]["lang_ok"])
-        await asyncio.sleep(0.8)
-
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=TEXTS[lang]["after_lang"]
-        )
-
-        if lang == "pt":
-            await asyncio.sleep(1.5)
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-            await asyncio.sleep(2.0)
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+        await context.bot.send_message(query.message.chat_id, TEXTS[lang]["after_lang"])
 
     elif query.data == "buy_vip":
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title="💖 VIP Sophia",
-            description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
+            description="Acesso VIP por 15 dias 💎",
             payload=f"vip_{uid}",
             provider_token="",
             currency="XTR",
             prices=[LabeledPrice("VIP Sophia – 15 dias", PRECO_VIP_STARS)],
             start_parameter="vip"
+        )
+
+    elif query.data == "pix_info":
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"{TEXTS['pt']['pix_info']}\n\n`{PIX_CHAVE}`",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📋 Copiar chave PIX", callback_data="pix_copy")]
+            ])
+        )
+
+    elif query.data == "pix_copy":
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"🔑 Chave PIX:\n\n`{PIX_CHAVE}`",
+            parse_mode="Markdown"
         )
 
 # ================= MENSAGENS =================
@@ -292,33 +281,33 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = get_lang(uid)
 
     if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
+        buttons = [[InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]]
+        if lang == "pt":
+            buttons.insert(0, [InlineKeyboardButton("💳 Pagar com PIX", callback_data="pix_info")])
+
         await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=FOTO_TEASE_FILE_ID,
+            update.effective_chat.id,
+            FOTO_TEASE_FILE_ID,
             caption=TEXTS[lang]["photo_block"],
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
-            ])
+            reply_markup=InlineKeyboardMarkup(buttons)
         )
         return
 
     if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
+        buttons = [[InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]]
+        if lang == "pt":
+            buttons.insert(0, [InlineKeyboardButton("💳 Pagar com PIX", callback_data="pix_info")])
+
         await update.message.reply_text(
             TEXTS[lang]["limit"],
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
-            ])
+            reply_markup=InlineKeyboardMarkup(buttons)
         )
         return
 
     if not is_vip(uid):
         increment(uid)
 
-    try:
-        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-    except Exception as e:
-        logger.warning(f"⚠️ send_chat_action falhou: {e}")
-
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
     reply = await grok.reply(uid, text)
     await update.message.reply_text(reply)
 
@@ -334,7 +323,6 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= APP =================
 application = Application.builder().token(TELEGRAM_TOKEN).build()
-
 application.add_handler(CommandHandler("start", start_handler))
 application.add_handler(CommandHandler("reset", reset_cmd))
 application.add_handler(CommandHandler("resetall", resetall_cmd))
@@ -343,14 +331,8 @@ application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
-# ================= LOOP BLINDADO =================
+# ================= LOOP =================
 loop = asyncio.new_event_loop()
-
-def handle_exception(loop, context):
-    logger.error(f"🔥 Exceção global: {context}")
-
-loop.set_exception_handler(handle_exception)
-
 threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
 
 async def setup():
@@ -370,14 +352,8 @@ def health():
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
-    try:
-        update = Update.de_json(request.json, application.bot)
-        asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            loop
-        )
-    except Exception:
-        logger.exception("🔥 Erro no webhook")
+    update = Update.de_json(request.json, application.bot)
+    asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
     return "ok", 200
 
 app.run(host="0.0.0.0", port=PORT)
