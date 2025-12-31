@@ -8,7 +8,6 @@ IDIOMA DINÂMICO (PT / EN)
 import os
 import asyncio
 import logging
-import threading
 import aiohttp
 import redis
 import re
@@ -183,7 +182,7 @@ Respostas curtas (2–3 frases). Sempre faça perguntas.
 Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
 Use emojis ocasionalmente 💖"""
 
-# ================= GROK (BLINDADO) =================
+# ================= GROK =================
 class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
@@ -201,8 +200,7 @@ class Grok:
         }
 
         try:
-            timeout = aiohttp.ClientTimeout(total=25)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=25)) as session:
                 async with session.post(
                     GROK_API_URL,
                     headers={
@@ -212,13 +210,9 @@ class Grok:
                     json=payload
                 ) as resp:
 
-                    if resp.status != 200:
-                        logger.error(f"Grok HTTP {resp.status}")
-                        return "😔 Amor, minha cabecinha deu um nó agora… tenta de novo em alguns segundos 💕"
-
                     data = await resp.json()
 
-                    if "choices" not in data:
+                    if resp.status != 200 or "choices" not in data:
                         logger.error(f"Grok inválido: {data}")
                         return "😔 Amor, tive um probleminha agora… mas já já fico bem 💖"
 
@@ -343,23 +337,12 @@ application.add_handler(CallbackQueryHandler(callback_handler))
 application.add_handler(PreCheckoutQueryHandler(pre_checkout))
 application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
 
-# ================= LOOP BLINDADO =================
-loop = asyncio.new_event_loop()
-
-def handle_exception(loop, context):
-    logger.error(f"🔥 Exceção global: {context}")
-
-loop.set_exception_handler(handle_exception)
-
-threading.Thread(target=lambda: loop.run_forever(), daemon=True).start()
-
-async def setup():
+# ================= INIT =================
+async def main():
     await application.initialize()
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
     await application.start()
-
-asyncio.run_coroutine_threadsafe(setup(), loop)
 
 # ================= FLASK =================
 app = Flask(__name__)
@@ -370,14 +353,11 @@ def health():
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
-    try:
-        update = Update.de_json(request.json, application.bot)
-        asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            loop
-        )
-    except Exception:
-        logger.exception("🔥 Erro no webhook")
+    update = Update.de_json(request.json, application.bot)
+    asyncio.create_task(application.process_update(update))
     return "ok", 200
 
-app.run(host="0.0.0.0", port=PORT)
+# ================= RUN =================
+if __name__ == "__main__":
+    asyncio.run(main())
+    app.run(host="0.0.0.0", port=PORT)
