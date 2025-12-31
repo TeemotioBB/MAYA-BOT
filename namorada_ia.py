@@ -544,22 +544,34 @@ async def setup():
         await application.initialize()
         logger.info("✅ Application inicializado")
         
-        # Sem timeout - deixa o Telegram responder no tempo dele
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Webhook antigo removido")
+        # Timeout maior para delete_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.delete_webhook(drop_pending_updates=True),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook antigo removido")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao remover webhook (continuando...)")
         
-        await application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH)
-        logger.info("✅ Webhook configurado")
+        # Timeout maior para set_webhook
+        try:
+            await asyncio.wait_for(
+                application.bot.set_webhook(WEBHOOK_BASE_URL + WEBHOOK_PATH),
+                timeout=10.0
+            )
+            logger.info("✅ Webhook configurado")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Timeout ao configurar webhook (continuando...)")
         
         await application.start()
         logger.info("✅ Bot iniciado com sucesso!")
     except Exception as e:
         logger.error(f"❌ Erro no setup: {e}")
-        # Tenta iniciar mesmo assim
+        # Continua mesmo com erro
         try:
-            if not application.running:
-                await application.start()
-                logger.info("✅ Bot iniciado (recuperação)")
+            await application.start()
+            logger.info("✅ Bot iniciado (sem webhook)")
         except:
             pass
 
@@ -590,8 +602,8 @@ def webhook():
             loop
         )
         
-        # Aguarda até 10 segundos (por causa dos áudios)
-        future.result(timeout=10.0)
+        # Aguarda até 5 segundos
+        future.result(timeout=5.0)
         logger.info("✅ Update processado com sucesso")
         
     except asyncio.TimeoutError:
