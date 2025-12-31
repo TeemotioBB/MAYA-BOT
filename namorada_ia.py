@@ -541,18 +541,18 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= APP COM TIMEOUT AUMENTADO =================
 # Cria request customizado com timeout maior
-request = HTTPXRequest(
+tg_request = HTTPXRequest(
     connection_pool_size=8,
-    connect_timeout=30.0,  # 30s para conectar
-    read_timeout=30.0,     # 30s para ler
-    write_timeout=30.0,    # 30s para escrever
-    pool_timeout=30.0      # 30s para pool
+    connect_timeout=30.0,
+    read_timeout=30.0,
+    write_timeout=30.0,
+    pool_timeout=30.0
 )
 
 application = (
     Application.builder()
     .token(TELEGRAM_TOKEN)
-    .request(request)  # ✅ timeouts já estão aqui
+    .request(tg_request)
     .build()
 )
 
