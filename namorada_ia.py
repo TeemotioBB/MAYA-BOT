@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 🔥 Sophia Bot — Telegram + Groq 4 Fast Reasoning
-VIP | TELEGRAM STARS | PIX | REDIS | RAILWAY
-IDIOMA DINÂMICO (PT / EN)
+COM LOGGING DE CONVERSAS NO REDIS
 """
 import os
 import asyncio
@@ -61,8 +60,8 @@ MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= PIX CONFIG =================
-PIX_KEY = "mayaoficialbr@outlook.com"  # ⚠️ ALTERE PARA SUA CHAVE PIX REAL
-PIX_VALOR = "R$ 14,99"  # ⚠️ ALTERE PARA O VALOR DESEJADO
+PIX_KEY = "mayaoficialbr@outlook.com"
+PIX_VALOR = "R$ 14,99"
 
 # ================= ADMIN =================
 ADMIN_IDS = {1293602874}
@@ -96,6 +95,22 @@ def lang_key(uid):
 
 def pix_pending_key(uid):
     return f"pix_pending:{uid}"
+
+def chatlog_key(uid):
+    """Chave para o log de chat do usuário"""
+    return f"chatlog:{uid}"
+
+def save_message(uid, role, text):
+    """Salva mensagem no Redis para o painel admin"""
+    try:
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_entry = f"[{timestamp}] {role.upper()}: {text}"
+        r.rpush(chatlog_key(uid), log_entry)
+        # Mantém apenas últimas 200 mensagens
+        r.ltrim(chatlog_key(uid), -200, -1)
+        logger.info(f"💾 Mensagem salva: {uid} - {role}")
+    except Exception as e:
+        logger.error(f"Erro ao salvar mensagem: {e}")
 
 def is_vip(uid):
     try:
@@ -223,11 +238,15 @@ Não seja safada no primeiro contato. Só seja bem safada se o usuário for safa
 Use emojis ocasionalmente 💖
 É totalmente proibido prometer ou marcar encontros, caso entre no assunto dispiste"""
 
-# ================= GROK (BLINDADO) =================
+# ================= GROK (COM LOGGING) =================
 class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
         lang = get_lang(uid)
+        
+        # 💾 SALVA MENSAGEM DO USUÁRIO
+        save_message(uid, "user", text)
+        
         payload = {
             "model": MODELO,
             "messages": [
@@ -263,6 +282,10 @@ class Grok:
         
         mem.append({"role": "user", "content": text})
         mem.append({"role": "assistant", "content": answer})
+        
+        # 💾 SALVA RESPOSTA DA SOPHIA
+        save_message(uid, "sophia", answer)
+        
         return answer
 
 grok = Grok()
@@ -279,6 +302,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"🎯 START_HANDLER EXECUTADO! UID: {uid}")
     logger.info(f"📥 /start de {uid}")
     
+    # 💾 Registra o /start no log
+    save_message(uid, "system", "Usuário iniciou conversa com /start")
+    
     try:
         msg = await update.message.reply_text(
             TEXTS["pt"]["choose_lang"],
@@ -290,7 +316,6 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"✅ /start respondido para {uid} - msg_id: {msg.message_id}")
     except Exception as e:
         logger.error(f"❌ Erro no /start para {uid}: {e}")
-        # Tenta enviar uma mensagem mais simples
         try:
             await update.message.reply_text(
                 "Olá! 😊 Seja bem-vindo! 💕\n\nUse /start para ver as opções."
@@ -311,6 +336,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data.startswith("lang_"):
             lang = query.data.split("_")[1]
             set_lang(uid, lang)
+            save_message(uid, "system", f"Idioma configurado: {lang}")
             await query.message.edit_text(TEXTS[lang]["lang_ok"])
             await asyncio.sleep(0.8)
             await context.bot.send_message(
@@ -324,6 +350,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
         elif query.data == "pay_pix":
+            save_message(uid, "system", "Solicitou pagamento via PIX")
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=TEXTS["pt"]["pix_info"],
@@ -351,6 +378,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         
         elif query.data == "buy_vip":
+            save_message(uid, "system", "Iniciou compra VIP (Telegram Stars)")
             await context.bot.send_invoice(
                 chat_id=query.message.chat_id,
                 title="💖 VIP Sophia",
@@ -376,6 +404,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_pix_pending(uid) and (update.message.photo or update.message.document):
             logger.info(f"📸 Comprovante PIX de {uid}")
             lang = get_lang(uid)
+            save_message(uid, "system", "Enviou comprovante PIX")
             
             # Encaminha para admin
             for admin_id in ADMIN_IDS:
@@ -409,6 +438,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lang = get_lang(uid)
         
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
+            save_message(uid, "user", text)
+            save_message(uid, "system", "Bloqueado: Pediu foto sem ser VIP")
             await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
                 photo=FOTO_TEASE_FILE_ID,
@@ -421,6 +452,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
+            save_message(uid, "system", "Bloqueado: Limite diário atingido")
             await update.message.reply_text(
                 TEXTS[lang]["limit"],
                 reply_markup=InlineKeyboardMarkup([
@@ -455,6 +487,7 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"✅ Pagamento confirmado: {uid}")
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
     r.set(vip_key(uid), vip_until.isoformat())
+    save_message(uid, "system", f"VIP ativado via Telegram Stars até {vip_until.strftime('%d/%m/%Y')}")
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
 # ================= COMANDOS ADMIN =================
@@ -499,6 +532,7 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
     r.set(vip_key(uid), vip_until.isoformat())
     clear_pix_pending(uid)
+    save_message(uid, "system", f"VIP ativado manualmente via PIX até {vip_until.strftime('%d/%m/%Y')}")
     
     await update.message.reply_text(
         f"✅ VIP ativado!\n"
@@ -520,10 +554,8 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= CONFIGURAÇÃO DO BOT =================
 def setup_application():
     """Configura a aplicação do bot"""
-    # Cria a aplicação com timeout maior
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
-    # Adiciona handlers
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("reset", reset_cmd))
     application.add_handler(CommandHandler("resetall", resetall_cmd))
@@ -553,7 +585,6 @@ def start_loop():
 import threading
 threading.Thread(target=start_loop, daemon=True).start()
 
-
 @app.route("/", methods=["GET"])
 def health():
     return "ok", 200
@@ -566,56 +597,37 @@ def set_webhook_route():
     )
     return "Webhook configurado", 200
 
-
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def telegram_webhook():
     try:
         data = request.json
-
         if not data:
             logger.warning("⚠️ Webhook vazio")
             return "ok", 200
 
         update = Update.de_json(data, application.bot)
-
-        # 🔥 LINHA MAIS IMPORTANTE DO PROJETO
         asyncio.run_coroutine_threadsafe(
             application.process_update(update),
             loop
         )
-
         return "ok", 200
-
     except Exception as e:
         logger.exception(f"🔥 Erro no webhook: {e}")
         return "error", 500
 
-
 async def setup_webhook():
     """Configura o webhook no Telegram"""
     try:
-        # Remove webhook antigo
         await application.bot.delete_webhook(drop_pending_updates=True)
         logger.info("✅ Webhook antigo removido")
-        
-        # Configura novo webhook
         webhook_url = f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}"
         await application.bot.set_webhook(webhook_url)
         logger.info(f"✅ Webhook configurado para: {webhook_url}")
-        
     except Exception as e:
         logger.error(f"❌ Erro ao configurar webhook: {e}")
 
 if __name__ == "__main__":
-    # Inicializa e STARTA o bot (ESSENCIAL)
-    asyncio.run_coroutine_threadsafe(
-        application.initialize(),
-        loop
-    )
-    asyncio.run_coroutine_threadsafe(
-        application.start(),
-        loop
-    )
-
+    asyncio.run_coroutine_threadsafe(application.initialize(), loop)
+    asyncio.run_coroutine_threadsafe(application.start(), loop)
     logger.info(f"🌐 Iniciando Flask na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
