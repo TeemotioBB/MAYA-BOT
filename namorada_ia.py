@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 🔥 Sophia Bot — Telegram + Groq 4 Fast Reasoning
-COM LOGGING DE CONVERSAS NO REDIS
+COM MEMÓRIA PERSISTENTE NO REDIS
 """
 import os
 import asyncio
@@ -9,9 +9,9 @@ import logging
 import aiohttp
 import redis
 import re
+import json
 from datetime import datetime, timedelta, date
 from flask import Flask, request
-from collections import deque
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
 )
@@ -31,13 +31,13 @@ logger = logging.getLogger(__name__)
 # ================= ENV =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-REDIS_URL = "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241"
+REDIS_URL = os.getenv("REDIS_URL", "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241")
 PORT = int(os.getenv("PORT", 8080))
 
 if not TELEGRAM_TOKEN or not GROK_API_KEY:
     raise RuntimeError("❌ Tokens não configurados")
 
-WEBHOOK_BASE_URL = "https://maya-bot-production.up.railway.app"
+WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://maya-bot-production.up.railway.app")
 WEBHOOK_PATH = "/telegram"
 
 logger.info(f"🚀 Iniciando bot...")
@@ -60,11 +60,11 @@ MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= PIX CONFIG =================
-PIX_KEY = "mayaoficialbr@outlook.com"
+PIX_KEY = os.getenv("PIX_KEY", "mayaoficialbr@outlook.com")
 PIX_VALOR = "R$ 14,99"
 
 # ================= ADMIN =================
-ADMIN_IDS = {1293602874}
+ADMIN_IDS = set(map(int, os.getenv("ADMIN_IDS", "1293602874").split(",")))
 
 # ================= ÁUDIOS PT-BR =================
 AUDIO_PT_1 = "CQACAgEAAxkBAAEDAAEkaVRmK1n5WoDUbeTBKyl6sgLwfNoAAoYGAAIZwaFG88ZKij8fw884BA"
@@ -75,13 +75,53 @@ FOTO_TEASE_FILE_ID = (
     "AgACAgEAAxkBAAEC_zVpUyHjYxNx9GFfVMTja2RQM1gu6QACVQtrG1LGmUa_7PmysLeFmAEAAwIAA3MAAzgE"
 )
 
-# ================= MEMÓRIA =================
-MAX_MEMORIA = 6
-short_memory = {}
+# ================= MEMÓRIA PERSISTENTE =================
+MAX_MEMORIA = 12  # Aumentado para manter mais contexto
+
+def memory_key(uid):
+    """Chave para memória do usuário no Redis"""
+    return f"memory:{uid}"
 
 def get_memory(uid):
-    short_memory.setdefault(uid, deque(maxlen=MAX_MEMORIA))
-    return short_memory[uid]
+    """Recupera memória do Redis (persiste entre deploys!)"""
+    try:
+        data = r.get(memory_key(uid))
+        if data:
+            messages = json.loads(data)
+            logger.info(f"📚 Memória recuperada: {uid} ({len(messages)} msgs)")
+            return messages
+        return []
+    except Exception as e:
+        logger.error(f"Erro ao recuperar memória: {e}")
+        return []
+
+def save_memory(uid, messages):
+    """Salva memória no Redis com expiração de 7 dias"""
+    try:
+        # Mantém apenas as últimas MAX_MEMORIA mensagens
+        recent = messages[-MAX_MEMORIA:] if len(messages) > MAX_MEMORIA else messages
+        r.setex(
+            memory_key(uid),
+            timedelta(days=7),
+            json.dumps(recent, ensure_ascii=False)
+        )
+        logger.info(f"💾 Memória salva: {uid} ({len(recent)} msgs)")
+    except Exception as e:
+        logger.error(f"Erro ao salvar memória: {e}")
+
+def add_to_memory(uid, role, content):
+    """Adiciona mensagem à memória"""
+    memory = get_memory(uid)
+    memory.append({"role": role, "content": content})
+    save_memory(uid, memory)
+
+def clear_memory(uid):
+    """Limpa memória do usuário"""
+    try:
+        r.delete(memory_key(uid))
+        logger.info(f"🗑️ Memória limpa: {uid}")
+    except Exception as e:
+        logger.error(f"Erro ao limpar memória: {e}")
 
 # ================= REDIS HELPERS =================
 def vip_key(uid):
@@ -106,11 +146,10 @@ def save_message(uid, role, text):
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_entry = f"[{timestamp}] {role.upper()}: {text}"
         r.rpush(chatlog_key(uid), log_entry)
-        # Mantém apenas últimas 200 mensagens
         r.ltrim(chatlog_key(uid), -200, -1)
-        logger.info(f"💾 Mensagem salva: {uid} - {role}")
+        logger.info(f"💾 Log salvo: {uid} - {role}")
     except Exception as e:
-        logger.error(f"Erro ao salvar mensagem: {e}")
+        logger.error(f"Erro ao salvar log: {e}")
 
 def is_vip(uid):
     try:
@@ -238,7 +277,7 @@ Não seja safada no primeiro contato. Só seja bem safada se o usuário for safa
 Use emojis ocasionalmente 💖
 É totalmente proibido prometer ou marcar encontros, caso entre no assunto dispiste"""
 
-# ================= GROK (COM LOGGING) =================
+# ================= GROK (COM MEMÓRIA PERSISTENTE) =================
 class Grok:
     async def reply(self, uid, text):
         mem = get_memory(uid)
@@ -251,7 +290,7 @@ class Grok:
             "model": MODELO,
             "messages": [
                 {"role": "system", "content": build_prompt(is_vip(uid), lang)},
-                *list(mem),
+                *mem,
                 {"role": "user", "content": text}
             ],
             "max_tokens": 500,
@@ -280,8 +319,9 @@ class Grok:
             logger.exception("🔥 Erro no Grok")
             return "😔 Amor… fiquei confusa por um instante. Pode repetir pra mim? 💕"
         
-        mem.append({"role": "user", "content": text})
-        mem.append({"role": "assistant", "content": answer})
+        # ✅ SALVA NA MEMÓRIA PERSISTENTE
+        add_to_memory(uid, "user", text)
+        add_to_memory(uid, "assistant", answer)
         
         # 💾 SALVA RESPOSTA DA SOPHIA
         save_message(uid, "sophia", answer)
@@ -362,7 +402,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         elif query.data == "copy_pix":
             await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
-            # NÃO ativa pix_pending aqui - só quando clicar em "ENVIAR COMPROVANTE"
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=f"`{PIX_KEY}`",
@@ -373,7 +412,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         
         elif query.data == "send_receipt":
-            # APENAS aqui ativa o flag de pendente
             set_pix_pending(uid)
             save_message(uid, "system", "Clicou em ENVIAR COMPROVANTE - aguardando foto")
             await context.bot.send_message(
@@ -405,23 +443,19 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"📥 Mensagem de {uid}")
     
     try:
-        # DEBUG: Verifica se tem flag pendente
         has_pix_flag = is_pix_pending(uid)
         has_photo = bool(update.message.photo)
         has_doc = bool(update.message.document)
         
         logger.info(f"🔍 DEBUG - UID: {uid} | pix_pending: {has_pix_flag} | tem_foto: {has_photo} | tem_doc: {has_doc}")
         
-        # Verifica se é comprovante PIX (APENAS se clicou no botão)
         if has_pix_flag and (update.message.photo or update.message.document):
             logger.info(f"📸 COMPROVANTE PIX CONFIRMADO de {uid}")
             lang = get_lang(uid)
             save_message(uid, "system", "Enviou comprovante PIX")
             
-            # LIMPA o flag de pendente para não processar outras fotos
             clear_pix_pending(uid)
             
-            # Encaminha para admin
             for admin_id in ADMIN_IDS:
                 try:
                     await context.bot.send_message(
@@ -527,12 +561,26 @@ async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = int(context.args[0])
     reset_daily_count(uid)
     r.delete(vip_key(uid))
+    clear_memory(uid)
     await update.message.reply_text(
         f"🔥 Reset concluído:\n"
         f"• Limite diário\n"
-        f"• VIP removido\n\n"
+        f"• VIP removido\n"
+        f"• Memória limpa\n\n"
         f"👤 Usuário: {uid}"
     )
+
+async def clearmemory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Limpa memória de um usuário específico"""
+    logger.info(f"📥 /clearmemory de {update.effective_user.id}")
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    if not context.args:
+        await update.message.reply_text("Uso: /clearmemory <user_id>")
+        return
+    uid = int(context.args[0])
+    clear_memory(uid)
+    await update.message.reply_text(f"🗑️ Memória limpa para usuário {uid}")
 
 async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ativa VIP manualmente (após confirmar pagamento PIX)"""
@@ -555,7 +603,6 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⏰ Válido até: {vip_until.strftime('%d/%m/%Y %H:%M')}"
     )
     
-    # Notifica o usuário
     try:
         await context.bot.send_message(
             chat_id=uid,
@@ -574,6 +621,7 @@ def setup_application():
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("reset", reset_cmd))
     application.add_handler(CommandHandler("resetall", resetall_cmd))
+    application.add_handler(CommandHandler("clearmemory", clearmemory_cmd))
     application.add_handler(CommandHandler("setvip", setvip_cmd))
     application.add_handler(CallbackQueryHandler(callback_handler))
     application.add_handler(PreCheckoutQueryHandler(pre_checkout))
