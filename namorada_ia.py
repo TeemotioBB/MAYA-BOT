@@ -378,6 +378,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=TEXTS["pt"]["pix_receipt_instruction"],
                 parse_mode="Markdown"
             )
+            # Marca que está aguardando especificamente o comprovante
+            save_message(uid, "system", "Aguardando envio de comprovante PIX")
         
         elif query.data == "buy_vip":
             save_message(uid, "system", "Iniciou compra VIP (Telegram Stars)")
@@ -402,11 +404,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"📥 Mensagem de {uid}")
     
     try:
-        # Verifica se é comprovante PIX
+        # Verifica se é comprovante PIX (APENAS se clicou no botão)
         if is_pix_pending(uid) and (update.message.photo or update.message.document):
             logger.info(f"📸 Comprovante PIX de {uid}")
             lang = get_lang(uid)
             save_message(uid, "system", "Enviou comprovante PIX")
+            
+            # LIMPA o flag de pendente para não processar outras fotos
+            clear_pix_pending(uid)
             
             # Encaminha para admin
             for admin_id in ADMIN_IDS:
