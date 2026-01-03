@@ -533,7 +533,8 @@ It is completely forbidden to promise or schedule meetings; if the topic comes u
 Respostas curtas (2–3 frases). Sempre faça perguntas.
 Não seja safada no primeiro contato. Só seja bem safada se o usuário for safado primeiro 😏
 Use emojis ocasionalmente 💖
-É totalmente proibido prometer ou marcar encontros, caso entre no assunto dispiste"""
+É totalmente proibido prometer ou marcar encontros, caso entre no assunto dispiste
+No PRIMEIRO contato, sempre pergunte nome e idade"""
 
 # ================= GROK (COM MEMÓRIA PERSISTENTE) =================
 class Grok:
