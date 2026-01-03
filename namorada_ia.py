@@ -648,6 +648,7 @@ TEXTS = {
         "pix_info": (
             f"💳 **PAGAMENTO VIA PIX**\n\n"
             f"💰 Valor: **{PIX_VALOR}**\n\n"
+            f"Amor, não tenho pix, então pode fazer pra essa chave pix em nome do meu tio que estou te mandando. Após pagar é só você me enviar o comprovante amorzinho.\n\n"
             f"📋 **Como pagar:**\n"
             f"1️⃣ Copie a chave PIX abaixo\n"
             f"2️⃣ Abra seu app de pagamentos\n"
