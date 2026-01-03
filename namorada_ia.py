@@ -362,6 +362,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         elif query.data == "copy_pix":
             await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
+            # NÃO ativa pix_pending aqui - só quando clicar em "ENVIAR COMPROVANTE"
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=f"`{PIX_KEY}`",
@@ -372,14 +373,14 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         
         elif query.data == "send_receipt":
+            # APENAS aqui ativa o flag de pendente
             set_pix_pending(uid)
+            save_message(uid, "system", "Clicou em ENVIAR COMPROVANTE - aguardando foto")
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=TEXTS["pt"]["pix_receipt_instruction"],
                 parse_mode="Markdown"
             )
-            # Marca que está aguardando especificamente o comprovante
-            save_message(uid, "system", "Aguardando envio de comprovante PIX")
         
         elif query.data == "buy_vip":
             save_message(uid, "system", "Iniciou compra VIP (Telegram Stars)")
@@ -404,9 +405,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"📥 Mensagem de {uid}")
     
     try:
+        # DEBUG: Verifica se tem flag pendente
+        has_pix_flag = is_pix_pending(uid)
+        has_photo = bool(update.message.photo)
+        has_doc = bool(update.message.document)
+        
+        logger.info(f"🔍 DEBUG - UID: {uid} | pix_pending: {has_pix_flag} | tem_foto: {has_photo} | tem_doc: {has_doc}")
+        
         # Verifica se é comprovante PIX (APENAS se clicou no botão)
-        if is_pix_pending(uid) and (update.message.photo or update.message.document):
-            logger.info(f"📸 Comprovante PIX de {uid}")
+        if has_pix_flag and (update.message.photo or update.message.document):
+            logger.info(f"📸 COMPROVANTE PIX CONFIRMADO de {uid}")
             lang = get_lang(uid)
             save_message(uid, "system", "Enviou comprovante PIX")
             
