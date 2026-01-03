@@ -254,8 +254,8 @@ class Grok:
                 *list(mem),
                 {"role": "user", "content": text}
             ],
-            "max_tokens": 250,
-            "temperature": 0.85
+            "max_tokens": 500,
+            "temperature": 0.7
         }
         try:
             timeout = aiohttp.ClientTimeout(total=25)
