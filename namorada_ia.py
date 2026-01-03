@@ -365,8 +365,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
-                text=f"🔑 Chave PIX:\n\n`{PIX_KEY}`",
-                parse_mode="Markdown"
+                text=f"`{PIX_KEY}`",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
+                ])
             )
         
         elif query.data == "send_receipt":
