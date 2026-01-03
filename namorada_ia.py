@@ -965,7 +965,7 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
                     parse_mode="Markdown",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("💳 PAGAR COM PIX", callback_data="pay_pix")],
-                        [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+                        [InlineKeyboardButton("💖 Comprar VIP – Cartão", callback_data="buy_vip")]
                     ])
                 )
             else:
