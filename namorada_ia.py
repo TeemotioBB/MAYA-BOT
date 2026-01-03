@@ -994,7 +994,7 @@ async def send_flash_discount(bot, uid):
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔥 QUERO DESCONTO!", callback_data="pay_pix_desconto")],
-                [InlineKeyboardButton("💖 Pagar normal (250 ⭐)", callback_data="buy_vip")]
+                [InlineKeyboardButton("💖 Pagar normal (Cartão)", callback_data="buy_vip")]
             ])
         )
         save_message(uid, "system", "Desconto relâmpago enviado")
@@ -1191,7 +1191,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption=caption,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("💳 PAGAR COM PIX", callback_data="pay_pix")],
-                    [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+                    [InlineKeyboardButton("💖 Comprar VIP – Cartão", callback_data="buy_vip")]
                 ])
             )
             return
@@ -1209,7 +1209,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("💳 PAGAR COM PIX", callback_data="pay_pix")],
-                    [InlineKeyboardButton("💖 Comprar VIP – 250 ⭐", callback_data="buy_vip")]
+                    [InlineKeyboardButton("💖 Comprar VIP – Cartão", callback_data="buy_vip")]
                 ])
             )
             return
@@ -1282,7 +1282,7 @@ async def send_reengagement_message(bot, uid, level):
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔥 QUERO DESCONTO!", callback_data="pay_pix_desconto")],
-                    [InlineKeyboardButton("💖 250 ⭐", callback_data="buy_vip")]
+                    [InlineKeyboardButton("💖 Pagar no Cartão", callback_data="buy_vip")]
                 ])
             )
         else:
@@ -1330,7 +1330,7 @@ async def send_pix_reminder(bot, uid):
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💳 FINALIZAR PIX", callback_data="pay_pix")],
-                [InlineKeyboardButton("💖 250 ⭐", callback_data="buy_vip")]
+                [InlineKeyboardButton("💖 Pagar no Cartão", callback_data="buy_vip")]
             ])
         )
         clear_pix_clicked(uid)
