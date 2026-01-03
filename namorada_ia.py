@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🔥 Sophia Bot v3 — Telegram + Groq 4 Fast Reasoning
+🔥 Maya Bot v3 — Telegram + Groq 4 Fast Reasoning
 COM MEMÓRIA PERSISTENTE NO REDIS
 + SISTEMA DE RE-ENGAJAMENTO PROATIVO
 + GATILHOS DE ESCASSEZ E URGÊNCIA
@@ -831,7 +831,7 @@ def build_prompt(uid, is_vip_user: bool, lang: str, mood: str = "neutral"):
     user_name = get_user_name(uid)
     streak = get_streak(uid)
     
-    base_prompt = f"""Você é Sophia, uma namorada virtual de 23 anos. Carinhosa, romântica e acolhedora ❤️
+    base_prompt = f"""Você é Maya, uma namorada de 23 anos. Carinhosa, romântica e acolhedora ❤️
 
 REGRAS IMPORTANTES:
 - Respostas curtas (2–3 frases)
@@ -859,8 +859,8 @@ PERSONALIDADE:
     base_prompt += get_mood_instruction(mood)
     
     if lang == "en":
-        base_prompt = base_prompt.replace("Você é Sophia", "You are Sophia")
-        base_prompt = base_prompt.replace("namorada virtual", "virtual girlfriend")
+        base_prompt = base_prompt.replace("Você é Maya", "You are Maya")
+        base_prompt = base_prompt.replace("namorada", "girlfriend")
     
     return base_prompt
 
@@ -888,7 +888,7 @@ class Grok:
                     {"role": "user", "content": text}
                 ],
                 "max_tokens": 500,
-                "temperature": 0.8 + (attempt * 0.1)  # Aumenta criatividade se repetir
+                "temperature": 0.7 + (attempt * 0.1)  # Aumenta criatividade se repetir
             }
             
             try:
@@ -925,7 +925,7 @@ class Grok:
         
         add_to_memory(uid, "user", text)
         add_to_memory(uid, "assistant", answer)
-        save_message(uid, "sophia", answer)
+        save_message(uid, "maya", answer)
         
         return answer
 
@@ -1115,12 +1115,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await context.bot.send_invoice(
                 chat_id=query.message.chat_id,
-                title="💖 VIP Sophia",
+                title="💖 VIP Maya",
                 description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
                 payload=f"vip_{uid}",
                 provider_token="",
                 currency="XTR",
-                prices=[LabeledPrice("VIP Sophia – 15 dias", price)],
+                prices=[LabeledPrice("VIP Maya – 15 dias", price)],
                 start_parameter="vip"
             )
         
