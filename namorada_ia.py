@@ -1476,7 +1476,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 msg, parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 4,99)", callback_data="pay_pix")],
+                    [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", callback_data="pay_pix")],
                     [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                 ])
             )
@@ -1677,7 +1677,7 @@ async def send_smart_scheduled_message(bot, uid, msg_type):
                 chat_id=uid, 
                 text=message,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 PIX R$ 4,99", callback_data="pay_pix")],
+                    [InlineKeyboardButton("💳 PIX R$ 9,99", callback_data="pay_pix")],
                     [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                 ])
             )
