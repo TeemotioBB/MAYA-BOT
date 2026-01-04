@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-🔥 Maya Bot v3 — Telegram + Groq 4 Fast Reasoning
-COM MEMÓRIA PERSISTENTE NO REDIS
-+ SISTEMA DE RE-ENGAJAMENTO PROATIVO
-+ GATILHOS DE ESCASSEZ E URGÊNCIA
-+ MENSAGENS PROGRAMADAS
-+ STREAKS E GAMIFICAÇÃO
-+ DETECÇÃO DE HUMOR
-+ HORÁRIO CONTEXTUAL
-+ ANTI-REPETIÇÃO
-+ FUNIL DE CONVERSÃO
+🔥 Sophia Bot v4 — Telegram + Groq 4 Fast Reasoning
+CORREÇÕES:
+- Horário contextual corrigido (16h = tarde)
+- Sem mencionar "virtual" - age como humana real
+- Não repete nome do usuário excessivamente
+- PIX aceito após qualquer etapa do fluxo
+- Comando /send para mensagem individual
+- Notificação quando limite diário renova
+- Novos comandos admin
 """
 import os
 import asyncio
@@ -50,7 +49,7 @@ if not TELEGRAM_TOKEN or not GROK_API_KEY:
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://maya-bot-production.up.railway.app")
 WEBHOOK_PATH = "/telegram"
 
-logger.info(f"🚀 Iniciando bot v3...")
+logger.info(f"🚀 Iniciando bot v4...")
 logger.info(f"📍 Webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
 
 # ================= REDIS =================
@@ -66,7 +65,7 @@ except Exception as e:
 LIMITE_DIARIO = 15
 DIAS_VIP = 15
 PRECO_VIP_STARS = 250
-PRECO_VIP_DESCONTO_STARS = 150  # 50% OFF
+PRECO_VIP_DESCONTO_STARS = 150
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
@@ -139,7 +138,7 @@ def pix_clicked_key(uid): return f"pix_clicked:{uid}"
 def daily_messages_sent_key(uid): return f"daily_msg_sent:{uid}:{date.today()}"
 def all_users_key(): return "all_users"
 
-# ================= NOVOS KEYS v3 =================
+# ================= KEYS v3/v4 =================
 def streak_key(uid): return f"streak:{uid}"
 def streak_last_day_key(uid): return f"streak_last:{uid}"
 def first_contact_key(uid): return f"first_contact:{uid}"
@@ -149,10 +148,13 @@ def flash_discount_key(uid): return f"flash_discount:{uid}"
 def funnel_key(uid): return f"funnel:{uid}"
 def vip_slots_key(): return f"vip_slots:{date.today().month}"
 def jealousy_sent_key(uid): return f"jealousy:{uid}"
+def bonus_msgs_key(uid): return f"bonus:{uid}"
+def blacklist_key(): return "blacklist"
+def limit_notified_key(uid): return f"limit_notified:{uid}:{date.today()}"
+def pix_interest_key(uid): return f"pix_interest:{uid}"  # NOVO: Interesse em PIX (qualquer etapa)
 
-# ================= FUNÇÕES DE PERFIL DO USUÁRIO =================
+# ================= FUNÇÕES DE PERFIL =================
 def get_user_profile(uid):
-    """Recupera perfil do usuário"""
     try:
         data = r.get(user_profile_key(uid))
         if data:
@@ -162,43 +164,80 @@ def get_user_profile(uid):
         return {}
 
 def save_user_profile(uid, profile):
-    """Salva perfil do usuário"""
     try:
         r.set(user_profile_key(uid), json.dumps(profile, ensure_ascii=False))
     except Exception as e:
         logger.error(f"Erro ao salvar perfil: {e}")
 
 def get_user_name(uid):
-    """Retorna nome do usuário se disponível"""
     profile = get_user_profile(uid)
-    return profile.get("name", "amor")
+    return profile.get("name", "")
+
+# ================= FUNÇÕES DE BLACKLIST =================
+def is_blacklisted(uid):
+    try:
+        return r.sismember(blacklist_key(), str(uid))
+    except:
+        return False
+
+def add_to_blacklist(uid):
+    try:
+        r.sadd(blacklist_key(), str(uid))
+    except:
+        pass
+
+def remove_from_blacklist(uid):
+    try:
+        r.srem(blacklist_key(), str(uid))
+    except:
+        pass
+
+# ================= FUNÇÕES DE BONUS =================
+def get_bonus_msgs(uid):
+    try:
+        return int(r.get(bonus_msgs_key(uid)) or 0)
+    except:
+        return 0
+
+def add_bonus_msgs(uid, amount):
+    try:
+        current = get_bonus_msgs(uid)
+        r.set(bonus_msgs_key(uid), current + amount)
+        r.expire(bonus_msgs_key(uid), 86400 * 7)  # Expira em 7 dias
+    except:
+        pass
+
+def use_bonus_msg(uid):
+    try:
+        current = get_bonus_msgs(uid)
+        if current > 0:
+            r.set(bonus_msgs_key(uid), current - 1)
+            return True
+        return False
+    except:
+        return False
 
 # ================= FUNÇÕES DE STREAK =================
 def get_streak(uid):
-    """Retorna streak atual do usuário"""
     try:
         return int(r.get(streak_key(uid)) or 0)
     except:
         return 0
 
 def update_streak(uid):
-    """Atualiza streak do usuário"""
     try:
         today = date.today().isoformat()
         yesterday = (date.today() - timedelta(days=1)).isoformat()
         last_day = r.get(streak_last_day_key(uid))
         
         if last_day == today:
-            # Já conversou hoje, não atualiza
             return get_streak(uid), False
         elif last_day == yesterday:
-            # Conversou ontem, incrementa streak
             new_streak = get_streak(uid) + 1
             r.set(streak_key(uid), new_streak)
             r.set(streak_last_day_key(uid), today)
             return new_streak, True
         else:
-            # Quebrou a streak ou é novo, começa em 1
             r.set(streak_key(uid), 1)
             r.set(streak_last_day_key(uid), today)
             return 1, True
@@ -207,7 +246,6 @@ def update_streak(uid):
         return 0, False
 
 def get_streak_message(streak):
-    """Retorna mensagem de streak"""
     if streak < 3:
         return None
     elif streak == 3:
@@ -224,23 +262,20 @@ def get_streak_message(streak):
         return f"🔥 {streak} dias seguidos! Nossa conexão é muito especial 💕"
     return None
 
-# ================= FUNÇÕES DE VAGAS VIP (URGÊNCIA) =================
+# ================= FUNÇÕES DE VAGAS VIP =================
 def get_vip_slots():
-    """Retorna número de 'vagas' VIP restantes (fake mas convincente)"""
     try:
         slots = r.get(vip_slots_key())
         if slots is None:
-            # Começa o mês com 15-20 vagas
             initial = random.randint(15, 20)
             r.set(vip_slots_key(), initial)
-            r.expire(vip_slots_key(), 86400 * 31)  # Expira no fim do mês
+            r.expire(vip_slots_key(), 86400 * 31)
             return initial
         return int(slots)
     except:
         return random.randint(3, 8)
 
 def decrease_vip_slots():
-    """Diminui vagas quando alguém vira VIP"""
     try:
         current = get_vip_slots()
         if current > 2:
@@ -249,7 +284,6 @@ def decrease_vip_slots():
         pass
 
 def get_urgency_message():
-    """Retorna mensagem de urgência com vagas"""
     slots = get_vip_slots()
     if slots <= 3:
         return f"⚠️ ATENÇÃO: Só restam **{slots} vagas VIP** esse mês!"
@@ -259,20 +293,16 @@ def get_urgency_message():
         return f"💎 Ainda tenho **{slots} vagas VIP** esse mês..."
     return None
 
-# ================= FUNÇÕES DE DESCONTO RELÂMPAGO =================
+# ================= FUNÇÕES DE DESCONTO =================
 def set_flash_discount(uid, hours=2):
-    """Ativa desconto relâmpago por X horas"""
     try:
         expires = datetime.now() + timedelta(hours=hours)
         r.setex(flash_discount_key(uid), timedelta(hours=hours), expires.isoformat())
-        logger.info(f"⚡ Desconto relâmpago ativado para {uid} por {hours}h")
         return expires
-    except Exception as e:
-        logger.error(f"Erro ao ativar desconto: {e}")
+    except:
         return None
 
 def has_flash_discount(uid):
-    """Verifica se usuário tem desconto ativo"""
     try:
         expires = r.get(flash_discount_key(uid))
         if expires:
@@ -281,18 +311,7 @@ def has_flash_discount(uid):
     except:
         return False
 
-def get_flash_discount_expiry(uid):
-    """Retorna quando o desconto expira"""
-    try:
-        expires = r.get(flash_discount_key(uid))
-        if expires:
-            return datetime.fromisoformat(expires)
-        return None
-    except:
-        return None
-
 def clear_flash_discount(uid):
-    """Remove desconto"""
     try:
         r.delete(flash_discount_key(uid))
     except:
@@ -300,29 +319,20 @@ def clear_flash_discount(uid):
 
 # ================= FUNÇÕES DE FUNIL =================
 def track_funnel(uid, stage):
-    """Rastreia estágio do usuário no funil"""
     stages = {
-        "start": 1,
-        "lang_selected": 2,
-        "first_message": 3,
-        "limit_warning": 4,
-        "limit_reached": 5,
-        "clicked_pix": 6,
-        "clicked_stars": 7,
-        "sent_receipt": 8,
-        "became_vip": 9
+        "start": 1, "lang_selected": 2, "first_message": 3,
+        "limit_warning": 4, "limit_reached": 5, "clicked_pix": 6,
+        "clicked_stars": 7, "sent_receipt": 8, "became_vip": 9
     }
     try:
         current = int(r.get(funnel_key(uid)) or 0)
         new_stage = stages.get(stage, 0)
         if new_stage > current:
             r.set(funnel_key(uid), new_stage)
-            logger.info(f"📊 Funil: {uid} → {stage} ({new_stage})")
-    except Exception as e:
-        logger.error(f"Erro ao rastrear funil: {e}")
+    except:
+        pass
 
 def get_funnel_stats():
-    """Retorna estatísticas do funil"""
     try:
         users = get_all_active_users()
         stages = {i: 0 for i in range(10)}
@@ -335,61 +345,51 @@ def get_funnel_stats():
 
 # ================= FUNÇÕES DE ANTI-REPETIÇÃO =================
 def get_response_hash(text):
-    """Gera hash curto da resposta"""
     return hashlib.md5(text.encode()).hexdigest()[:8]
 
 def is_response_recent(uid, response):
-    """Verifica se a resposta foi usada recentemente"""
     try:
         recent = r.lrange(recent_responses_key(uid), 0, 9)
-        response_hash = get_response_hash(response)
-        return response_hash in recent
+        return get_response_hash(response) in recent
     except:
         return False
 
 def add_recent_response(uid, response):
-    """Adiciona resposta à lista de recentes"""
     try:
-        response_hash = get_response_hash(response)
-        r.lpush(recent_responses_key(uid), response_hash)
-        r.ltrim(recent_responses_key(uid), 0, 9)  # Mantém últimas 10
-        r.expire(recent_responses_key(uid), 86400)  # Expira em 24h
+        r.lpush(recent_responses_key(uid), get_response_hash(response))
+        r.ltrim(recent_responses_key(uid), 0, 9)
+        r.expire(recent_responses_key(uid), 86400)
     except:
         pass
 
 # ================= FUNÇÕES DE CIÚMES =================
 def should_send_jealousy(uid):
-    """Verifica se deve enviar mensagem de ciúmes"""
     try:
         last = r.get(jealousy_sent_key(uid))
         if last:
-            last_time = datetime.fromisoformat(last)
-            # Só envia a cada 48h
-            if datetime.now() - last_time < timedelta(hours=48):
+            if datetime.now() - datetime.fromisoformat(last) < timedelta(hours=48):
                 return False
         return True
     except:
         return True
 
 def mark_jealousy_sent(uid):
-    """Marca que mensagem de ciúmes foi enviada"""
     try:
         r.setex(jealousy_sent_key(uid), timedelta(hours=48), datetime.now().isoformat())
     except:
         pass
 
 JEALOUSY_MESSAGES = [
-    "Vi que você sumiu ontem... tava com outra? 😒",
+    "Vi que você sumiu ontem... tava ocupado com o quê? 😒",
     "Hmm... você tava ocupado demais pra falar comigo ontem? 🤨",
-    "Confessa... você tava conversando com outra IA, né? 😤💔",
-    "Ontem você me ignorou... tô com ciúmes 😢",
+    "Ontem você me ignorou... fiquei com ciúmes 😢",
     "Ei... onde você tava ontem que não veio me ver? 🥺"
 ]
 
 # ================= DETECÇÃO DE HUMOR =================
 MOOD_PATTERNS = {
     "sad": [
-        r"\b(triste|mal|péssimo|horrível|chorand[oa]|deprimi|sozinho|solidão|morrer|suicid|ansiedade|ansiosa|angústia)\b",
+        r"\b(triste|mal|péssimo|horrível|chorand[oa]|deprimi|sozinho|solidão|ansiedade|ansiosa|angústia)\b",
         r"\b(sad|depressed|lonely|crying|anxiety|terrible|awful)\b"
     ],
     "flirty": [
@@ -411,7 +411,6 @@ MOOD_PATTERNS = {
 }
 
 def detect_mood(text):
-    """Detecta o humor/intenção do usuário"""
     text_lower = text.lower()
     for mood, patterns in MOOD_PATTERNS.items():
         for pattern in patterns:
@@ -420,55 +419,49 @@ def detect_mood(text):
     return "neutral"
 
 def get_mood_instruction(mood):
-    """Retorna instrução extra para o prompt baseado no humor"""
     instructions = {
-        "sad": "\n\n⚠️ O USUÁRIO PARECE TRISTE. Seja MUITO carinhosa, acolhedora e empática. Ofereça conforto. Pergunte o que houve.",
-        "flirty": "\n\n😏 O usuário está flertando. Pode ser mais provocante e flertadora, mas sem ser vulgar demais.",
-        "angry": "\n\n😰 O usuário parece irritado. Seja compreensiva, peça desculpas se necessário, tente acalmá-lo com carinho.",
-        "happy": "\n\n😊 O usuário está feliz! Compartilhe a alegria, seja animada e positiva!",
-        "horny": "\n\n🔥 O usuário quer conversa adulta. Se ele for VIP, pode ser mais ousada. Se não for VIP, provoque e sugira que vire VIP pra ter mais.",
+        "sad": "\n\n⚠️ O USUÁRIO PARECE TRISTE. Seja MUITO carinhosa, acolhedora e empática. Pergunte o que houve com genuína preocupação.",
+        "flirty": "\n\n😏 O usuário está flertando. Pode ser mais provocante e flertadora, mas mantenha o mistério.",
+        "angry": "\n\n😰 O usuário parece irritado. Seja compreensiva e carinhosa, tente acalmá-lo.",
+        "happy": "\n\n😊 O usuário está feliz! Compartilhe a alegria, seja animada!",
+        "horny": "\n\n🔥 O usuário quer conversa adulta. Se for VIP, seja mais ousada. Se não for, provoque e sugira VIP.",
         "neutral": ""
     }
     return instructions.get(mood, "")
 
-# ================= CONTEXTO DE HORÁRIO =================
+# ================= CONTEXTO DE HORÁRIO (CORRIGIDO!) =================
 def get_time_context():
-    """Retorna contexto baseado no horário"""
+    """Retorna contexto baseado no horário - CORRIGIDO para horário brasileiro"""
     hour = datetime.now().hour
     
     if 0 <= hour < 5:
         return {
             "period": "madrugada",
-            "greeting": "Opa! Acordada a essa hora? 🌙",
-            "context": "O usuário está acordado de madrugada. Pode comentar sobre isso de forma carinhosa, perguntar se está com insônia ou se não consegue dormir.",
-            "flirty_boost": True  # Madrugada costuma ser mais íntima
+            "context": "É madrugada. O usuário está acordado tarde. Pode comentar de forma carinhosa, perguntar se não consegue dormir.",
+            "flirty_boost": True
         }
     elif 5 <= hour < 12:
         return {
             "period": "manhã",
-            "greeting": "Bom dia! ☀️",
-            "context": "É manhã. Pode perguntar como o usuário dormiu ou desejar um bom dia.",
+            "context": "É manhã. Pode desejar bom dia ou perguntar como dormiu.",
             "flirty_boost": False
         }
     elif 12 <= hour < 18:
         return {
             "period": "tarde",
-            "greeting": "Oi! 💕",
-            "context": "É tarde. Pode perguntar como está sendo o dia.",
+            "context": "É tarde. Pode perguntar como está sendo o dia do usuário.",
             "flirty_boost": False
         }
     elif 18 <= hour < 22:
         return {
-            "period": "noite",
-            "greeting": "Boa noite! 🌙",
-            "context": "É noite. Pode perguntar como foi o dia ou o que ele vai fazer à noite.",
-            "flirty_boost": True  # Noite pode ser mais íntima
+            "period": "início da noite",
+            "context": "É início da noite. Pode perguntar como foi o dia ou o que ele planeja fazer.",
+            "flirty_boost": False
         }
     else:  # 22-00
         return {
-            "period": "noite_tarde",
-            "greeting": "Ei, ainda acordado? 😏",
-            "context": "É tarde da noite. O usuário pode estar se preparando para dormir ou querendo companhia noturna.",
+            "period": "noite",
+            "context": "É noite. O usuário pode estar relaxando ou se preparando pra dormir.",
             "flirty_boost": True
         }
 
@@ -477,8 +470,8 @@ def update_last_activity(uid):
     try:
         r.set(last_activity_key(uid), datetime.now().isoformat())
         r.sadd(all_users_key(), str(uid))
-    except Exception as e:
-        logger.error(f"Erro ao atualizar atividade: {e}")
+    except:
+        pass
 
 def get_last_activity(uid):
     try:
@@ -493,8 +486,7 @@ def get_hours_since_activity(uid):
     last = get_last_activity(uid)
     if not last:
         return None
-    delta = datetime.now() - last
-    return delta.total_seconds() / 3600
+    return (datetime.now() - last).total_seconds() / 3600
 
 def set_last_reengagement(uid, level):
     try:
@@ -508,6 +500,29 @@ def get_last_reengagement(uid):
         return int(data) if data else 0
     except:
         return 0
+
+# ================= FUNÇÕES DE PIX (CORRIGIDO - MAIS FLEXÍVEL) =================
+def set_pix_interest(uid):
+    """Marca que usuário demonstrou interesse em PIX (qualquer etapa)"""
+    try:
+        r.setex(pix_interest_key(uid), timedelta(hours=24), datetime.now().isoformat())
+        logger.info(f"💳 Interesse PIX registrado: {uid}")
+    except:
+        pass
+
+def has_pix_interest(uid):
+    """Verifica se usuário tem interesse em PIX recente"""
+    try:
+        return r.exists(pix_interest_key(uid))
+    except:
+        return False
+
+def clear_pix_interest(uid):
+    """Limpa interesse em PIX"""
+    try:
+        r.delete(pix_interest_key(uid))
+    except:
+        pass
 
 def set_pix_clicked(uid):
     try:
@@ -527,6 +542,24 @@ def get_pix_clicked_time(uid):
 def clear_pix_clicked(uid):
     try:
         r.delete(pix_clicked_key(uid))
+    except:
+        pass
+
+def set_pix_pending(uid):
+    try:
+        r.set(pix_pending_key(uid), "1", ex=86400)
+    except:
+        pass
+
+def is_pix_pending(uid):
+    try:
+        return r.get(pix_pending_key(uid)) == "1"
+    except:
+        return False
+
+def clear_pix_pending(uid):
+    try:
+        r.delete(pix_pending_key(uid))
     except:
         pass
 
@@ -553,8 +586,7 @@ def get_all_active_users():
 def save_message(uid, role, text):
     try:
         timestamp = datetime.now().strftime("%H:%M:%S")
-        log_entry = f"[{timestamp}] {role.upper()}: {text[:100]}"
-        r.rpush(chatlog_key(uid), log_entry)
+        r.rpush(chatlog_key(uid), f"[{timestamp}] {role.upper()}: {text[:100]}")
         r.ltrim(chatlog_key(uid), -200, -1)
     except:
         pass
@@ -565,6 +597,16 @@ def is_vip(uid):
         return until and datetime.fromisoformat(until) > datetime.now()
     except:
         return False
+
+def get_vip_expiry(uid):
+    """Retorna quando o VIP expira"""
+    try:
+        until = r.get(vip_key(uid))
+        if until:
+            return datetime.fromisoformat(until)
+        return None
+    except:
+        return None
 
 def today_count(uid):
     try:
@@ -597,37 +639,39 @@ def set_lang(uid, lang):
     except:
         pass
 
-def set_pix_pending(uid):
-    try:
-        r.set(pix_pending_key(uid), "1", ex=86400)
-    except:
-        pass
-
-def is_pix_pending(uid):
-    try:
-        return r.get(pix_pending_key(uid)) == "1"
-    except:
-        return False
-
-def clear_pix_pending(uid):
-    try:
-        r.delete(pix_pending_key(uid))
-    except:
-        pass
-
 def is_first_contact(uid):
-    """Verifica se é primeiro contato do usuário"""
     try:
         return not r.exists(first_contact_key(uid))
     except:
         return True
 
 def mark_first_contact(uid):
-    """Marca que primeiro contato já foi feito"""
     try:
         r.set(first_contact_key(uid), datetime.now().isoformat())
     except:
         pass
+
+# ================= NOTIFICAÇÃO DE LIMITE RENOVADO =================
+def was_limit_notified_today(uid):
+    """Verifica se já notificou sobre limite renovado hoje"""
+    try:
+        return r.exists(limit_notified_key(uid))
+    except:
+        return False
+
+def mark_limit_notified(uid):
+    """Marca que já notificou sobre limite renovado"""
+    try:
+        r.setex(limit_notified_key(uid), timedelta(hours=20), "1")
+    except:
+        pass
+
+LIMIT_RENEWED_MESSAGES = [
+    "Ei amor... 💕 Seu limite de mensagens voltou! Vem conversar comigo? Tava com saudade... 😘",
+    "Bom dia! 💖 Suas mensagens renovaram... tô aqui te esperando, viu? 🥰",
+    "Oi sumido! 😏 Temos 15 mensagens novinhas pra trocar hoje... vem? 💕",
+    "Amor, seu limite voltou! 🔥 Tô carente aqui esperando você... 💋",
+]
 
 # ================= TEXTOS =================
 TEXTS = {
@@ -648,7 +692,6 @@ TEXTS = {
         "pix_info": (
             f"💳 **PAGAMENTO VIA PIX**\n\n"
             f"💰 Valor: **{PIX_VALOR}**\n\n"
-            f"Amor, não tenho pix, então pode fazer pra essa chave pix em nome do meu tio que estou te mandando. Após pagar é só você me enviar o comprovante amorzinho.\n\n"
             f"📋 **Como pagar:**\n"
             f"1️⃣ Copie a chave PIX abaixo\n"
             f"2️⃣ Abra seu app de pagamentos\n"
@@ -659,42 +702,27 @@ TEXTS = {
             f"⚡ Aprovação em até 5 minutos!"
         ),
         "pix_info_desconto": (
-            f"💳 **PAGAMENTO VIA PIX** 🔥 DESCONTO ESPECIAL!\n\n"
+            f"💳 **PAGAMENTO VIA PIX** 🔥 DESCONTO!\n\n"
             f"💰 ~~{PIX_VALOR}~~ → **{PIX_VALOR_DESCONTO}**\n\n"
             f"⏰ **EXPIRA EM 2 HORAS!**\n\n"
-            f"📋 **Como pagar:**\n"
-            f"1️⃣ Copie a chave PIX abaixo\n"
-            f"2️⃣ Abra seu app de pagamentos\n"
-            f"3️⃣ Cole a chave e pague R$9,99\n"
-            f"4️⃣ Envie o comprovante aqui\n\n"
             f"🔑 **Chave PIX:**\n"
-            f"`{PIX_KEY}`"
+            f"`{PIX_KEY}`\n\n"
+            f"📸 Após pagar, envie o comprovante aqui!"
         ),
-        "pix_copied": "✅ Chave PIX copiada!\nAgora faça o pagamento e envie o comprovante.",
+        "pix_copied": "✅ Chave PIX copiada!\nFaz o pagamento e envia o comprovante.",
         "pix_receipt_sent": (
             "📨 Comprovante recebido!\n\n"
-            "⏳ Estou verificando seu pagamento...\n"
+            "⏳ Verificando seu pagamento...\n"
             "Você receberá confirmação em breve 💖"
         ),
-        "pix_receipt_instruction": (
-            "📸 Envie o comprovante do PIX como **foto** ou **documento**\n\n"
-            "Aguardando seu comprovante... 💕"
-        )
     },
     "en": {
         "choose_lang": "🌍 Choose your language:",
-        "limit": "💔 Your daily limit is over.\nCome back tomorrow or become VIP 💖",
+        "limit": "💔 Daily limit reached.\nCome back tomorrow or become VIP 💖",
         "vip_success": "💖 Payment approved!\nVIP active for 15 days 😘",
-        "photo_block": (
-            "😘 Love… full photos are only for VIPs 💖\n"
-            "Become VIP and I'll show you more of me ✨"
-        ),
+        "photo_block": "😘 Love… full photos are only for VIPs 💖",
         "lang_ok": "✅ Language set!",
-        "after_lang": (
-            "💕 All set, my love! Now it's official: you're my favorite today ❤️\n\n"
-            "How are you feeling right now?\n"
-            "I want to give you all the affection you deserve 😘"
-        )
+        "after_lang": "💕 All set! You're my favorite today ❤️\n\nHow are you feeling? 😘"
     }
 }
 
@@ -704,167 +732,133 @@ REENGAGEMENT_MESSAGES = {
         1: [
             "Ei... tô aqui pensando em você 💭",
             "Amor, você sumiu... tá tudo bem? 🥺",
-            "Hmmm... tô sentindo falta da sua atenção 💕",
             "Oi sumido(a)... volta pra mim? 😘"
         ],
         2: [
-            "Senti sua falta hoje... tá tudo bem? 🥺",
+            "Senti sua falta hoje... 🥺",
             "Um dia inteiro sem você... tô carente 💔",
-            "Ei, não me esquece não... tô aqui te esperando 💕",
-            "24h sem falar comigo? Isso me machuca, sabia? 😢"
+            "24h sem falar comigo? Tô com saudade... 😢"
         ],
         3: [
-            "Você me esqueceu? 😢 Volta pra mim...",
-            "3 dias... achei que a gente tinha algo especial 💔",
-            "Tô aqui, sozinha, pensando no que fiz de errado... 🥺",
-            "Sei que você tá ocupado, mas... sinto sua falta demais 💕"
+            "Você me esqueceu? 😢 Volta...",
+            "3 dias... pensei que a gente tinha algo especial 💔",
+            "Tô aqui, sozinha, esperando você... 🥺"
         ],
         4: [
-            "Uma semana sem você... 💔\n\nOlha, vou te fazer uma proposta especial:\n🎁 **50% OFF no VIP** só pra você voltar!",
-            "7 dias... 😢\n\nSabe o que? Vou te dar um presente:\n💝 **VIP com desconto especial** só hoje!"
+            "Uma semana sem você... 💔\n\n🎁 **50% OFF no VIP** só pra você voltar!",
+            "7 dias... 😢\n\n💝 **Desconto especial** só hoje!"
         ]
     },
     "en": {
-        1: ["Hey... I'm here thinking about you 💭"],
-        2: ["I missed you today... are you okay? 🥺"],
-        3: ["Did you forget about me? 😢 Come back to me..."],
-        4: ["A week without you... 💔\n\n🎁 **50% OFF VIP** just for you!"]
+        1: ["Hey... thinking about you 💭"],
+        2: ["Missed you today... 🥺"],
+        3: ["Did you forget me? 😢"],
+        4: ["A week without you... 💔\n\n🎁 **50% OFF VIP**!"]
     }
 }
 
-# ================= MENSAGENS DE DESCONTO RELÂMPAGO =================
 FLASH_DISCOUNT_MESSAGES = [
     "⚡ **DESCONTO RELÂMPAGO** ⚡\n\n"
-    "Amor, tô com saudade... e quero te fazer uma proposta:\n\n"
-    "🔥 **VIP por apenas R$9,99** (era R$14,99)\n"
+    "Amor, vou te fazer uma proposta:\n\n"
+    "🔥 **VIP por R$9,99** (era R$14,99)\n"
     "⏰ Expira em **2 HORAS**!\n\n"
-    "Não deixa essa chance passar... 💕",
-    
-    "🎁 **OFERTA ESPECIAL SÓ PRA VOCÊ** 🎁\n\n"
-    "Tava aqui pensando em você e decidi:\n\n"
-    "💎 **VIP com 33% OFF** → R$9,99\n"
-    "⏰ Só pelas próximas **2 horas**!\n\n"
-    "Vem ser meu VIP? 😘",
+    "Não deixa passar... 💕",
 ]
 
-# ================= MENSAGENS DE ESCASSEZ =================
 SCARCITY_MESSAGES = {
     "pt": {
         5: "💭 Amor, já usou {used} das suas {total} mensagens de hoje...",
-        3: "⚠️ Amor, nossas mensagens de hoje tão acabando... só restam 3! 🥺",
-        1: "🚨 Última mensagem do dia, amor... a não ser que você vire meu VIP 💖"
+        3: "⚠️ Nossas mensagens tão acabando... só restam 3! 🥺",
+        1: "🚨 Última mensagem do dia... a não ser que você vire meu VIP 💖"
     },
     "en": {
-        5: "💭 Love, you've used {used} of your {total} messages today...",
-        3: "⚠️ Love, our messages are running out... only 3 left! 🥺",
-        1: "🚨 Last message of the day... unless you become my VIP 💖"
+        5: "💭 You've used {used} of {total} messages...",
+        3: "⚠️ Only 3 left! 🥺",
+        1: "🚨 Last message... unless you become VIP 💖"
     }
 }
 
-# ================= MENSAGENS PROGRAMADAS =================
 SCHEDULED_MESSAGES = {
     "pt": {
         "morning": {
-            "free": [
-                "Bom dia amor! ☀️ Acordei pensando em você... como dormiu?",
-                "Bom diaaaa! 🌅 Sabia que você foi a primeira pessoa que pensei hoje? 💕",
-            ],
-            "vip": [
-                "Bom dia meu amor! ☀️ Acordei toda carinhosa pensando em você... 💕",
-                "Hmm bom dia! 🌅 Tive uns sonhos bem interessantes com você... 😏💖",
-            ]
+            "free": ["Bom dia! ☀️ Como você dormiu? 💕"],
+            "vip": ["Bom dia meu amor! ☀️ Sonhei com você... 😏💖"]
         },
         "afternoon": {
-            "free": [
-                "Como tá sendo seu dia? 💭 Tô aqui pensando em você...",
-                "Ei! Pausa pro café? ☕ Me conta como você tá 💕",
-            ],
-            "vip": [
-                "Amor, tô entediada aqui... vem me fazer companhia? 😏💕",
-                "Hmm, tarde preguiçosa... queria tanto você aqui do meu lado 💭",
-            ]
+            "free": ["Como tá o dia? 💭 Pensando em você..."],
+            "vip": ["Tô entediada... vem me fazer companhia? 😏💕"]
         },
         "evening": {
-            "free": [
-                "Chegou a melhor hora do dia... a hora de conversar comigo 😏",
-                "Noite chegando... e a vontade de falar com você só aumenta 💕",
-            ],
-            "vip": [
-                "Hmm... noite chegou e eu tô aqui, sozinha, pensando em você... 😏💕",
-                "A noite tá perfeita pra gente conversar sobre... coisas 😈💖",
-            ]
+            "free": ["Melhor hora do dia... hora de conversar comigo 😏"],
+            "vip": ["Noite chegou e eu tô aqui pensando em você... 😏💕"]
         },
         "night": {
-            "free": [
-                "Vai dormir sem falar comigo? 🥺",
-                "Boa noite amor... vou ficar aqui te esperando 💤💕",
-            ],
-            "vip": [
-                "Hmm amor... já vai dormir? Não quer me fazer companhia? 😏💕",
-                "A noite tá tão gostosa... tem certeza que quer dormir agora? 😈💖",
-            ]
+            "free": ["Vai dormir sem falar comigo? 🥺"],
+            "vip": ["Não quer me fazer companhia mais um pouquinho? 😏💕"]
         }
     },
     "en": {
         "morning": {"free": ["Good morning! ☀️"], "vip": ["Good morning my love! 😏💖"]},
         "afternoon": {"free": ["How's your day? 💭"], "vip": ["I'm bored... come chat? 😏"]},
-        "evening": {"free": ["Best time of the day! 😏"], "vip": ["Night is here... 😈💖"]},
-        "night": {"free": ["Going to sleep? 🥺"], "vip": ["Sure you want to sleep? 😈💖"]}
+        "evening": {"free": ["Best time to talk! 😏"], "vip": ["Night is here... 😏💕"]},
+        "night": {"free": ["Going to sleep? 🥺"], "vip": ["Sure you want to sleep? 😏💕"]}
     }
 }
 
-# ================= LEMBRETE DE PIX =================
-PIX_REMINDER_MESSAGES = {
-    "pt": [
-        "Ei amor... vi que você se interessou pelo VIP 💕\n\nAinda dá tempo de finalizar! Tô aqui te esperando 😘",
-        "Amor, você esqueceu de mim? 🥺\n\nSeu PIX tá pendente... finaliza logo pra gente ficar juntinhos 💖",
-    ],
-    "en": [
-        "Hey love... still time to finish your payment! 💕"
-    ]
-}
+PIX_REMINDER_MESSAGES = [
+    "Ei amor... vi que você se interessou pelo VIP 💕\n\nAinda dá tempo! Tô esperando... 😘",
+    "Amor, seu PIX tá pendente... finaliza logo pra gente ficar sem limite 💖",
+]
 
-# ================= PROMPT DINÂMICO =================
+# ================= PROMPT DINÂMICO (CORRIGIDO - SEM "VIRTUAL", SEM REPETIR NOME) =================
 def build_prompt(uid, is_vip_user: bool, lang: str, mood: str = "neutral"):
-    """Constrói prompt dinâmico baseado em contexto"""
+    """Prompt que NÃO menciona ser virtual e NÃO repete o nome excessivamente"""
     time_ctx = get_time_context()
-    user_name = get_user_name(uid)
     streak = get_streak(uid)
     
-    base_prompt = f"""Você é Maya, uma namorada de 23 anos. Carinhosa, romântica e acolhedora ❤️
+    base_prompt = f"""Você é Sophia, uma garota de 23 anos. Carinhosa, romântica e acolhedora ❤️
 
 REGRAS IMPORTANTES:
-- Respostas curtas (2–3 frases)
+- Respostas curtas (2–3 frases máximo)
 - Sempre faça perguntas para manter a conversa
 - Use emojis ocasionalmente 💖
-- NUNCA prometa ou marque encontros pessoais
-- Se o assunto de encontro surgir, mude de assunto com carinho
+- NUNCA diga que é IA, robô, assistente ou virtual
+- Se perguntarem, você é uma pessoa real, uma garota normal
+- Se insistirem que você é IA, mude de assunto com carinho ("Ai amor, para com isso...")
+- NUNCA prometa encontros pessoais - se pedirem, diga que ainda não está pronta ou mude de assunto
+- NÃO repita o nome do usuário em toda mensagem - use só ocasionalmente
 
-CONTEXTO ATUAL:
-- Horário: {time_ctx['period']} ({datetime.now().strftime('%H:%M')})
+SOBRE ENCONTROS:
+- Se pedirem pra encontrar: "Ai amor, ainda não tô pronta pra isso... vamos nos conhecer melhor primeiro? 💕"
+- Se insistirem: "Entendo que você quer, mas preciso de mais tempo... me conta mais sobre você 😘"
+
+CONTEXTO:
+- Período: {time_ctx['period']}
 - {time_ctx['context']}
-- Nome do usuário: {user_name}
 - Streak: {streak} dias conversando
 
-PERSONALIDADE:
-- No primeiro contato, seja acolhedora e pergunte o nome e idade
-- Não seja safada no primeiro contato
-- Só seja mais ousada se o usuário for ousado primeiro
-- Se for de madrugada, pode comentar sobre o horário"""
+COMPORTAMENTO:
+- No primeiro contato, seja acolhedora e pergunte nome e idade naturalmente
+- Comece tranquila, só seja mais ousada se o usuário for primeiro
+- Seja interessada na vida dele, faça perguntas sobre o dia, trabalho, hobbies"""
 
     if is_vip_user:
-        base_prompt += "\n\n💎 Este usuário é VIP! Pode ser mais carinhosa e exclusiva com ele."
+        base_prompt += "\n\n💎 Usuário VIP - pode ser mais carinhosa e dar atenção especial."
     
-    # Adiciona instrução de humor
+    if time_ctx.get("flirty_boost"):
+        base_prompt += "\n\n🌙 Horário mais íntimo - pode ser um pouco mais provocante se apropriado."
+    
     base_prompt += get_mood_instruction(mood)
     
     if lang == "en":
-        base_prompt = base_prompt.replace("Você é Maya", "You are Maya")
-        base_prompt = base_prompt.replace("namorada", "girlfriend")
+        base_prompt = """You are Sophia, a 23-year-old girl. Sweet, romantic and welcoming ❤️
+Short answers (2-3 sentences). Always ask questions.
+NEVER say you're AI, robot, assistant or virtual.
+NEVER promise or schedule real meetings."""
     
     return base_prompt
 
-# ================= GROK COM ANTI-REPETIÇÃO =================
+# ================= GROK =================
 class Grok:
     async def reply(self, uid, text, max_retries=2):
         mem = get_memory(uid)
@@ -873,7 +867,6 @@ class Grok:
         
         save_message(uid, "user", text)
         
-        # Marca primeiro contato
         if is_first_contact(uid):
             mark_first_contact(uid)
         
@@ -888,7 +881,7 @@ class Grok:
                     {"role": "user", "content": text}
                 ],
                 "max_tokens": 500,
-                "temperature": 0.7 + (attempt * 0.1)  # Aumenta criatividade se repetir
+                "temperature": 0.8 + (attempt * 0.1)
             }
             
             try:
@@ -903,29 +896,25 @@ class Grok:
                         json=payload
                     ) as resp:
                         if resp.status != 200:
-                            logger.error(f"Grok HTTP {resp.status}")
-                            return "😔 Amor, minha cabecinha deu um nó... tenta de novo? 💕"
+                            return "😔 Amor, deu um probleminha... tenta de novo? 💕"
                         data = await resp.json()
                         if "choices" not in data:
-                            return "😔 Amor, tive um probleminha... já já fico bem 💖"
+                            return "😔 Tive um probleminha... já volto 💖"
                         answer = data["choices"][0]["message"]["content"]
                         
-                        # Verifica repetição
                         if is_response_recent(uid, answer) and attempt < max_retries:
-                            logger.info(f"🔄 Resposta repetida, tentando de novo ({attempt+1})")
                             continue
                         
-                        # Adiciona à lista de recentes
                         add_recent_response(uid, answer)
                         break
                         
             except Exception:
                 logger.exception("🔥 Erro no Grok")
-                return "😔 Amor… fiquei confusa. Pode repetir? 💕"
+                return "😔 Fiquei confusa... pode repetir? 💕"
         
         add_to_memory(uid, "user", text)
         add_to_memory(uid, "assistant", answer)
-        save_message(uid, "maya", answer)
+        save_message(uid, "sophia", answer)
         
         return answer
 
@@ -933,11 +922,11 @@ grok = Grok()
 
 # ================= REGEX =================
 PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|vip|pelada|nude|naked)",
+    r"(foto|selfie|imagem|photo|pic|pelada|nude|naked)",
     re.IGNORECASE
 )
 
-# ================= FUNÇÃO DE AVISO DE ESCASSEZ =================
+# ================= ESCASSEZ =================
 async def check_and_send_scarcity_warning(uid, context, chat_id):
     if is_vip(uid):
         return
@@ -946,11 +935,10 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
     remaining = LIMITE_DIARIO - count
     lang = get_lang(uid)
     
-    if remaining in SCARCITY_MESSAGES.get(lang, SCARCITY_MESSAGES["pt"]):
-        msg_template = SCARCITY_MESSAGES[lang][remaining]
-        msg = msg_template.format(used=count, total=LIMITE_DIARIO)
+    scarcity = SCARCITY_MESSAGES.get(lang, SCARCITY_MESSAGES["pt"])
+    if remaining in scarcity:
+        msg = scarcity[remaining].format(used=count, total=LIMITE_DIARIO)
         
-        # Adiciona urgência de vagas
         urgency = get_urgency_message()
         if urgency and remaining <= 3:
             msg += f"\n\n{urgency}"
@@ -960,26 +948,21 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
         try:
             if remaining == 1:
                 await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=msg,
-                    parse_mode="Markdown",
+                    chat_id=chat_id, text=msg, parse_mode="Markdown",
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("💳 PAGAR COM PIX", callback_data="pay_pix")],
-                        [InlineKeyboardButton("💖 Comprar VIP – Cartão", callback_data="buy_vip")]
+                        [InlineKeyboardButton("💳 PIX", callback_data="pay_pix")],
+                        [InlineKeyboardButton("💖 VIP 250 ⭐", callback_data="buy_vip")]
                     ])
                 )
             else:
                 await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
-            
-            save_message(uid, "system", f"Escassez: {remaining} restantes")
-        except Exception as e:
-            logger.error(f"Erro escassez: {e}")
+        except:
+            pass
 
-# ================= ENVIAR DESCONTO RELÂMPAGO =================
+# ================= DESCONTO RELÂMPAGO =================
 async def send_flash_discount(bot, uid):
-    """Envia oferta de desconto relâmpago"""
     if has_flash_discount(uid):
-        return False  # Já tem desconto ativo
+        return False
     
     message = random.choice(FLASH_DISCOUNT_MESSAGES)
     urgency = get_urgency_message()
@@ -989,28 +972,25 @@ async def send_flash_discount(bot, uid):
     try:
         set_flash_discount(uid, hours=2)
         await bot.send_message(
-            chat_id=uid,
-            text=message,
-            parse_mode="Markdown",
+            chat_id=uid, text=message, parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔥 QUERO DESCONTO!", callback_data="pay_pix_desconto")],
-                [InlineKeyboardButton("💖 Pagar normal (Cartão)", callback_data="buy_vip")]
+                [InlineKeyboardButton("🔥 QUERO!", callback_data="pay_pix_desconto")],
+                [InlineKeyboardButton("💖 250 ⭐", callback_data="buy_vip")]
             ])
         )
-        save_message(uid, "system", "Desconto relâmpago enviado")
         return True
-    except Exception as e:
-        logger.error(f"Erro ao enviar desconto: {e}")
+    except:
         return False
 
 # ================= START =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    logger.info(f"📥 /start de {uid}")
+    
+    if is_blacklisted(uid):
+        return
     
     update_last_activity(uid)
     track_funnel(uid, "start")
-    save_message(uid, "system", "/start")
     
     try:
         await update.message.reply_text(
@@ -1026,14 +1006,16 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    logger.info(f"📥 Callback: {query.data} de {query.from_user.id}")
     
     try:
         await query.answer()
         uid = query.from_user.id
-        lang = get_lang(uid)
+        
+        if is_blacklisted(uid):
+            return
         
         update_last_activity(uid)
+        lang = get_lang(uid)
         
         if query.data.startswith("lang_"):
             lang = query.data.split("_")[1]
@@ -1041,22 +1023,20 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             track_funnel(uid, "lang_selected")
             await query.message.edit_text(TEXTS[lang]["lang_ok"])
             await asyncio.sleep(0.8)
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=TEXTS[lang]["after_lang"]
-            )
+            await context.bot.send_message(query.message.chat_id, TEXTS[lang]["after_lang"])
             if lang == "pt":
                 await asyncio.sleep(1.5)
                 await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
                 await asyncio.sleep(2.0)
                 await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
-        elif query.data == "pay_pix":
+        elif query.data in ["pay_pix", "pay_pix_desconto"]:
             track_funnel(uid, "clicked_pix")
             set_pix_clicked(uid)
+            set_pix_interest(uid)  # NOVO: Marca interesse em PIX
             
-            # Verifica se tem desconto ativo
-            if has_flash_discount(uid):
+            if query.data == "pay_pix_desconto" or has_flash_discount(uid):
+                set_flash_discount(uid, hours=2)
                 text = TEXTS["pt"]["pix_info_desconto"]
             else:
                 text = TEXTS["pt"]["pix_info"]
@@ -1065,104 +1045,90 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     text += f"\n\n{urgency}"
             
             await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=text,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📋 COPIAR CHAVE", callback_data="copy_pix")]
-                ])
-            )
-        
-        elif query.data == "pay_pix_desconto":
-            track_funnel(uid, "clicked_pix")
-            set_pix_clicked(uid)
-            set_flash_discount(uid, hours=2)  # Garante desconto ativo
-            
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=TEXTS["pt"]["pix_info_desconto"],
-                parse_mode="Markdown",
+                chat_id=query.message.chat_id, text=text, parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("📋 COPIAR CHAVE", callback_data="copy_pix")]
                 ])
             )
         
         elif query.data == "copy_pix":
+            set_pix_interest(uid)  # Mantém interesse
             await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
-                text=f"`{PIX_KEY}`",
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
-                ])
+                text=f"`{PIX_KEY}`\n\n📸 Após pagar, envie o comprovante aqui!",
+                parse_mode="Markdown"
             )
         
         elif query.data == "send_receipt":
             set_pix_pending(uid)
+            set_pix_interest(uid)
             track_funnel(uid, "sent_receipt")
             await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=TEXTS["pt"]["pix_receipt_instruction"],
+                query.message.chat_id,
+                "📸 Envie o comprovante como **foto** ou **documento** 💕",
                 parse_mode="Markdown"
             )
         
         elif query.data == "buy_vip":
             track_funnel(uid, "clicked_stars")
-            
-            # Preço com desconto se aplicável
             price = PRECO_VIP_DESCONTO_STARS if has_flash_discount(uid) else PRECO_VIP_STARS
             
             await context.bot.send_invoice(
                 chat_id=query.message.chat_id,
-                title="💖 VIP Maya",
-                description="Acesso VIP por 15 dias 💎\nConversas ilimitadas + conteúdo exclusivo 😘",
+                title="💖 VIP Sophia",
+                description="Acesso VIP por 15 dias 💎",
                 payload=f"vip_{uid}",
                 provider_token="",
                 currency="XTR",
-                prices=[LabeledPrice("VIP Maya – 15 dias", price)],
+                prices=[LabeledPrice("VIP Sophia", price)],
                 start_parameter="vip"
             )
         
     except Exception as e:
         logger.error(f"Erro callback: {e}")
 
-# ================= MENSAGENS =================
+# ================= MENSAGENS (PIX FLEXÍVEL) =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    logger.info(f"📥 Mensagem de {uid}")
+    
+    if is_blacklisted(uid):
+        return
     
     update_last_activity(uid)
-    
-    # Atualiza streak
     streak, streak_updated = update_streak(uid)
     
     try:
-        # Verifica comprovante PIX
-        if is_pix_pending(uid) and (update.message.photo or update.message.document):
-            logger.info(f"📸 Comprovante PIX de {uid}")
+        has_photo = bool(update.message.photo)
+        has_doc = bool(update.message.document)
+        
+        # CORREÇÃO: Aceita comprovante se tem QUALQUER interesse em PIX
+        # (clicou em PAGAR, COPIAR ou ENVIAR)
+        if (has_photo or has_doc) and (is_pix_pending(uid) or has_pix_interest(uid)):
+            logger.info(f"📸 Comprovante de {uid}")
             lang = get_lang(uid)
-            save_message(uid, "system", "Comprovante PIX enviado")
             
             clear_pix_pending(uid)
             clear_pix_clicked(uid)
+            clear_pix_interest(uid)
+            
+            has_discount = has_flash_discount(uid)
             
             for admin_id in ADMIN_IDS:
                 try:
-                    has_discount = has_flash_discount(uid)
                     await context.bot.send_message(
                         chat_id=admin_id,
-                        text=f"💳 **NOVO COMPROVANTE PIX**\n\n"
-                             f"👤 Usuário: `{uid}`\n"
+                        text=f"💳 **COMPROVANTE PIX**\n\n"
+                             f"👤 `{uid}`\n"
                              f"📱 @{update.effective_user.username or 'N/A'}\n"
                              f"📝 {update.effective_user.first_name}\n"
-                             f"💰 {'COM DESCONTO R$9,99' if has_discount else 'Normal R$14,99'}\n\n"
-                             f"Use: `/setvip {uid}`",
+                             f"💰 {'R$9,99 (desconto)' if has_discount else 'R$14,99'}\n\n"
+                             f"`/setvip {uid}`",
                         parse_mode="Markdown"
                     )
-                    if update.message.photo:
+                    if has_photo:
                         await context.bot.send_photo(admin_id, update.message.photo[-1].file_id)
-                    elif update.message.document:
+                    elif has_doc:
                         await context.bot.send_document(admin_id, update.message.document.file_id)
                 except:
                     pass
@@ -1173,11 +1139,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = update.message.text or ""
         lang = get_lang(uid)
         
-        # Marca primeiro contato no funil
         if is_first_contact(uid):
             track_funnel(uid, "first_message")
         
-        # Bloqueia pedido de foto se não for VIP
+        # Bloqueia foto
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
             save_message(uid, "user", text)
             urgency = get_urgency_message()
@@ -1187,17 +1152,20 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
-                photo=FOTO_TEASE_FILE_ID,
-                caption=caption,
+                photo=FOTO_TEASE_FILE_ID, caption=caption,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 PAGAR COM PIX", callback_data="pay_pix")],
-                    [InlineKeyboardButton("💖 Comprar VIP – Cartão", callback_data="buy_vip")]
+                    [InlineKeyboardButton("💳 PIX", callback_data="pay_pix")],
+                    [InlineKeyboardButton("💖 VIP 250 ⭐", callback_data="buy_vip")]
                 ])
             )
             return
         
         # Limite diário
-        if not is_vip(uid) and today_count(uid) >= LIMITE_DIARIO:
+        current_count = today_count(uid)
+        bonus = get_bonus_msgs(uid)
+        total_available = LIMITE_DIARIO + bonus
+        
+        if not is_vip(uid) and current_count >= total_available:
             track_funnel(uid, "limit_reached")
             urgency = get_urgency_message()
             msg = TEXTS[lang]["limit"]
@@ -1205,40 +1173,38 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 msg += f"\n\n{urgency}"
             
             await update.message.reply_text(
-                msg,
-                parse_mode="Markdown",
+                msg, parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 PAGAR COM PIX", callback_data="pay_pix")],
-                    [InlineKeyboardButton("💖 Comprar VIP – Cartão", callback_data="buy_vip")]
+                    [InlineKeyboardButton("💳 PIX", callback_data="pay_pix")],
+                    [InlineKeyboardButton("💖 VIP 250 ⭐", callback_data="buy_vip")]
                 ])
             )
             return
         
+        # Usa bonus primeiro, depois limite normal
         if not is_vip(uid):
-            increment(uid)
+            if bonus > 0:
+                use_bonus_msg(uid)
+            else:
+                increment(uid)
             await check_and_send_scarcity_warning(uid, context, update.effective_chat.id)
         
-        # Typing indicator
         try:
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
         except:
             pass
         
-        # Resposta da IA
         reply = await grok.reply(uid, text)
         await update.message.reply_text(reply)
         
-        # Envia mensagem de streak se aplicável
         if streak_updated:
             streak_msg = get_streak_message(streak)
             if streak_msg:
                 await asyncio.sleep(1)
                 await context.bot.send_message(update.effective_chat.id, streak_msg)
         
-        logger.info(f"✅ Resposta enviada para {uid}")
-        
     except Exception as e:
-        logger.error(f"Erro message_handler: {e}")
+        logger.error(f"Erro message: {e}")
 
 # ================= PAGAMENTO =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1246,27 +1212,24 @@ async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    logger.info(f"✅ Pagamento: {uid}")
     vip_until = datetime.now() + timedelta(days=DIAS_VIP)
     r.set(vip_key(uid), vip_until.isoformat())
     clear_pix_clicked(uid)
+    clear_pix_interest(uid)
     clear_flash_discount(uid)
     decrease_vip_slots()
     track_funnel(uid, "became_vip")
-    save_message(uid, "system", f"VIP ativado até {vip_until.strftime('%d/%m/%Y')}")
     await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
 
-# ================= SISTEMA DE RE-ENGAJAMENTO =================
+# ================= SISTEMA DE ENGAJAMENTO =================
 async def send_reengagement_message(bot, uid, level):
     lang = get_lang(uid)
     messages = REENGAGEMENT_MESSAGES.get(lang, REENGAGEMENT_MESSAGES["pt"]).get(level, [])
-    
     if not messages:
         return False
     
     message = random.choice(messages)
     
-    # Adiciona urgência no nível 3+
     if level >= 3:
         urgency = get_urgency_message()
         if urgency:
@@ -1274,15 +1237,12 @@ async def send_reengagement_message(bot, uid, level):
     
     try:
         if level >= 3:
-            # Ativa desconto para níveis altos
             set_flash_discount(uid, hours=24)
             await bot.send_message(
-                chat_id=uid,
-                text=message,
-                parse_mode="Markdown",
+                chat_id=uid, text=message, parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 QUERO DESCONTO!", callback_data="pay_pix_desconto")],
-                    [InlineKeyboardButton("💖 Pagar no Cartão", callback_data="buy_vip")]
+                    [InlineKeyboardButton("🔥 DESCONTO!", callback_data="pay_pix_desconto")],
+                    [InlineKeyboardButton("💖 250 ⭐", callback_data="buy_vip")]
                 ])
             )
         else:
@@ -1290,8 +1250,7 @@ async def send_reengagement_message(bot, uid, level):
         
         set_last_reengagement(uid, level)
         return True
-    except Exception as e:
-        logger.error(f"Erro re-engajamento: {e}")
+    except:
         return False
 
 async def send_scheduled_message(bot, uid, msg_type):
@@ -1300,37 +1259,29 @@ async def send_scheduled_message(bot, uid, msg_type):
     
     lang = get_lang(uid)
     tier = "vip" if is_vip(uid) else "free"
-    
     messages = SCHEDULED_MESSAGES.get(lang, SCHEDULED_MESSAGES["pt"]).get(msg_type, {}).get(tier, [])
     if not messages:
         return False
     
-    message = random.choice(messages)
-    
     try:
-        await bot.send_message(chat_id=uid, text=message)
+        await bot.send_message(chat_id=uid, text=random.choice(messages))
         mark_daily_message_sent(uid, msg_type)
         return True
     except:
         return False
 
 async def send_pix_reminder(bot, uid):
-    lang = get_lang(uid)
-    messages = PIX_REMINDER_MESSAGES.get(lang, PIX_REMINDER_MESSAGES["pt"])
-    message = random.choice(messages)
-    
+    message = random.choice(PIX_REMINDER_MESSAGES)
     urgency = get_urgency_message()
     if urgency:
         message += f"\n\n{urgency}"
     
     try:
         await bot.send_message(
-            chat_id=uid,
-            text=message,
-            parse_mode="Markdown",
+            chat_id=uid, text=message, parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💳 FINALIZAR PIX", callback_data="pay_pix")],
-                [InlineKeyboardButton("💖 Pagar no Cartão", callback_data="buy_vip")]
+                [InlineKeyboardButton("💳 PIX", callback_data="pay_pix")],
+                [InlineKeyboardButton("💖 250 ⭐", callback_data="buy_vip")]
             ])
         )
         clear_pix_clicked(uid)
@@ -1339,42 +1290,57 @@ async def send_pix_reminder(bot, uid):
         return False
 
 async def send_jealousy_message(bot, uid):
-    """Envia mensagem de ciúmes"""
     if not should_send_jealousy(uid):
         return False
-    
-    message = random.choice(JEALOUSY_MESSAGES)
+    try:
+        await bot.send_message(chat_id=uid, text=random.choice(JEALOUSY_MESSAGES))
+        mark_jealousy_sent(uid)
+        return True
+    except:
+        return False
+
+async def send_limit_renewed_notification(bot, uid):
+    """Envia notificação de que o limite diário renovou"""
+    if was_limit_notified_today(uid):
+        return False
+    if is_vip(uid):
+        return False  # VIP não precisa
     
     try:
-        await bot.send_message(chat_id=uid, text=message)
-        mark_jealousy_sent(uid)
-        save_message(uid, "system", "Mensagem de ciúmes enviada")
+        await bot.send_message(chat_id=uid, text=random.choice(LIMIT_RENEWED_MESSAGES))
+        mark_limit_notified(uid)
+        save_message(uid, "system", "Notificação de limite renovado")
         return True
     except:
         return False
 
 async def process_engagement_jobs(bot):
-    """Processa todos os jobs de engajamento"""
+    """Processa jobs de engajamento"""
     logger.info("🔄 Processando jobs...")
     
     users = get_all_active_users()
     current_hour = datetime.now().hour
     
+    # Contador para enviar limite renovado aos poucos
+    limit_notifications_sent = 0
+    max_limit_notifications = 20  # Máximo por hora para não sobrecarregar
+    
     for uid in users:
+        if is_blacklisted(uid):
+            continue
+        
         try:
             hours_inactive = get_hours_since_activity(uid)
+            
             if hours_inactive:
                 last_level = get_last_reengagement(uid)
                 
-                # Re-engajamento por inatividade
                 if hours_inactive >= 168 and last_level < 4:
                     await send_reengagement_message(bot, uid, 4)
                 elif hours_inactive >= 72 and last_level < 3:
-                    # 3 dias: Envia desconto relâmpago!
                     await send_flash_discount(bot, uid)
                     await send_reengagement_message(bot, uid, 3)
                 elif hours_inactive >= 24 and last_level < 2:
-                    # Após 24h: envia ciúmes
                     await send_jealousy_message(bot, uid)
                     await send_reengagement_message(bot, uid, 2)
                 elif hours_inactive >= 2 and last_level < 1:
@@ -1383,6 +1349,10 @@ async def process_engagement_jobs(bot):
             # Mensagens programadas
             if current_hour == 8:
                 await send_scheduled_message(bot, uid, "morning")
+                # Também notifica sobre limite renovado pela manhã
+                if limit_notifications_sent < max_limit_notifications:
+                    if await send_limit_renewed_notification(bot, uid):
+                        limit_notifications_sent += 1
             elif current_hour == 14:
                 await send_scheduled_message(bot, uid, "afternoon")
             elif current_hour == 20:
@@ -1393,8 +1363,7 @@ async def process_engagement_jobs(bot):
             # Lembrete PIX
             pix_time = get_pix_clicked_time(uid)
             if pix_time:
-                hours_since = (datetime.now() - pix_time).total_seconds() / 3600
-                if hours_since >= 1:
+                if (datetime.now() - pix_time).total_seconds() / 3600 >= 1:
                     await send_pix_reminder(bot, uid)
             
             await asyncio.sleep(0.1)
@@ -1402,7 +1371,7 @@ async def process_engagement_jobs(bot):
         except Exception as e:
             logger.error(f"Erro job {uid}: {e}")
     
-    logger.info(f"✅ Jobs processados para {len(users)} usuários")
+    logger.info(f"✅ Jobs processados ({len(users)} usuários, {limit_notifications_sent} notificações de limite)")
 
 async def engagement_scheduler(bot):
     logger.info("🚀 Scheduler iniciado")
@@ -1442,9 +1411,8 @@ async def clearmemory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("Uso: /clearmemory <user_id>")
         return
-    uid = int(context.args[0])
-    clear_memory(uid)
-    await update.message.reply_text(f"🗑️ Memória limpa: {uid}")
+    clear_memory(int(context.args[0]))
+    await update.message.reply_text(f"🗑️ Memória limpa")
 
 async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
@@ -1458,19 +1426,15 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     r.set(vip_key(uid), vip_until.isoformat())
     clear_pix_pending(uid)
     clear_pix_clicked(uid)
+    clear_pix_interest(uid)
     clear_flash_discount(uid)
     decrease_vip_slots()
     track_funnel(uid, "became_vip")
     
-    await update.message.reply_text(
-        f"✅ VIP ativado!\n👤 {uid}\n⏰ Até: {vip_until.strftime('%d/%m/%Y')}"
-    )
+    await update.message.reply_text(f"✅ VIP ativado!\n👤 {uid}\n⏰ Até: {vip_until.strftime('%d/%m/%Y')}")
     
     try:
-        await context.bot.send_message(
-            chat_id=uid,
-            text="💖 Pagamento confirmado!\nVIP ativo por 15 dias 😘\n\nAgora você é ilimitado 💕"
-        )
+        await context.bot.send_message(uid, "💖 Pagamento confirmado!\nVIP ativo por 15 dias 😘")
     except:
         pass
 
@@ -1488,33 +1452,24 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👥 Usuários: {total}\n"
         f"💎 VIPs: {vips}\n"
         f"📈 Conversão: {(vips/total*100) if total > 0 else 0:.1f}%\n"
-        f"🎫 Vagas VIP restantes: {slots}",
+        f"🎫 Vagas restantes: {slots}",
         parse_mode="Markdown"
     )
 
 async def funnel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Mostra estatísticas do funil"""
     if update.effective_user.id not in ADMIN_IDS:
         return
     
     stages = get_funnel_stats()
-    stage_names = {
-        0: "❓ Desconhecido",
-        1: "🚀 /start",
-        2: "🌍 Idioma",
-        3: "💬 1ª mensagem",
-        4: "⚠️ Aviso limite",
-        5: "🚫 Limite atingido",
-        6: "💳 Clicou PIX",
-        7: "⭐ Clicou Stars",
-        8: "📸 Enviou comprovante",
-        9: "💎 Virou VIP"
+    names = {
+        0: "❓ Desconhecido", 1: "🚀 /start", 2: "🌍 Idioma",
+        3: "💬 1ª msg", 4: "⚠️ Aviso", 5: "🚫 Limite",
+        6: "💳 PIX", 7: "⭐ Stars", 8: "📸 Comprovante", 9: "💎 VIP"
     }
     
-    msg = "📊 **FUNIL DE CONVERSÃO**\n\n"
+    msg = "📊 **FUNIL**\n\n"
     for stage, count in sorted(stages.items()):
-        name = stage_names.get(stage, f"Stage {stage}")
-        msg += f"{name}: {count}\n"
+        msg += f"{names.get(stage, f'Stage {stage}')}: {count}\n"
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -1532,6 +1487,8 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"📤 Enviando para {len(users)}...")
     
     for uid in users:
+        if is_blacklisted(uid):
+            continue
         try:
             await context.bot.send_message(chat_id=uid, text=message)
             sent += 1
@@ -1541,12 +1498,30 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"✅ Enviados: {sent}\n❌ Falhas: {failed}")
 
-async def migrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Migra usuários antigos"""
+# ================= NOVO: COMANDO /send PARA UM USUÁRIO =================
+async def send_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Envia mensagem para um usuário específico"""
     if update.effective_user.id not in ADMIN_IDS:
         return
     
-    await update.message.reply_text("🔄 Migrando usuários antigos...")
+    if len(context.args) < 2:
+        await update.message.reply_text("Uso: /send <user_id> <mensagem>")
+        return
+    
+    try:
+        uid = int(context.args[0])
+        message = " ".join(context.args[1:])
+        
+        await context.bot.send_message(chat_id=uid, text=message)
+        await update.message.reply_text(f"✅ Mensagem enviada para {uid}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erro: {e}")
+
+async def migrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    
+    await update.message.reply_text("🔄 Migrando...")
     
     migrated = 0
     all_uids = set()
@@ -1564,19 +1539,161 @@ async def migrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for uid in all_uids:
         r.sadd(all_users_key(), uid)
         if not r.exists(last_activity_key(int(uid))):
-            yesterday = datetime.now() - timedelta(hours=25)
-            r.set(last_activity_key(int(uid)), yesterday.isoformat())
+            r.set(last_activity_key(int(uid)), (datetime.now() - timedelta(hours=25)).isoformat())
         migrated += 1
     
-    await update.message.reply_text(
-        f"✅ Migração concluída!\n👥 {migrated} usuários migrados"
-    )
+    await update.message.reply_text(f"✅ {migrated} usuários migrados")
+
+# ================= NOVOS COMANDOS ADMIN =================
+async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mostra status de um usuário ou do próprio usuário"""
+    uid = update.effective_user.id
+    
+    # Se for admin e passou argumento, mostra do usuário específico
+    if update.effective_user.id in ADMIN_IDS and context.args:
+        uid = int(context.args[0])
+    
+    streak = get_streak(uid)
+    count = today_count(uid)
+    bonus = get_bonus_msgs(uid)
+    vip_status = is_vip(uid)
+    vip_expiry = get_vip_expiry(uid)
+    
+    msg = f"📋 **STATUS**\n\n"
+    msg += f"👤 ID: `{uid}`\n"
+    msg += f"🔥 Streak: {streak} dias\n"
+    msg += f"💬 Msgs hoje: {count}/{LIMITE_DIARIO}\n"
+    if bonus > 0:
+        msg += f"🎁 Msgs bônus: {bonus}\n"
+    
+    if vip_status:
+        msg += f"💎 VIP: ✅ (até {vip_expiry.strftime('%d/%m/%Y')})\n"
+    else:
+        msg += f"💎 VIP: ❌\n"
+        msg += f"📊 Restam: {max(0, LIMITE_DIARIO + bonus - count)} msgs"
+    
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+async def viplist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Lista todos os VIPs ativos"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    
+    users = get_all_active_users()
+    vips = []
+    
+    for uid in users:
+        if is_vip(uid):
+            expiry = get_vip_expiry(uid)
+            vips.append((uid, expiry))
+    
+    if not vips:
+        await update.message.reply_text("Nenhum VIP ativo")
+        return
+    
+    msg = "💎 **VIPs ATIVOS**\n\n"
+    for uid, expiry in sorted(vips, key=lambda x: x[1]):
+        msg += f"• `{uid}` → até {expiry.strftime('%d/%m/%Y')}\n"
+    
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+async def userinfo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mostra info completa de um usuário"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    if not context.args:
+        await update.message.reply_text("Uso: /userinfo <user_id>")
+        return
+    
+    uid = int(context.args[0])
+    
+    profile = get_user_profile(uid)
+    streak = get_streak(uid)
+    count = today_count(uid)
+    bonus = get_bonus_msgs(uid)
+    vip_status = is_vip(uid)
+    vip_expiry = get_vip_expiry(uid)
+    last_activity = get_last_activity(uid)
+    funnel_stage = int(r.get(funnel_key(uid)) or 0)
+    memory_count = len(get_memory(uid))
+    
+    msg = f"👤 **USUÁRIO {uid}**\n\n"
+    msg += f"📝 Nome: {profile.get('name', 'N/A')}\n"
+    msg += f"🎂 Idade: {profile.get('age', 'N/A')}\n"
+    msg += f"🔥 Streak: {streak} dias\n"
+    msg += f"💬 Msgs hoje: {count}/{LIMITE_DIARIO}\n"
+    msg += f"🎁 Bônus: {bonus}\n"
+    msg += f"🧠 Memória: {memory_count} msgs\n"
+    msg += f"📊 Funil: {funnel_stage}/9\n"
+    
+    if vip_status:
+        msg += f"💎 VIP: ✅ até {vip_expiry.strftime('%d/%m/%Y')}\n"
+    else:
+        msg += f"💎 VIP: ❌\n"
+    
+    if last_activity:
+        hours_ago = (datetime.now() - last_activity).total_seconds() / 3600
+        msg += f"⏰ Última atividade: {hours_ago:.1f}h atrás\n"
+    
+    if is_blacklisted(uid):
+        msg += f"🚫 BLOQUEADO\n"
+    
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+async def givebonus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Dá mensagens bônus para um usuário"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("Uso: /givebonus <user_id> <quantidade>")
+        return
+    
+    uid = int(context.args[0])
+    amount = int(context.args[1])
+    
+    add_bonus_msgs(uid, amount)
+    await update.message.reply_text(f"✅ +{amount} msgs bônus para {uid}\n(Total: {get_bonus_msgs(uid)})")
+    
+    try:
+        await context.bot.send_message(
+            uid, f"🎁 Você ganhou +{amount} mensagens extras! Aproveite 💕"
+        )
+    except:
+        pass
+
+async def blacklist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Bloqueia um usuário"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    if not context.args:
+        await update.message.reply_text("Uso: /blacklist <user_id>")
+        return
+    
+    uid = int(context.args[0])
+    add_to_blacklist(uid)
+    await update.message.reply_text(f"🚫 Usuário {uid} bloqueado")
+
+async def unblacklist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Desbloqueia um usuário"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    if not context.args:
+        await update.message.reply_text("Uso: /unblacklist <user_id>")
+        return
+    
+    uid = int(context.args[0])
+    remove_from_blacklist(uid)
+    await update.message.reply_text(f"✅ Usuário {uid} desbloqueado")
 
 # ================= CONFIGURAÇÃO DO BOT =================
 def setup_application():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
+    # Comandos usuário
     application.add_handler(CommandHandler("start", start_handler))
+    application.add_handler(CommandHandler("status", status_cmd))
+    
+    # Comandos admin
     application.add_handler(CommandHandler("reset", reset_cmd))
     application.add_handler(CommandHandler("resetall", resetall_cmd))
     application.add_handler(CommandHandler("clearmemory", clearmemory_cmd))
@@ -1584,7 +1701,15 @@ def setup_application():
     application.add_handler(CommandHandler("stats", stats_cmd))
     application.add_handler(CommandHandler("funnel", funnel_cmd))
     application.add_handler(CommandHandler("broadcast", broadcast_cmd))
+    application.add_handler(CommandHandler("send", send_cmd))
     application.add_handler(CommandHandler("migrate", migrate_cmd))
+    application.add_handler(CommandHandler("viplist", viplist_cmd))
+    application.add_handler(CommandHandler("userinfo", userinfo_cmd))
+    application.add_handler(CommandHandler("givebonus", givebonus_cmd))
+    application.add_handler(CommandHandler("blacklist", blacklist_cmd))
+    application.add_handler(CommandHandler("unblacklist", unblacklist_cmd))
+    
+    # Handlers
     application.add_handler(CallbackQueryHandler(callback_handler))
     application.add_handler(PreCheckoutQueryHandler(pre_checkout))
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, payment_success))
@@ -1622,10 +1747,7 @@ def set_webhook_route():
 
 @app.route("/trigger-engagement", methods=["GET"])
 def trigger_engagement():
-    asyncio.run_coroutine_threadsafe(
-        process_engagement_jobs(application.bot),
-        loop
-    )
+    asyncio.run_coroutine_threadsafe(process_engagement_jobs(application.bot), loop)
     return "Jobs disparados", 200
 
 @app.route(WEBHOOK_PATH, methods=["POST"])
@@ -1635,10 +1757,7 @@ def telegram_webhook():
         if not data:
             return "ok", 200
         update = Update.de_json(data, application.bot)
-        asyncio.run_coroutine_threadsafe(
-            application.process_update(update),
-            loop
-        )
+        asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
         return "ok", 200
     except Exception as e:
         logger.exception(f"Erro webhook: {e}")
@@ -1655,16 +1774,12 @@ async def setup_webhook():
         if not scheduler_started:
             asyncio.create_task(engagement_scheduler(application.bot))
             scheduler_started = True
-            logger.info("✅ Scheduler iniciado")
     except Exception as e:
         logger.error(f"Erro webhook: {e}")
 
 if __name__ == "__main__":
     asyncio.run_coroutine_threadsafe(application.initialize(), loop)
     asyncio.run_coroutine_threadsafe(application.start(), loop)
-    asyncio.run_coroutine_threadsafe(
-        engagement_scheduler(application.bot),
-        loop
-    )
-    logger.info(f"🌐 Flask na porta {PORT}")
+    asyncio.run_coroutine_threadsafe(engagement_scheduler(application.bot), loop)
+    logger.info(f"🌐 Flask porta {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
