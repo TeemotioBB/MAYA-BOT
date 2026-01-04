@@ -1999,7 +1999,7 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"❌ Falhas: {failed}"
     )
 
-# ================= NOVO: COMANDO /send PARA UM USUÁRIO =================
+# ================= COMANDO /send PARA UM USUÁRIO =================
 async def send_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Envia mensagem para um usuário específico"""
     if update.effective_user.id not in ADMIN_IDS:
@@ -2015,6 +2015,98 @@ async def send_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await context.bot.send_message(chat_id=uid, text=message)
         await update.message.reply_text(f"✅ Mensagem enviada para {uid}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erro: {e}")
+
+# ================= COMANDO /sendphoto PARA ENVIAR MÍDIA =================
+async def sendphoto_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Envia foto/documento para um usuário específico
+    Uso: Responda a uma foto/documento com /sendphoto <user_id> [legenda]
+    """
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            "📸 **Como usar:**\n\n"
+            "1️⃣ Envie uma foto ou documento\n"
+            "2️⃣ Responda com `/sendphoto <user_id> [legenda]`\n\n"
+            "Exemplo: `/sendphoto 123456789 Olha isso! 💕`",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Verifica se está respondendo a uma mensagem
+    if not update.message.reply_to_message:
+        await update.message.reply_text("❌ Responda a uma foto ou documento com este comando")
+        return
+    
+    reply = update.message.reply_to_message
+    
+    try:
+        uid = int(context.args[0])
+        caption = " ".join(context.args[1:]) if len(context.args) > 1 else None
+        
+        # Verifica o tipo de mídia na mensagem respondida
+        if reply.photo:
+            await context.bot.send_photo(
+                chat_id=uid,
+                photo=reply.photo[-1].file_id,
+                caption=caption
+            )
+            await update.message.reply_text(f"✅ Foto enviada para {uid}")
+        
+        elif reply.document:
+            await context.bot.send_document(
+                chat_id=uid,
+                document=reply.document.file_id,
+                caption=caption
+            )
+            await update.message.reply_text(f"✅ Documento enviado para {uid}")
+        
+        elif reply.video:
+            await context.bot.send_video(
+                chat_id=uid,
+                video=reply.video.file_id,
+                caption=caption
+            )
+            await update.message.reply_text(f"✅ Vídeo enviado para {uid}")
+        
+        elif reply.audio:
+            await context.bot.send_audio(
+                chat_id=uid,
+                audio=reply.audio.file_id,
+                caption=caption
+            )
+            await update.message.reply_text(f"✅ Áudio enviado para {uid}")
+        
+        elif reply.voice:
+            await context.bot.send_voice(
+                chat_id=uid,
+                voice=reply.voice.file_id,
+                caption=caption
+            )
+            await update.message.reply_text(f"✅ Mensagem de voz enviada para {uid}")
+        
+        elif reply.video_note:
+            await context.bot.send_video_note(
+                chat_id=uid,
+                video_note=reply.video_note.file_id
+            )
+            await update.message.reply_text(f"✅ Video note enviado para {uid}")
+        
+        elif reply.sticker:
+            await context.bot.send_sticker(
+                chat_id=uid,
+                sticker=reply.sticker.file_id
+            )
+            await update.message.reply_text(f"✅ Sticker enviado para {uid}")
+        
+        else:
+            await update.message.reply_text("❌ Tipo de mídia não suportado. Use foto, documento, vídeo ou áudio.")
+            
+    except ValueError:
+        await update.message.reply_text("❌ ID de usuário inválido")
     except Exception as e:
         await update.message.reply_text(f"❌ Erro: {e}")
 
@@ -2255,6 +2347,7 @@ def setup_application():
     application.add_handler(CommandHandler("funnel", funnel_cmd))
     application.add_handler(CommandHandler("broadcast", broadcast_cmd))
     application.add_handler(CommandHandler("send", send_cmd))
+    application.add_handler(CommandHandler("sendphoto", sendphoto_cmd))  # NOVO
     application.add_handler(CommandHandler("migrate", migrate_cmd))
     application.add_handler(CommandHandler("viplist", viplist_cmd))
     application.add_handler(CommandHandler("userinfo", userinfo_cmd))
