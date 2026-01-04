@@ -1103,15 +1103,17 @@ async def send_flash_discount(bot, uid):
     except:
         return False
 
-# ================= START =================
+# ================= START (COM LOG) =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
     if is_blacklisted(uid):
+        save_message(uid, "blocked", "❌ /start bloqueado - usuário na blacklist")
         return
     
     update_last_activity(uid)
     track_funnel(uid, "start")
+    save_message(uid, "action", "🚀 /START - Usuário iniciou o bot")
     
     try:
         await update.message.reply_text(
@@ -1121,10 +1123,12 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
             ]])
         )
+        save_message(uid, "sophia", "[MENU DE IDIOMA EXIBIDO]")
     except Exception as e:
         logger.error(f"Erro /start: {e}")
+        save_message(uid, "error", f"❌ ERRO /start: {str(e)[:30]}")
 
-# ================= CALLBACK =================
+# ================= CALLBACK (COM LOGS COMPLETOS) =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     
@@ -1133,38 +1137,49 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         uid = query.from_user.id
         
         if is_blacklisted(uid):
+            save_message(uid, "blocked", f"Ação bloqueada: {query.data}")
             return
         
         update_last_activity(uid)
         lang = get_lang(uid)
         
+        # LOG: Registra TODAS as ações de botão
+        save_message(uid, "action", f"🔘 CLICOU: {query.data}")
+        
         if query.data.startswith("lang_"):
             lang = query.data.split("_")[1]
             set_lang(uid, lang)
             track_funnel(uid, "lang_selected")
+            save_message(uid, "info", f"🌍 Idioma: {lang.upper()}")
             await query.message.edit_text(TEXTS[lang]["lang_ok"])
             await asyncio.sleep(0.8)
-            await context.bot.send_message(query.message.chat_id, TEXTS[lang]["after_lang"])
+            response = TEXTS[lang]["after_lang"]
+            save_message(uid, "sophia", response)
+            await context.bot.send_message(query.message.chat_id, response)
             if lang == "pt":
                 await asyncio.sleep(1.5)
+                save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
                 await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
                 await asyncio.sleep(2.0)
+                save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
                 await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
         elif query.data in ["pay_pix", "pay_pix_desconto"]:
             track_funnel(uid, "clicked_pix")
             set_pix_clicked(uid)
-            set_pix_interest(uid)  # NOVO: Marca interesse em PIX
+            set_pix_interest(uid)
             
             if query.data == "pay_pix_desconto" or has_flash_discount(uid):
                 set_flash_discount(uid, hours=2)
                 text = TEXTS["pt"]["pix_info_desconto"]
+                save_message(uid, "info", "💰 DESCONTO ATIVO - R$9,99")
             else:
                 text = TEXTS["pt"]["pix_info"]
                 urgency = get_urgency_message()
                 if urgency:
                     text += f"\n\n{urgency}"
             
+            save_message(uid, "sophia", "[TELA PIX EXIBIDA]")
             await context.bot.send_message(
                 chat_id=query.message.chat_id, text=text, parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
@@ -1173,7 +1188,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         
         elif query.data == "copy_pix":
-            set_pix_interest(uid)  # Mantém interesse
+            set_pix_interest(uid)
+            save_message(uid, "info", "📋 COPIOU CHAVE PIX")
             await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
@@ -1185,6 +1201,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             set_pix_pending(uid)
             set_pix_interest(uid)
             track_funnel(uid, "sent_receipt")
+            save_message(uid, "info", "📸 AGUARDANDO COMPROVANTE")
             await context.bot.send_message(
                 query.message.chat_id,
                 "📸 Envie o comprovante como **foto** ou **documento** 💕",
@@ -1194,6 +1211,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == "buy_vip":
             track_funnel(uid, "clicked_stars")
             price = PRECO_VIP_DESCONTO_STARS if has_flash_discount(uid) else PRECO_VIP_STARS
+            save_message(uid, "info", f"⭐ INICIOU COMPRA STARS ({price}⭐)")
             
             await context.bot.send_invoice(
                 chat_id=query.message.chat_id,
@@ -1209,11 +1227,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Erro callback: {e}")
 
-# ================= MENSAGENS (PIX FLEXÍVEL) =================
+# ================= MENSAGENS (PIX FLEXÍVEL + LOG COMPLETO) =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
     if is_blacklisted(uid):
+        save_message(uid, "blocked", "Mensagem bloqueada - usuário na blacklist")
         return
     
     update_last_activity(uid)
@@ -1222,12 +1241,21 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         has_photo = bool(update.message.photo)
         has_doc = bool(update.message.document)
+        text = update.message.text or ""
+        lang = get_lang(uid)
+        
+        # SEMPRE salva a mensagem do usuário primeiro (mesmo se for travar depois)
+        if text:
+            save_message(uid, "user", text)
+        elif has_photo:
+            save_message(uid, "user", "[📷 FOTO ENVIADA]")
+        elif has_doc:
+            save_message(uid, "user", "[📄 DOCUMENTO ENVIADO]")
         
         # CORREÇÃO: Aceita comprovante se tem QUALQUER interesse em PIX
-        # (clicou em PAGAR, COPIAR ou ENVIAR)
         if (has_photo or has_doc) and (is_pix_pending(uid) or has_pix_interest(uid)):
             logger.info(f"📸 Comprovante de {uid}")
-            lang = get_lang(uid)
+            save_message(uid, "action", "💳 COMPROVANTE PIX ENVIADO - Aguardando aprovação")
             
             clear_pix_pending(uid)
             clear_pix_clicked(uid)
@@ -1254,23 +1282,23 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except:
                     pass
             
-            await update.message.reply_text(TEXTS[lang]["pix_receipt_sent"])
+            response = TEXTS[lang]["pix_receipt_sent"]
+            save_message(uid, "sophia", response)
+            await update.message.reply_text(response)
             return
-        
-        text = update.message.text or ""
-        lang = get_lang(uid)
         
         if is_first_contact(uid):
             track_funnel(uid, "first_message")
         
-        # Bloqueia foto
+        # Bloqueia foto (mas já salvou a msg do usuário acima)
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-            save_message(uid, "user", text)
+            save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
             urgency = get_urgency_message()
             caption = TEXTS[lang]["photo_block"]
             if urgency:
                 caption += f"\n\n{urgency}"
             
+            save_message(uid, "sophia", caption)
             await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
                 photo=FOTO_TEASE_FILE_ID, caption=caption,
@@ -1281,18 +1309,21 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # Limite diário
+        # Limite diário (mas já salvou a msg do usuário acima)
         current_count = today_count(uid)
         bonus = get_bonus_msgs(uid)
         total_available = LIMITE_DIARIO + bonus
         
         if not is_vip(uid) and current_count >= total_available:
             track_funnel(uid, "limit_reached")
+            save_message(uid, "action", f"🔒 LIMITE ATINGIDO ({current_count}/{total_available}) - Usuário travado")
+            
             urgency = get_urgency_message()
             msg = TEXTS[lang]["limit"]
             if urgency:
                 msg += f"\n\n{urgency}"
             
+            save_message(uid, "sophia", msg)
             await update.message.reply_text(
                 msg, parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
@@ -1306,6 +1337,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not is_vip(uid):
             if bonus > 0:
                 use_bonus_msg(uid)
+                save_message(uid, "info", f"🎁 Usou 1 msg bônus (restam {get_bonus_msgs(uid)})")
             else:
                 increment(uid)
             await check_and_send_scarcity_warning(uid, context, update.effective_chat.id)
@@ -1321,14 +1353,18 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if streak_updated:
             streak_msg = get_streak_message(streak)
             if streak_msg:
+                save_message(uid, "info", f"🔥 Streak atualizado: {streak} dias")
                 await asyncio.sleep(1)
                 await context.bot.send_message(update.effective_chat.id, streak_msg)
         
     except Exception as e:
         logger.error(f"Erro message: {e}")
+        save_message(uid, "error", f"❌ ERRO: {str(e)[:50]}")
 
-# ================= PAGAMENTO =================
+# ================= PAGAMENTO (COM LOG) =================
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.pre_checkout_query.from_user.id
+    save_message(uid, "info", "⏳ PRE-CHECKOUT - Processando pagamento...")
     await update.pre_checkout_query.answer(ok=True)
 
 async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1340,7 +1376,10 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
     clear_flash_discount(uid)
     decrease_vip_slots()
     track_funnel(uid, "became_vip")
-    await update.message.reply_text(TEXTS[get_lang(uid)]["vip_success"])
+    save_message(uid, "action", f"💎 VIP ATIVADO! Válido até {vip_until.strftime('%d/%m/%Y')}")
+    response = TEXTS[get_lang(uid)]["vip_success"]
+    save_message(uid, "sophia", response)
+    await update.message.reply_text(response)
 
 # ================= SISTEMA DE ENGAJAMENTO =================
 async def send_reengagement_message(bot, uid, level):
