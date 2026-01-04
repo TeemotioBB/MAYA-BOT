@@ -1209,7 +1209,7 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
                     chat_id=chat_id, text=msg, parse_mode="Markdown",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 4,99)", callback_data="pay_pix")],
-                        [InlineKeyboardButton("💖 VIP 250 ⭐", callback_data="buy_vip")]
+                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                     ])
                 )
             else:
@@ -1452,7 +1452,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=update.effective_chat.id,
                 photo=FOTO_TEASE_FILE_ID, caption=caption,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 4,99)", callback_data="pay_pix")],
+                    [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", callback_data="pay_pix")],
                     [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                 ])
             )
