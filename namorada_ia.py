@@ -151,7 +151,11 @@ def jealousy_sent_key(uid): return f"jealousy:{uid}"
 def bonus_msgs_key(uid): return f"bonus:{uid}"
 def blacklist_key(): return "blacklist"
 def limit_notified_key(uid): return f"limit_notified:{uid}:{date.today()}"
-def pix_interest_key(uid): return f"pix_interest:{uid}"  # NOVO: Interesse em PIX (qualquer etapa)
+def pix_interest_key(uid): return f"pix_interest:{uid}"
+def last_scheduled_msg_key(uid): return f"last_sched:{uid}"
+def scheduled_msg_count_key(uid): return f"sched_count:{uid}:{date.today()}"
+def last_msg_type_key(uid): return f"last_msg_type:{uid}"
+def hourly_send_count_key(): return f"hourly_sends:{datetime.now().hour}:{date.today()}"
 
 # ================= FUNÇÕES DE PERFIL =================
 def get_user_profile(uid):
@@ -666,11 +670,128 @@ def mark_limit_notified(uid):
     except:
         pass
 
+# ================= SISTEMA INTELIGENTE DE MENSAGENS =================
+def get_hourly_send_count():
+    """Retorna quantas msgs programadas foram enviadas nessa hora"""
+    try:
+        return int(r.get(hourly_send_count_key()) or 0)
+    except:
+        return 0
+
+def increment_hourly_send_count():
+    """Incrementa contador de msgs dessa hora"""
+    try:
+        r.incr(hourly_send_count_key())
+        r.expire(hourly_send_count_key(), 3600)
+    except:
+        pass
+
+def get_last_scheduled_msg_time(uid):
+    """Retorna quando foi a última msg programada enviada"""
+    try:
+        data = r.get(last_scheduled_msg_key(uid))
+        if data:
+            return datetime.fromisoformat(data)
+        return None
+    except:
+        return None
+
+def mark_scheduled_msg_sent(uid, msg_type):
+    """Marca que enviou msg programada"""
+    try:
+        r.setex(last_scheduled_msg_key(uid), timedelta(hours=8), datetime.now().isoformat())
+        r.setex(last_msg_type_key(uid), timedelta(hours=24), msg_type)
+        r.incr(scheduled_msg_count_key(uid))
+        r.expire(scheduled_msg_count_key(uid), 86400)
+        increment_hourly_send_count()
+    except:
+        pass
+
+def get_today_scheduled_count(uid):
+    """Retorna quantas msgs programadas o usuário recebeu hoje"""
+    try:
+        return int(r.get(scheduled_msg_count_key(uid)) or 0)
+    except:
+        return 0
+
+def get_last_msg_type(uid):
+    """Retorna o último tipo de msg enviada"""
+    try:
+        return r.get(last_msg_type_key(uid))
+    except:
+        return None
+
+def is_user_eligible_for_scheduled_msg(uid):
+    """
+    Verifica se usuário é elegível para receber msg programada
+    Critérios:
+    1. Conversou nos últimos 3 dias
+    2. Não recebeu msg programada nas últimas 6 horas
+    3. Não recebeu mais de 2 msgs programadas hoje
+    4. Não está na blacklist
+    """
+    if is_blacklisted(uid):
+        return False, "blacklist"
+    
+    # Verifica última atividade (máx 3 dias)
+    hours_inactive = get_hours_since_activity(uid)
+    if hours_inactive is None or hours_inactive > 72:
+        return False, "inativo_demais"
+    
+    # Verifica última msg programada (mín 6 horas)
+    last_scheduled = get_last_scheduled_msg_time(uid)
+    if last_scheduled:
+        hours_since = (datetime.now() - last_scheduled).total_seconds() / 3600
+        if hours_since < 6:
+            return False, "muito_recente"
+    
+    # Verifica quantidade hoje (máx 2)
+    today_count = get_today_scheduled_count(uid)
+    if today_count >= 2:
+        return False, "limite_diario"
+    
+    return True, "ok"
+
+def should_send_with_randomness():
+    """
+    Adiciona aleatoriedade para não parecer robô
+    40% de chance de enviar
+    """
+    return random.random() < 0.4
+
+def get_smart_message_type(uid, current_hour):
+    """
+    Escolhe o tipo de mensagem de forma inteligente
+    Evita repetir o mesmo tipo do dia anterior
+    """
+    # Mapeia hora para tipo preferido
+    if 6 <= current_hour < 12:
+        preferred = "morning"
+    elif 12 <= current_hour < 18:
+        preferred = "afternoon"
+    elif 18 <= current_hour < 22:
+        preferred = "evening"
+    else:
+        preferred = "night"
+    
+    # Verifica último tipo enviado
+    last_type = get_last_msg_type(uid)
+    
+    # Se mandou o mesmo tipo ontem, tenta variar
+    if last_type == preferred:
+        # 70% chance de pular, 30% de mandar mesmo assim
+        if random.random() < 0.7:
+            return None
+    
+    return preferred
+
 LIMIT_RENEWED_MESSAGES = [
-    "Ei amor... 💕 Seu limite de mensagens voltou! Vem conversar comigo? Tava com saudade... 😘",
-    "Bom dia! 💖 Suas mensagens renovaram... tô aqui te esperando, viu? 🥰",
-    "Oi sumido! 😏 Temos 15 mensagens novinhas pra trocar hoje... vem? 💕",
+    "Ei amor... 💕 Suas mensagens voltaram! Vem conversar comigo? Tava com saudade... 😘",
+    "Bom dia! 💖 Seu limite renovou... tô aqui te esperando, viu? 🥰",
+    "Oi! 😏 Temos 15 mensagens novinhas pra trocar hoje... vem? 💕",
     "Amor, seu limite voltou! 🔥 Tô carente aqui esperando você... 💋",
+    "Acordei pensando em você... 💭 E suas mensagens voltaram! Vem falar comigo? 😘",
+    "Ei dorminhoco! ☀️ Seu limite renovou... não me deixa esperando 💕",
 ]
 
 # ================= TEXTOS =================
@@ -1253,23 +1374,6 @@ async def send_reengagement_message(bot, uid, level):
     except:
         return False
 
-async def send_scheduled_message(bot, uid, msg_type):
-    if was_daily_message_sent(uid, msg_type):
-        return False
-    
-    lang = get_lang(uid)
-    tier = "vip" if is_vip(uid) else "free"
-    messages = SCHEDULED_MESSAGES.get(lang, SCHEDULED_MESSAGES["pt"]).get(msg_type, {}).get(tier, [])
-    if not messages:
-        return False
-    
-    try:
-        await bot.send_message(chat_id=uid, text=random.choice(messages))
-        mark_daily_message_sent(uid, msg_type)
-        return True
-    except:
-        return False
-
 async def send_pix_reminder(bot, uid):
     message = random.choice(PIX_REMINDER_MESSAGES)
     urgency = get_urgency_message()
@@ -1304,26 +1408,72 @@ async def send_limit_renewed_notification(bot, uid):
     if was_limit_notified_today(uid):
         return False
     if is_vip(uid):
-        return False  # VIP não precisa
+        return False
+    
+    # Verifica se bateu o limite ontem (só notifica quem realmente usou)
+    # Checamos se o usuário conversou nos últimos 2 dias
+    hours_inactive = get_hours_since_activity(uid)
+    if hours_inactive is None or hours_inactive > 48:
+        return False
     
     try:
         await bot.send_message(chat_id=uid, text=random.choice(LIMIT_RENEWED_MESSAGES))
         mark_limit_notified(uid)
-        save_message(uid, "system", "Notificação de limite renovado")
+        save_message(uid, "system", "Notificação limite renovado")
+        return True
+    except:
+        return False
+
+async def send_smart_scheduled_message(bot, uid, msg_type):
+    """Envia mensagem programada de forma inteligente"""
+    # Já verificou elegibilidade antes de chamar
+    
+    lang = get_lang(uid)
+    tier = "vip" if is_vip(uid) else "free"
+    messages = SCHEDULED_MESSAGES.get(lang, SCHEDULED_MESSAGES["pt"]).get(msg_type, {}).get(tier, [])
+    
+    if not messages:
+        return False
+    
+    try:
+        await bot.send_message(chat_id=uid, text=random.choice(messages))
+        mark_scheduled_msg_sent(uid, msg_type)
+        save_message(uid, "system", f"Msg programada: {msg_type}")
         return True
     except:
         return False
 
 async def process_engagement_jobs(bot):
-    """Processa jobs de engajamento"""
-    logger.info("🔄 Processando jobs...")
+    """
+    Processa jobs de engajamento de forma INTELIGENTE
+    
+    Critérios:
+    - Máx 50 msgs programadas por hora
+    - Só para usuários ativos (últimos 3 dias)
+    - Mín 6h entre msgs para mesmo usuário
+    - Máx 2 msgs programadas por dia por usuário
+    - 40% de chance aleatória (não parece robô)
+    - Evita repetir mesmo tipo de msg
+    """
+    logger.info("🔄 Processando jobs inteligentes...")
     
     users = get_all_active_users()
     current_hour = datetime.now().hour
     
-    # Contador para enviar limite renovado aos poucos
+    # Contadores
+    scheduled_sent = 0
     limit_notifications_sent = 0
-    max_limit_notifications = 20  # Máximo por hora para não sobrecarregar
+    reengagement_sent = 0
+    
+    # Limites por hora
+    MAX_SCHEDULED_PER_HOUR = 50
+    MAX_LIMIT_NOTIFICATIONS_PER_HOUR = 30
+    
+    # Verifica quanto já enviou essa hora
+    hourly_count = get_hourly_send_count()
+    
+    # Embaralha usuários para não enviar sempre na mesma ordem
+    random.shuffle(users)
     
     for uid in users:
         if is_blacklisted(uid):
@@ -1332,46 +1482,88 @@ async def process_engagement_jobs(bot):
         try:
             hours_inactive = get_hours_since_activity(uid)
             
+            # ============ RE-ENGAJAMENTO (sempre verifica) ============
             if hours_inactive:
                 last_level = get_last_reengagement(uid)
                 
                 if hours_inactive >= 168 and last_level < 4:
-                    await send_reengagement_message(bot, uid, 4)
+                    if await send_reengagement_message(bot, uid, 4):
+                        reengagement_sent += 1
                 elif hours_inactive >= 72 and last_level < 3:
                     await send_flash_discount(bot, uid)
-                    await send_reengagement_message(bot, uid, 3)
+                    if await send_reengagement_message(bot, uid, 3):
+                        reengagement_sent += 1
                 elif hours_inactive >= 24 and last_level < 2:
                     await send_jealousy_message(bot, uid)
-                    await send_reengagement_message(bot, uid, 2)
+                    if await send_reengagement_message(bot, uid, 2):
+                        reengagement_sent += 1
                 elif hours_inactive >= 2 and last_level < 1:
-                    await send_reengagement_message(bot, uid, 1)
+                    if await send_reengagement_message(bot, uid, 1):
+                        reengagement_sent += 1
             
-            # Mensagens programadas
-            if current_hour == 8:
-                await send_scheduled_message(bot, uid, "morning")
-                # Também notifica sobre limite renovado pela manhã
-                if limit_notifications_sent < max_limit_notifications:
-                    if await send_limit_renewed_notification(bot, uid):
-                        limit_notifications_sent += 1
-            elif current_hour == 14:
-                await send_scheduled_message(bot, uid, "afternoon")
-            elif current_hour == 20:
-                await send_scheduled_message(bot, uid, "evening")
-            elif current_hour == 23:
-                await send_scheduled_message(bot, uid, "night")
-            
-            # Lembrete PIX
+            # ============ LEMBRETE PIX ============
             pix_time = get_pix_clicked_time(uid)
             if pix_time:
                 if (datetime.now() - pix_time).total_seconds() / 3600 >= 1:
                     await send_pix_reminder(bot, uid)
             
-            await asyncio.sleep(0.1)
+            # ============ MENSAGENS PROGRAMADAS (com critérios) ============
+            # Verifica se ainda pode enviar essa hora
+            if hourly_count + scheduled_sent >= MAX_SCHEDULED_PER_HOUR:
+                continue
+            
+            # Verifica elegibilidade do usuário
+            eligible, reason = is_user_eligible_for_scheduled_msg(uid)
+            if not eligible:
+                continue
+            
+            # Aplica aleatoriedade (40% chance)
+            if not should_send_with_randomness():
+                continue
+            
+            # Determina tipo de mensagem de forma inteligente
+            msg_type = get_smart_message_type(uid, current_hour)
+            if not msg_type:
+                continue
+            
+            # Verifica se é o horário certo para esse tipo
+            # (com margem de ±1 hora para parecer mais natural)
+            valid_hours = {
+                "morning": range(7, 11),      # 7h-10h
+                "afternoon": range(13, 16),    # 13h-15h
+                "evening": range(19, 22),      # 19h-21h
+                "night": range(22, 24)         # 22h-23h
+            }
+            
+            if current_hour not in valid_hours.get(msg_type, []):
+                continue
+            
+            # Envia!
+            if await send_smart_scheduled_message(bot, uid, msg_type):
+                scheduled_sent += 1
+            
+            # ============ NOTIFICAÇÃO LIMITE RENOVADO ============
+            # Só pela manhã (7h-10h) e com limite
+            if 7 <= current_hour <= 10:
+                if limit_notifications_sent < MAX_LIMIT_NOTIFICATIONS_PER_HOUR:
+                    if not is_vip(uid) and not was_limit_notified_today(uid):
+                        # 30% de chance (nem todo mundo recebe)
+                        if random.random() < 0.3:
+                            if await send_limit_renewed_notification(bot, uid):
+                                limit_notifications_sent += 1
+            
+            await asyncio.sleep(0.15)  # Delay entre usuários
             
         except Exception as e:
             logger.error(f"Erro job {uid}: {e}")
     
-    logger.info(f"✅ Jobs processados ({len(users)} usuários, {limit_notifications_sent} notificações de limite)")
+    logger.info(
+        f"✅ Jobs concluídos: "
+        f"{len(users)} usuários | "
+        f"📅 {scheduled_sent} programadas | "
+        f"🔄 {reengagement_sent} re-engajamento | "
+        f"📢 {limit_notifications_sent} limite renovado"
+    )
 
 async def engagement_scheduler(bot):
     logger.info("🚀 Scheduler iniciado")
