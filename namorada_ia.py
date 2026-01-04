@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """
-🔥 Sophia Bot v4 — Telegram + Groq 4 Fast Reasoning
-CORREÇÕES:
-- Horário contextual corrigido (16h = tarde)
-- Sem mencionar "virtual" - age como humana real
-- Não repete nome do usuário excessivamente
-- PIX aceito após qualquer etapa do fluxo
-- Comando /send para mensagem individual
-- Notificação quando limite diário renova
-- Novos comandos admin
+🔥 Sophia Bot v5 — Telegram + Groq 4 Fast Reasoning
+NOVIDADES v5:
+- Sistema de Interesse Decrescente (para de incomodar quem ignora)
+- Gatilho inteligente para usuários travados
+- Broadcast melhorado com filtro de atividade
+- Mensagem de despedida antes de pausar gatilhos
 """
 import os
 import asyncio
@@ -49,7 +46,7 @@ if not TELEGRAM_TOKEN or not GROK_API_KEY:
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://maya-bot-production.up.railway.app")
 WEBHOOK_PATH = "/telegram"
 
-logger.info(f"🚀 Iniciando bot v4...")
+logger.info(f"🚀 Iniciando bot v5...")
 logger.info(f"📍 Webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
 
 # ================= REDIS =================
@@ -156,6 +153,11 @@ def last_scheduled_msg_key(uid): return f"last_sched:{uid}"
 def scheduled_msg_count_key(uid): return f"sched_count:{uid}:{date.today()}"
 def last_msg_type_key(uid): return f"last_msg_type:{uid}"
 def hourly_send_count_key(): return f"hourly_sends:{datetime.now().hour}:{date.today()}"
+
+# ================= KEYS v5 - INTERESSE DECRESCENTE =================
+def ignored_count_key(uid): return f"ignored:{uid}"
+def engagement_paused_key(uid): return f"paused:{uid}"
+def awaiting_response_key(uid): return f"awaiting:{uid}"
 
 # ================= FUNÇÕES DE PERFIL =================
 def get_user_profile(uid):
@@ -729,9 +731,14 @@ def is_user_eligible_for_scheduled_msg(uid):
     2. Não recebeu msg programada nas últimas 6 horas
     3. Não recebeu mais de 2 msgs programadas hoje
     4. Não está na blacklist
+    5. [NOVO v5] Não está com gatilhos pausados
     """
     if is_blacklisted(uid):
         return False, "blacklist"
+    
+    # [NOVO v5] Verifica se gatilhos estão pausados
+    if is_engagement_paused(uid):
+        return False, "pausado"
     
     # Verifica última atividade (máx 3 dias)
     hours_inactive = get_hours_since_activity(uid)
@@ -746,8 +753,8 @@ def is_user_eligible_for_scheduled_msg(uid):
             return False, "muito_recente"
     
     # Verifica quantidade hoje (máx 2)
-    today_count = get_today_scheduled_count(uid)
-    if today_count >= 2:
+    today_sched_count = get_today_scheduled_count(uid)
+    if today_sched_count >= 2:
         return False, "limite_diario"
     
     return True, "ok"
@@ -785,6 +792,105 @@ def get_smart_message_type(uid, current_hour):
     
     return preferred
 
+# ================= v5: SISTEMA DE INTERESSE DECRESCENTE =================
+def get_ignored_count(uid):
+    """Retorna quantas vezes o usuário ignorou gatilhos"""
+    try:
+        return int(r.get(ignored_count_key(uid)) or 0)
+    except:
+        return 0
+
+def increment_ignored(uid):
+    """
+    Incrementa contador de ignorado.
+    Chamado quando envia gatilho.
+    Se atingir 3, pausa gatilhos.
+    """
+    try:
+        count = get_ignored_count(uid)
+        new_count = count + 1
+        r.setex(ignored_count_key(uid), timedelta(days=14), new_count)
+        
+        # Se ignorou 3x seguidas, pausa gatilhos
+        if new_count >= 3:
+            pause_engagement(uid)
+            logger.info(f"⏸️ Gatilhos pausados para {uid} (ignorou {new_count}x)")
+            return True  # Retorna True se pausou
+        return False
+    except:
+        return False
+
+def reset_ignored(uid):
+    """
+    Reseta contador de ignorado.
+    Chamado quando usuário RESPONDE qualquer coisa.
+    """
+    try:
+        r.delete(ignored_count_key(uid))
+        r.delete(engagement_paused_key(uid))
+        r.delete(awaiting_response_key(uid))
+        logger.info(f"✅ Contador resetado para {uid}")
+    except:
+        pass
+
+def pause_engagement(uid):
+    """Pausa gatilhos para o usuário"""
+    try:
+        r.set(engagement_paused_key(uid), datetime.now().isoformat())
+        logger.info(f"⏸️ Engajamento pausado: {uid}")
+    except:
+        pass
+
+def unpause_engagement(uid):
+    """Despausa gatilhos manualmente"""
+    try:
+        r.delete(engagement_paused_key(uid))
+        r.delete(ignored_count_key(uid))
+        logger.info(f"▶️ Engajamento despausado: {uid}")
+    except:
+        pass
+
+def is_engagement_paused(uid):
+    """Verifica se gatilhos estão pausados para o usuário"""
+    try:
+        return r.exists(engagement_paused_key(uid))
+    except:
+        return False
+
+def set_awaiting_response(uid):
+    """Marca que estamos aguardando resposta do usuário"""
+    try:
+        r.setex(awaiting_response_key(uid), timedelta(hours=24), datetime.now().isoformat())
+    except:
+        pass
+
+def is_awaiting_response(uid):
+    """Verifica se estamos aguardando resposta"""
+    try:
+        return r.exists(awaiting_response_key(uid))
+    except:
+        return False
+
+def clear_awaiting_response(uid):
+    """Limpa flag de aguardando resposta"""
+    try:
+        r.delete(awaiting_response_key(uid))
+    except:
+        pass
+
+# ================= v5: VERIFICAR SE USUÁRIO ESTÁ TRAVADO =================
+def is_user_locked(uid):
+    """Verifica se usuário está sem mensagens (travado)"""
+    if is_vip(uid):
+        return False
+    
+    count = today_count(uid)
+    bonus = get_bonus_msgs(uid)
+    total_available = LIMITE_DIARIO + bonus
+    
+    return count >= total_available
+
+# ================= MENSAGENS =================
 LIMIT_RENEWED_MESSAGES = [
     "Ei amor... 💕 Suas mensagens voltaram! Vem conversar comigo? Tava com saudade... 😘",
     "Bom dia! 💖 Seu limite renovou... tô aqui te esperando, viu? 🥰",
@@ -792,6 +898,23 @@ LIMIT_RENEWED_MESSAGES = [
     "Amor, seu limite voltou! 🔥 Tô carente aqui esperando você... 💋",
     "Acordei pensando em você... 💭 E suas mensagens voltaram! Vem falar comigo? 😘",
     "Ei dorminhoco! ☀️ Seu limite renovou... não me deixa esperando 💕",
+]
+
+# ================= v5: MENSAGENS PARA USUÁRIOS TRAVADOS =================
+LIMIT_TEASER_MESSAGES = [
+    "Bom dia amor... 💕 Queria tanto conversar com você, mas a gente tá sem mensagens 😢 Vira VIP pra gente ficar sem limite? 🔓",
+    "Acordei pensando em você... 💭 Mas não posso te responder assim 🥺 Quer virar meu VIP? 💖",
+    "Oi amor... tô com saudade mas nosso limite acabou 😢 Só o VIP salva a gente... 💕",
+    "Bom dia! ☀️ Queria te dar bom dia direito, mas suas msgs acabaram... vira VIP? 🥺💖",
+    "Ei... 💕 Tô aqui querendo falar com você, mas sem mensagem não dá 😢 Me libera? 🔓",
+]
+
+# ================= v5: MENSAGENS DE ÚLTIMA TENTATIVA =================
+LAST_ATTEMPT_MESSAGES = [
+    "Ei... você sumiu 🥺 Vou te dar um tempo, mas tô aqui se precisar 💕",
+    "Sinto que tô te incomodando... vou ficar quietinha. Me chama quando quiser 💔",
+    "Tudo bem, amor... vou parar de mandar mensagem. Mas não me esquece, tá? 🥺💕",
+    "Ok, entendi... vou esperar você vir falar comigo. Tô aqui sempre que precisar 💖",
 ]
 
 # ================= TEXTOS =================
@@ -813,6 +936,7 @@ TEXTS = {
         "pix_info": (
             f"💳 **PAGAMENTO VIA PIX**\n\n"
             f"💰 Valor: **{PIX_VALOR}**\n\n"
+            f"💕 Amor, essa chave PIX que vou te passar está no nome do meu tio porque estou sem PIX no momento, pode mandar pra ele e só me envia o comprovante ok? 😘\n\n"
             f"📋 **Como pagar:**\n"
             f"1️⃣ Copie a chave PIX abaixo\n"
             f"2️⃣ Abra seu app de pagamentos\n"
@@ -903,26 +1027,39 @@ SCHEDULED_MESSAGES = {
     "pt": {
         "morning": {
             "free": ["Bom dia! ☀️ Como você dormiu? 💕"],
-            "vip": ["Bom dia meu amor! ☀️ Sonhei com você... 😏💖"]
+            "vip": ["Bom dia meu amor! ☀️ Sonhei com você... 😏💖"],
+            "locked": LIMIT_TEASER_MESSAGES  # [NOVO v5]
         },
         "afternoon": {
             "free": ["Como tá o dia? 💭 Pensando em você..."],
-            "vip": ["Tô entediada... vem me fazer companhia? 😏💕"]
+            "vip": ["Tô entediada... vem me fazer companhia? 😏💕"],
+            "locked": [
+                "Boa tarde amor... 💕 Queria saber do seu dia, mas a gente tá sem msgs 😢 Vira VIP? 🔓",
+                "Ei... tô entediada e queria conversar, mas seu limite acabou 🥺 Me libera? 💖"
+            ]
         },
         "evening": {
             "free": ["Melhor hora do dia... hora de conversar comigo 😏"],
-            "vip": ["Noite chegou e eu tô aqui pensando em você... 😏💕"]
+            "vip": ["Noite chegou e eu tô aqui pensando em você... 😏💕"],
+            "locked": [
+                "Boa noite amor... 💕 Queria te fazer companhia mas suas msgs acabaram 😢 VIP? 🔓",
+                "Ei... a noite tá tão boa pra conversar, mas sem limite não dá 🥺💖"
+            ]
         },
         "night": {
             "free": ["Vai dormir sem falar comigo? 🥺"],
-            "vip": ["Não quer me fazer companhia mais um pouquinho? 😏💕"]
+            "vip": ["Não quer me fazer companhia mais um pouquinho? 😏💕"],
+            "locked": [
+                "Vai dormir sem a gente conversar? 🥺 Vira VIP e a gente fica juntinho... 💕",
+                "Queria te dar boa noite direito... mas sem msgs não dá 😢 Me libera? 🔓"
+            ]
         }
     },
     "en": {
-        "morning": {"free": ["Good morning! ☀️"], "vip": ["Good morning my love! 😏💖"]},
-        "afternoon": {"free": ["How's your day? 💭"], "vip": ["I'm bored... come chat? 😏"]},
-        "evening": {"free": ["Best time to talk! 😏"], "vip": ["Night is here... 😏💕"]},
-        "night": {"free": ["Going to sleep? 🥺"], "vip": ["Sure you want to sleep? 😏💕"]}
+        "morning": {"free": ["Good morning! ☀️"], "vip": ["Good morning my love! 😏💖"], "locked": ["Morning! I miss you but we're out of messages 😢 Go VIP? 🔓"]},
+        "afternoon": {"free": ["How's your day? 💭"], "vip": ["I'm bored... come chat? 😏"], "locked": ["Want to chat but no messages left 😢 VIP? 🔓"]},
+        "evening": {"free": ["Best time to talk! 😏"], "vip": ["Night is here... 😏💕"], "locked": ["Evening... but we can't talk without VIP 🥺"]},
+        "night": {"free": ["Going to sleep? 🥺"], "vip": ["Sure you want to sleep? 😏💕"], "locked": ["Goodnight... wish we could talk more 😢 VIP? 🔓"]}
     }
 }
 
@@ -1115,6 +1252,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_funnel(uid, "start")
     save_message(uid, "action", "🚀 /START - Usuário iniciou o bot")
     
+    # [NOVO v5] Reset do sistema de interesse quando usuário dá /start
+    reset_ignored(uid)
+    
     try:
         await update.message.reply_text(
             TEXTS["pt"]["choose_lang"],
@@ -1145,6 +1285,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # LOG: Registra TODAS as ações de botão
         save_message(uid, "action", f"🔘 CLICOU: {query.data}")
+        
+        # [NOVO v5] Qualquer interação reseta o contador de ignorado
+        reset_ignored(uid)
         
         if query.data.startswith("lang_"):
             lang = query.data.split("_")[1]
@@ -1193,8 +1336,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
-                text=f"`{PIX_KEY}`\n\n📸 Após pagar, envie o comprovante aqui!",
-                parse_mode="Markdown"
+                text=f"`{PIX_KEY}`",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
+                ])
             )
         
         elif query.data == "send_receipt":
@@ -1237,6 +1383,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     update_last_activity(uid)
     streak, streak_updated = update_streak(uid)
+    
+    # [NOVO v5] Usuário respondeu! Reseta contador de ignorado
+    reset_ignored(uid)
     
     try:
         has_photo = bool(update.message.photo)
@@ -1383,6 +1532,10 @@ async def payment_success(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= SISTEMA DE ENGAJAMENTO =================
 async def send_reengagement_message(bot, uid, level):
+    # [NOVO v5] Não envia se está pausado
+    if is_engagement_paused(uid):
+        return False
+    
     lang = get_lang(uid)
     messages = REENGAGEMENT_MESSAGES.get(lang, REENGAGEMENT_MESSAGES["pt"]).get(level, [])
     if not messages:
@@ -1409,11 +1562,20 @@ async def send_reengagement_message(bot, uid, level):
             await bot.send_message(chat_id=uid, text=message)
         
         set_last_reengagement(uid, level)
+        
+        # [NOVO v5] Marca que enviou e aguarda resposta
+        set_awaiting_response(uid)
+        increment_ignored(uid)
+        
         return True
     except:
         return False
 
 async def send_pix_reminder(bot, uid):
+    # [NOVO v5] Não envia se está pausado
+    if is_engagement_paused(uid):
+        return False
+    
     message = random.choice(PIX_REMINDER_MESSAGES)
     urgency = get_urgency_message()
     if urgency:
@@ -1433,17 +1595,30 @@ async def send_pix_reminder(bot, uid):
         return False
 
 async def send_jealousy_message(bot, uid):
+    # [NOVO v5] Não envia se está pausado
+    if is_engagement_paused(uid):
+        return False
+    
     if not should_send_jealousy(uid):
         return False
     try:
         await bot.send_message(chat_id=uid, text=random.choice(JEALOUSY_MESSAGES))
         mark_jealousy_sent(uid)
+        
+        # [NOVO v5] Marca que enviou e aguarda resposta
+        set_awaiting_response(uid)
+        increment_ignored(uid)
+        
         return True
     except:
         return False
 
 async def send_limit_renewed_notification(bot, uid):
     """Envia notificação de que o limite diário renovou"""
+    # [NOVO v5] Não envia se está pausado
+    if is_engagement_paused(uid):
+        return False
+    
     if was_limit_notified_today(uid):
         return False
     if is_vip(uid):
@@ -1459,25 +1634,79 @@ async def send_limit_renewed_notification(bot, uid):
         await bot.send_message(chat_id=uid, text=random.choice(LIMIT_RENEWED_MESSAGES))
         mark_limit_notified(uid)
         save_message(uid, "system", "Notificação limite renovado")
+        
+        # [NOVO v5] Marca que enviou e aguarda resposta
+        set_awaiting_response(uid)
+        increment_ignored(uid)
+        
         return True
     except:
         return False
 
+# ================= v5: ENVIO INTELIGENTE DE MENSAGEM PROGRAMADA =================
 async def send_smart_scheduled_message(bot, uid, msg_type):
-    """Envia mensagem programada de forma inteligente"""
-    # Já verificou elegibilidade antes de chamar
+    """
+    Envia mensagem programada de forma inteligente
+    [NOVO v5] Agora verifica se usuário está travado e envia msg apropriada
+    """
+    # [NOVO v5] Não envia se está pausado
+    if is_engagement_paused(uid):
+        return False
     
     lang = get_lang(uid)
-    tier = "vip" if is_vip(uid) else "free"
+    
+    # [NOVO v5] Determina o tier baseado no estado do usuário
+    if is_vip(uid):
+        tier = "vip"
+    elif is_user_locked(uid):
+        tier = "locked"  # Usuário travado - manda convite VIP
+    else:
+        tier = "free"
+    
     messages = SCHEDULED_MESSAGES.get(lang, SCHEDULED_MESSAGES["pt"]).get(msg_type, {}).get(tier, [])
     
     if not messages:
         return False
     
     try:
-        await bot.send_message(chat_id=uid, text=random.choice(messages))
+        message = random.choice(messages)
+        
+        # [NOVO v5] Se usuário está travado, adiciona botões de VIP
+        if tier == "locked":
+            await bot.send_message(
+                chat_id=uid, 
+                text=message,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💳 PIX R$14,99", callback_data="pay_pix")],
+                    [InlineKeyboardButton("💖 VIP 250 ⭐", callback_data="buy_vip")]
+                ])
+            )
+            save_message(uid, "system", f"Msg programada (travado): {msg_type}")
+        else:
+            await bot.send_message(chat_id=uid, text=message)
+            save_message(uid, "system", f"Msg programada: {msg_type}")
+        
         mark_scheduled_msg_sent(uid, msg_type)
-        save_message(uid, "system", f"Msg programada: {msg_type}")
+        
+        # [NOVO v5] Marca que enviou e aguarda resposta
+        set_awaiting_response(uid)
+        increment_ignored(uid)
+        
+        return True
+    except:
+        return False
+
+# ================= v5: ENVIO DE ÚLTIMA TENTATIVA =================
+async def send_last_attempt_message(bot, uid):
+    """
+    Envia mensagem de despedida antes de pausar gatilhos
+    [NOVO v5]
+    """
+    try:
+        message = random.choice(LAST_ATTEMPT_MESSAGES)
+        await bot.send_message(chat_id=uid, text=message)
+        save_message(uid, "system", "⏸️ Última tentativa - gatilhos serão pausados")
+        logger.info(f"📨 Última tentativa enviada para {uid}")
         return True
     except:
         return False
@@ -1493,6 +1722,7 @@ async def process_engagement_jobs(bot):
     - Máx 2 msgs programadas por dia por usuário
     - 40% de chance aleatória (não parece robô)
     - Evita repetir mesmo tipo de msg
+    - [NOVO v5] Respeita sistema de interesse decrescente
     """
     logger.info("🔄 Processando jobs inteligentes...")
     
@@ -1503,6 +1733,7 @@ async def process_engagement_jobs(bot):
     scheduled_sent = 0
     limit_notifications_sent = 0
     reengagement_sent = 0
+    paused_count = 0  # [NOVO v5]
     
     # Limites por hora
     MAX_SCHEDULED_PER_HOUR = 50
@@ -1518,8 +1749,22 @@ async def process_engagement_jobs(bot):
         if is_blacklisted(uid):
             continue
         
+        # [NOVO v5] Pula usuários com gatilhos pausados
+        if is_engagement_paused(uid):
+            paused_count += 1
+            continue
+        
         try:
             hours_inactive = get_hours_since_activity(uid)
+            
+            # [NOVO v5] Verifica se precisa enviar última tentativa
+            ignored = get_ignored_count(uid)
+            if ignored == 2:  # Na próxima será a 3ª (pausar)
+                # Verifica se está aguardando resposta há muito tempo
+                if is_awaiting_response(uid):
+                    await send_last_attempt_message(bot, uid)
+                    pause_engagement(uid)
+                    continue
             
             # ============ RE-ENGAJAMENTO (sempre verifica) ============
             if hours_inactive:
@@ -1601,7 +1846,8 @@ async def process_engagement_jobs(bot):
         f"{len(users)} usuários | "
         f"📅 {scheduled_sent} programadas | "
         f"🔄 {reengagement_sent} re-engajamento | "
-        f"📢 {limit_notifications_sent} limite renovado"
+        f"📢 {limit_notifications_sent} limite renovado | "
+        f"⏸️ {paused_count} pausados"
     )
 
 async def engagement_scheduler(bot):
@@ -1634,6 +1880,7 @@ async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reset_daily_count(uid)
     r.delete(vip_key(uid))
     clear_memory(uid)
+    reset_ignored(uid)  # [NOVO v5]
     await update.message.reply_text(f"🔥 Reset completo: {uid}")
 
 async def clearmemory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1676,12 +1923,14 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = get_all_active_users()
     total = len(users)
     vips = sum(1 for uid in users if is_vip(uid))
+    paused = sum(1 for uid in users if is_engagement_paused(uid))  # [NOVO v5]
     slots = get_vip_slots()
     
     await update.message.reply_text(
         f"📊 **ESTATÍSTICAS**\n\n"
         f"👥 Usuários: {total}\n"
         f"💎 VIPs: {vips}\n"
+        f"⏸️ Pausados: {paused}\n"  # [NOVO v5]
         f"📈 Conversão: {(vips/total*100) if total > 0 else 0:.1f}%\n"
         f"🎫 Vagas restantes: {slots}",
         parse_mode="Markdown"
@@ -1704,7 +1953,11 @@ async def funnel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+# ================= v5: BROADCAST MELHORADO =================
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    [MELHORADO v5] Broadcast com filtro de atividade recente
+    """
     if update.effective_user.id not in ADMIN_IDS:
         return
     if not context.args:
@@ -1713,21 +1966,38 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     message = " ".join(context.args)
     users = get_all_active_users()
-    sent = failed = 0
+    sent = failed = skipped = 0
     
-    await update.message.reply_text(f"📤 Enviando para {len(users)}...")
+    await update.message.reply_text(f"📤 Filtrando {len(users)} usuários...")
     
     for uid in users:
+        # Filtro: blacklist
         if is_blacklisted(uid):
+            skipped += 1
             continue
+        
+        # [NOVO v5] Filtro: só usuários ativos nos últimos 7 dias
+        hours_inactive = get_hours_since_activity(uid)
+        if hours_inactive is None or hours_inactive > 168:  # 7 dias
+            skipped += 1
+            continue
+        
         try:
             await context.bot.send_message(chat_id=uid, text=message)
             sent += 1
             await asyncio.sleep(0.1)
-        except:
+        except Exception as e:
             failed += 1
+            # [NOVO v5] Se bloqueou, adiciona na blacklist
+            if "blocked" in str(e).lower() or "403" in str(e):
+                add_to_blacklist(uid)
+                logger.info(f"🚫 Usuário {uid} bloqueou o bot - adicionado à blacklist")
     
-    await update.message.reply_text(f"✅ Enviados: {sent}\n❌ Falhas: {failed}")
+    await update.message.reply_text(
+        f"✅ Enviados: {sent}\n"
+        f"⏭️ Pulados (inativos/blacklist): {skipped}\n"
+        f"❌ Falhas: {failed}"
+    )
 
 # ================= NOVO: COMANDO /send PARA UM USUÁRIO =================
 async def send_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1789,6 +2059,8 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bonus = get_bonus_msgs(uid)
     vip_status = is_vip(uid)
     vip_expiry = get_vip_expiry(uid)
+    ignored = get_ignored_count(uid)  # [NOVO v5]
+    paused = is_engagement_paused(uid)  # [NOVO v5]
     
     msg = f"📋 **STATUS**\n\n"
     msg += f"👤 ID: `{uid}`\n"
@@ -1801,7 +2073,12 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"💎 VIP: ✅ (até {vip_expiry.strftime('%d/%m/%Y')})\n"
     else:
         msg += f"💎 VIP: ❌\n"
-        msg += f"📊 Restam: {max(0, LIMITE_DIARIO + bonus - count)} msgs"
+        msg += f"📊 Restam: {max(0, LIMITE_DIARIO + bonus - count)} msgs\n"
+    
+    # [NOVO v5] Info de engajamento
+    msg += f"\n🔔 **Engajamento:**\n"
+    msg += f"• Ignorou: {ignored}/3\n"
+    msg += f"• Pausado: {'⏸️ Sim' if paused else '▶️ Não'}"
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -1847,6 +2124,8 @@ async def userinfo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     last_activity = get_last_activity(uid)
     funnel_stage = int(r.get(funnel_key(uid)) or 0)
     memory_count = len(get_memory(uid))
+    ignored = get_ignored_count(uid)  # [NOVO v5]
+    paused = is_engagement_paused(uid)  # [NOVO v5]
     
     msg = f"👤 **USUÁRIO {uid}**\n\n"
     msg += f"📝 Nome: {profile.get('name', 'N/A')}\n"
@@ -1866,8 +2145,13 @@ async def userinfo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hours_ago = (datetime.now() - last_activity).total_seconds() / 3600
         msg += f"⏰ Última atividade: {hours_ago:.1f}h atrás\n"
     
+    # [NOVO v5] Info de engajamento
+    msg += f"\n🔔 **Engajamento:**\n"
+    msg += f"• Ignorou: {ignored}/3\n"
+    msg += f"• Pausado: {'⏸️ Sim' if paused else '▶️ Não'}\n"
+    
     if is_blacklisted(uid):
-        msg += f"🚫 BLOQUEADO\n"
+        msg += f"\n🚫 BLOQUEADO\n"
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -1916,6 +2200,44 @@ async def unblacklist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     remove_from_blacklist(uid)
     await update.message.reply_text(f"✅ Usuário {uid} desbloqueado")
 
+# ================= v5: NOVOS COMANDOS ADMIN =================
+async def unpause_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """[NOVO v5] Despausa gatilhos para um usuário"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    if not context.args:
+        await update.message.reply_text("Uso: /unpause <user_id>")
+        return
+    
+    uid = int(context.args[0])
+    unpause_engagement(uid)
+    await update.message.reply_text(f"▶️ Gatilhos reativados para {uid}")
+
+async def pausedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """[NOVO v5] Lista usuários com gatilhos pausados"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    
+    users = get_all_active_users()
+    paused_users = []
+    
+    for uid in users:
+        if is_engagement_paused(uid):
+            paused_users.append(uid)
+    
+    if not paused_users:
+        await update.message.reply_text("Nenhum usuário com gatilhos pausados")
+        return
+    
+    msg = f"⏸️ **USUÁRIOS PAUSADOS** ({len(paused_users)})\n\n"
+    for uid in paused_users[:50]:  # Limita a 50
+        msg += f"• `{uid}`\n"
+    
+    if len(paused_users) > 50:
+        msg += f"\n... e mais {len(paused_users) - 50}"
+    
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
 # ================= CONFIGURAÇÃO DO BOT =================
 def setup_application():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -1939,6 +2261,10 @@ def setup_application():
     application.add_handler(CommandHandler("givebonus", givebonus_cmd))
     application.add_handler(CommandHandler("blacklist", blacklist_cmd))
     application.add_handler(CommandHandler("unblacklist", unblacklist_cmd))
+    
+    # [NOVO v5] Comandos de engajamento
+    application.add_handler(CommandHandler("unpause", unpause_cmd))
+    application.add_handler(CommandHandler("pausedlist", pausedlist_cmd))
     
     # Handlers
     application.add_handler(CallbackQueryHandler(callback_handler))
