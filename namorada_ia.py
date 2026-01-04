@@ -68,7 +68,7 @@ GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= PIX CONFIG =================
 PIX_KEY = os.getenv("PIX_KEY", "mayaoficialbr@outlook.com")
-PIX_VALOR = "R$ 4,99"
+PIX_VALOR = "R$ 9,99"
 PIX_VALOR_DESCONTO = "R$ 4,99"
 
 # ================= ADMIN =================
