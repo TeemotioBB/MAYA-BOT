@@ -16,6 +16,7 @@ import re
 import json
 import random
 import hashlib
+import base64
 from datetime import datetime, timedelta, date
 from flask import Flask, request
 from telegram import (
@@ -905,6 +906,17 @@ def is_takeover_active(uid):
     except:
         return False
 
+# ================= VISÃO (FOTOS) =================
+async def download_photo_base64(bot, file_id):
+    """Baixa foto do Telegram e converte para base64"""
+    try:
+        file = await bot.get_file(file_id)
+        file_bytes = await file.download_as_bytearray()
+        return base64.b64encode(file_bytes).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Erro ao baixar foto: {e}")
+        return None
+
 # ================= v5: VERIFICAR SE USUÁRIO ESTÁ TRAVADO =================
 def is_user_locked(uid):
     """Verifica se usuário está sem mensagens (travado)"""
@@ -1161,17 +1173,27 @@ NEVER promise or schedule real meetings."""
 
 # ================= GROK =================
 class Grok:
-    async def reply(self, uid, text, max_retries=2):
+    async def reply(self, uid, text, image_base64=None, max_retries=2):
         mem = get_memory(uid)
         lang = get_lang(uid)
-        mood = detect_mood(text)
-        
-        save_message(uid, "user", text)
+        mood = detect_mood(text) if text else "neutral"
         
         if is_first_contact(uid):
             mark_first_contact(uid)
         
         prompt = build_prompt(uid, is_vip(uid), lang, mood)
+        
+        # Monta o conteúdo da mensagem do usuário
+        if image_base64:
+            user_content = []
+            if text:
+                user_content.append({"type": "text", "text": text})
+            user_content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
+            })
+        else:
+            user_content = text
         
         for attempt in range(max_retries + 1):
             payload = {
@@ -1179,14 +1201,14 @@ class Grok:
                 "messages": [
                     {"role": "system", "content": prompt},
                     *mem,
-                    {"role": "user", "content": text}
+                    {"role": "user", "content": user_content}
                 ],
                 "max_tokens": 500,
                 "temperature": 0.8 + (attempt * 0.1)
             }
             
             try:
-                timeout = aiohttp.ClientTimeout(total=25)
+                timeout = aiohttp.ClientTimeout(total=30)
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.post(
                         GROK_API_URL,
@@ -1197,6 +1219,8 @@ class Grok:
                         json=payload
                     ) as resp:
                         if resp.status != 200:
+                            error_text = await resp.text()
+                            logger.error(f"Grok erro {resp.status}: {error_text}")
                             return "😔 Amor, deu um probleminha... tenta de novo? 💕"
                         data = await resp.json()
                         if "choices" not in data:
@@ -1209,11 +1233,13 @@ class Grok:
                         add_recent_response(uid, answer)
                         break
                         
-            except Exception:
-                logger.exception("🔥 Erro no Grok")
+            except Exception as e:
+                logger.exception(f"🔥 Erro no Grok: {e}")
                 return "😔 Fiquei confusa... pode repetir? 💕"
         
-        add_to_memory(uid, "user", text)
+        # Salva na memória
+        memory_text = f"[Usuário enviou uma foto] {text}" if image_base64 else text
+        add_to_memory(uid, "user", memory_text)
         add_to_memory(uid, "assistant", answer)
         save_message(uid, "sophia", answer)
         
@@ -1488,6 +1514,27 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_message(uid, "user", "[📷 FOTO ENVIADA]")
         elif has_doc:
             save_message(uid, "user", "[📄 DOCUMENTO ENVIADO]")
+        
+        # ========== FOTO PARA IA (se não for comprovante PIX) ==========
+        if has_photo and not (is_pix_pending(uid) or has_pix_interest(uid)):
+            photo_file_id = update.message.photo[-1].file_id
+            caption = update.message.caption or ""
+            
+            image_base64 = await download_photo_base64(context.bot, photo_file_id)
+            
+            if image_base64:
+                try:
+                    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+                except:
+                    pass
+                
+                reply = await grok.reply(uid, caption, image_base64=image_base64)
+                await update.message.reply_text(reply)
+                return
+            else:
+                await update.message.reply_text("😔 Não consegui ver a foto... tenta de novo? 💕")
+                return
+        # ========== FIM FOTO PARA IA ==========
         
         # CORREÇÃO: Aceita comprovante se tem QUALQUER interesse em PIX
         if (has_photo or has_doc) and (is_pix_pending(uid) or has_pix_interest(uid)):
