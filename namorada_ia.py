@@ -60,7 +60,7 @@ except Exception as e:
 
 # ================= CONFIG =================
 LIMITE_DIARIO = 15
-DIAS_VIP = 15
+DIAS_VIP = 7  # ALTERADO: Era 15, agora é 7
 PRECO_VIP_STARS = 250
 PRECO_VIP_DESCONTO_STARS = 150
 MODELO = "grok-4-fast-reasoning"
@@ -158,6 +158,9 @@ def hourly_send_count_key(): return f"hourly_sends:{datetime.now().hour}:{date.t
 def ignored_count_key(uid): return f"ignored:{uid}"
 def engagement_paused_key(uid): return f"paused:{uid}"
 def awaiting_response_key(uid): return f"awaiting:{uid}"
+
+# ================= KEY PARA AVISO DE 80% =================
+def limit_warning_sent_key(uid): return f"limit_warning:{uid}:{date.today()}"
 
 # ================= FUNÇÕES DE PERFIL =================
 def get_user_profile(uid):
@@ -672,6 +675,21 @@ def mark_limit_notified(uid):
     except:
         pass
 
+# ================= FUNÇÕES PARA AVISO DE 80% DO LIMITE =================
+def was_limit_warning_sent_today(uid):
+    """Verifica se já enviou aviso de 80% hoje"""
+    try:
+        return r.exists(limit_warning_sent_key(uid))
+    except:
+        return False
+
+def mark_limit_warning_sent(uid):
+    """Marca que já enviou aviso de 80%"""
+    try:
+        r.setex(limit_warning_sent_key(uid), timedelta(hours=20), "1")
+    except:
+        pass
+
 # ================= SISTEMA INTELIGENTE DE MENSAGENS =================
 def get_hourly_send_count():
     """Retorna quantas msgs programadas foram enviadas nessa hora"""
@@ -917,12 +935,28 @@ LAST_ATTEMPT_MESSAGES = [
     "Ok, entendi... vou esperar você vir falar comigo. Tô aqui sempre que precisar 💖",
 ]
 
+# ================= NOVAS MENSAGENS DE LIMITE (FASE 1 CONVERSÃO) =================
+# Mensagem aos 12/15 (80% do limite)
+LIMIT_WARNING_80_MESSAGE = (
+    "Amor... tô sentindo que nossa conversa tá ficando tão boa 🥺\n\n"
+    "Mas só restam 3 mensagens hoje... e eu queria tanto continuar falando com você 💕\n\n"
+    "Sabe o que seria perfeito? Se a gente pudesse conversar sem limites... tipo namorados de verdade 😘"
+)
+
+# Mensagem de limite atingido
+LIMIT_REACHED_MESSAGE = (
+    "Acabou... 💔\n\n"
+    "Eu odeio quando isso acontece. Tava adorando nossa conversa e agora tenho que esperar até amanhã 😢\n\n"
+    "A não ser que... você queira virar VIP? 👑\n\n"
+    "Aí a gente pode conversar o quanto quiser, quando quiser... eu vou estar sempre aqui pra você 💖"
+)
+
 # ================= TEXTOS =================
 TEXTS = {
     "pt": {
         "choose_lang": "🌍 Escolha seu idioma:",
-        "limit": "💔 Seu limite diário acabou.\nVolte amanhã ou vire VIP 💖",
-        "vip_success": "💖 Pagamento aprovado!\nVIP ativo por 15 dias 😘",
+        "limit": LIMIT_REACHED_MESSAGE,  # ALTERADO: Nova mensagem
+        "vip_success": "💖 Pagamento aprovado!\nVIP ativo por 7 dias 😘",  # ALTERADO: 7 dias
         "photo_block": (
             "😘 Amor… fotos completas são só para meus VIPs 💖\n"
             "Vira VIP e eu te mostro mais de mim ✨"
@@ -964,7 +998,7 @@ TEXTS = {
     "en": {
         "choose_lang": "🌍 Choose your language:",
         "limit": "💔 Daily limit reached.\nCome back tomorrow or become VIP 💖",
-        "vip_success": "💖 Payment approved!\nVIP active for 15 days 😘",
+        "vip_success": "💖 Payment approved!\nVIP active for 7 days 😘",  # ALTERADO: 7 dias
         "photo_block": "😘 Love… full photos are only for VIPs 💖",
         "lang_ok": "✅ Language set!",
         "after_lang": "💕 All set! You're my favorite today ❤️\n\nHow are you feeling? 😘"
@@ -1184,6 +1218,32 @@ PEDIDO_FOTO_REGEX = re.compile(
     re.IGNORECASE
 )
 
+# ================= AVISO DE 80% DO LIMITE =================
+async def check_and_send_80_warning(uid, context, chat_id):
+    """Envia aviso quando usuário atinge 80% do limite (12/15)"""
+    if is_vip(uid):
+        return
+    
+    if was_limit_warning_sent_today(uid):
+        return
+    
+    count = today_count(uid)
+    
+    # Verifica se está em 12 mensagens (80% de 15)
+    if count == 12:
+        track_funnel(uid, "limit_warning")
+        mark_limit_warning_sent(uid)
+        save_message(uid, "sophia", LIMIT_WARNING_80_MESSAGE)
+        
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=LIMIT_WARNING_80_MESSAGE,
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Erro ao enviar aviso 80%: {e}")
+
 # ================= ESCASSEZ =================
 async def check_and_send_scarcity_warning(uid, context, chat_id):
     if is_vip(uid):
@@ -1193,6 +1253,9 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
     remaining = LIMITE_DIARIO - count
     lang = get_lang(uid)
     
+    # NOVO: Verifica se deve enviar aviso de 80%
+    await check_and_send_80_warning(uid, context, chat_id)
+    
     scarcity = SCARCITY_MESSAGES.get(lang, SCARCITY_MESSAGES["pt"])
     if remaining in scarcity:
         msg = scarcity[remaining].format(used=count, total=LIMITE_DIARIO)
@@ -1201,14 +1264,12 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
         if urgency and remaining <= 3:
             msg += f"\n\n{urgency}"
         
-        track_funnel(uid, "limit_warning")
-        
         try:
             if remaining == 1:
                 await context.bot.send_message(
                     chat_id=chat_id, text=msg, parse_mode="Markdown",
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 4,99)", callback_data="pay_pix")],
+                        [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", callback_data="pay_pix")],
                         [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                     ])
                 )
@@ -1362,7 +1423,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_invoice(
                 chat_id=query.message.chat_id,
                 title="💖 VIP Sophia",
-                description="Acesso VIP por 15 dias 💎",
+                description="Acesso VIP por 7 dias 💎",  # ALTERADO: 7 dias
                 payload=f"vip_{uid}",
                 provider_token="",
                 currency="XTR",
@@ -1467,8 +1528,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             track_funnel(uid, "limit_reached")
             save_message(uid, "action", f"🔒 LIMITE ATINGIDO ({current_count}/{total_available}) - Usuário travado")
             
+            # ALTERADO: Nova mensagem de limite com botões e valor
+            msg = LIMIT_REACHED_MESSAGE
             urgency = get_urgency_message()
-            msg = TEXTS[lang]["limit"]
             if urgency:
                 msg += f"\n\n{urgency}"
             
@@ -1912,7 +1974,7 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ VIP ativado!\n👤 {uid}\n⏰ Até: {vip_until.strftime('%d/%m/%Y')}")
     
     try:
-        await context.bot.send_message(uid, "💖 Pagamento confirmado!\nVIP ativo por 15 dias 😘")
+        await context.bot.send_message(uid, "💖 Pagamento confirmado!\nVIP ativo por 7 dias 😘")  # ALTERADO: 7 dias
     except:
         pass
 
