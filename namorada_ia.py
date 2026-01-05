@@ -158,6 +158,7 @@ def hourly_send_count_key(): return f"hourly_sends:{datetime.now().hour}:{date.t
 def ignored_count_key(uid): return f"ignored:{uid}"
 def engagement_paused_key(uid): return f"paused:{uid}"
 def awaiting_response_key(uid): return f"awaiting:{uid}"
+def admin_takeover_key(uid): return f"admin:takeover:{uid}"
 
 # ================= KEY PARA AVISO DE 80% =================
 def limit_warning_sent_key(uid): return f"limit_warning:{uid}:{date.today()}"
@@ -896,6 +897,14 @@ def clear_awaiting_response(uid):
     except:
         pass
 
+# ================= TAKEOVER (ADMIN NO CONTROLE) =================
+def is_takeover_active(uid):
+    """Verifica se admin está controlando a conversa"""
+    try:
+        return r.hget(admin_takeover_key(uid), "active") == "1"
+    except:
+        return False
+
 # ================= v5: VERIFICAR SE USUÁRIO ESTÁ TRAVADO =================
 def is_user_locked(uid):
     """Verifica se usuário está sem mensagens (travado)"""
@@ -1434,7 +1443,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Erro callback: {e}")
 
-# ================= MENSAGENS (PIX FLEXÍVEL + LOG COMPLETO) =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
@@ -1447,6 +1455,25 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # [NOVO v5] Usuário respondeu! Reseta contador de ignorado
     reset_ignored(uid)
+    
+    # ========== TAKEOVER: ADMIN NO CONTROLE ==========
+    if is_takeover_active(uid):
+        # Salva a mensagem do usuário para o admin ver
+        text = update.message.text or ""
+        has_photo = bool(update.message.photo)
+        has_doc = bool(update.message.document)
+        
+        if text:
+            save_message(uid, "user", text)
+        elif has_photo:
+            save_message(uid, "user", "[📷 FOTO ENVIADA]")
+        elif has_doc:
+            save_message(uid, "user", "[📄 DOCUMENTO ENVIADO]")
+        
+        # NÃO responde - admin está no controle
+        logger.info(f"🎮 Takeover ativo para {uid} - IA não responde")
+        return
+    # ========== FIM TAKEOVER ==========
     
     try:
         has_photo = bool(update.message.photo)
