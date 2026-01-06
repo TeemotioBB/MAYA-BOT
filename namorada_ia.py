@@ -1660,55 +1660,54 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 save_message(uid, "sophia", response)
                 await context.bot.send_message(query.message.chat_id, response)
         
-        # ============ [NOVO v6] ONBOARDING CHOICE ============
-        elif query.data == "onboard_carente":
-            set_onboarding_choice(uid, "carente")
-            save_message(uid, "info", "💕 Escolheu: CARENTE")
-            
-            await context.bot.send_message(
-                query.message.chat_id,
-                ONBOARDING_RESPONSE_CARENTE
-            )
-            
-            # Agora envia os áudios
-            await asyncio.sleep(1.5)
-            save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-            await asyncio.sleep(2.0)
-            save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
-        
+       # ============ [NOVO v6] ONBOARDING CHOICE ============
+elif query.data == "onboard_carente":
+    set_onboarding_choice(uid, "carente")
+    save_message(uid, "info", "💕 Escolheu: CARENTE")
+
+    await context.bot.send_message(
+        query.message.chat_id,
+        ONBOARDING_RESPONSE_CARENTE
+    )
+
+    # Agora envia os áudios
+    await asyncio.sleep(1.5)
+    save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
+    await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
+
+    await asyncio.sleep(2.0)
+    save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
+    await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
 
 
-       elif query.data == "onboard_tesao":
-           set_onboarding_choice(uid, "tesao")
-           save_message(uid, "info", "🔥 Escolheu: COM TESÃO")
-    
-           await context.bot.send_message(
-               query.message.chat_id,
-               ONBOARDING_RESPONSE_TESAO
-           )
-    
-           # Envia os áudios
-           await asyncio.sleep(1.5)
-           save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
-           await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-           await asyncio.sleep(2.0)
-           save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
-           await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
-    
-           # [NOVO] Envia foto provocante para quem escolheu tesão
-           await asyncio.sleep(1.5)
-           if not FOTO_ONBOARDING_TESAO.startswith("COLE_AQUI"):
-           save_message(uid, "sophia", "[📸 FOTO TESÃO]")
-           await context.bot.send_photo(
-               query.message.chat_id,
-               FOTO_ONBOARDING_TESAO,
-               caption="Gostou? 😏🔥"
-           )
+elif query.data == "onboard_tesao":
+    set_onboarding_choice(uid, "tesao")
+    save_message(uid, "info", "🔥 Escolheu: COM TESÃO")
 
+    await context.bot.send_message(
+        query.message.chat_id,
+        ONBOARDING_RESPONSE_TESAO
+    )
 
-        
+    # Envia os áudios
+    await asyncio.sleep(1.5)
+    save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
+    await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
+
+    await asyncio.sleep(2.0)
+    save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
+    await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+
+    # [NOVO] Envia foto provocante para quem escolheu tesão
+    await asyncio.sleep(1.5)
+    if not FOTO_ONBOARDING_TESAO.startswith("COLE_AQUI"):
+        save_message(uid, "sophia", "[📸 FOTO TESÃO]")
+        await context.bot.send_photo(
+            query.message.chat_id,
+            FOTO_ONBOARDING_TESAO,
+            caption="Gostou? 😏🔥"
+        )
+
         # ============ PIX ============
         elif query.data in ["pay_pix", "pay_pix_desconto"]:
             track_funnel(uid, "clicked_pix")
