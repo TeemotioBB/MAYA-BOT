@@ -1675,7 +1675,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
             await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
-        elif query.data == "onboard_tesao":
+         elif query.data == "onboard_tesao":
             set_onboarding_choice(uid, "tesao")
             save_message(uid, "info", "🔥 Escolheu: COM TESÃO")
             
@@ -1691,6 +1691,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await asyncio.sleep(2.0)
             save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
             await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+            
+            # [NOVO] Envia foto provocante para quem escolheu tesão
+            await asyncio.sleep(1.5)
+            if not FOTO_ONBOARDING_TESAO.startswith("COLE_AQUI"):
+                save_message(uid, "sophia", "[📸 FOTO TESÃO]")
+                await context.bot.send_photo(
+                    query.message.chat_id,
+                    FOTO_ONBOARDING_TESAO,
+                    caption="Gostou? 😏🔥"
+                )
+
         
         # ============ PIX ============
         elif query.data in ["pay_pix", "pay_pix_desconto"]:
