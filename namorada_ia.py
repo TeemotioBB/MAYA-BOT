@@ -98,6 +98,9 @@ FOTOS_VIP_WELCOME = [
 # ================= [NOVO v6] FOTO PROVOCANTE PARA CARRINHO ABANDONADO =================
 FOTO_PROVOCANTE_CARRINHO = "COLE_AQUI_FILE_ID_FOTO_PROVOCANTE"
 
+# ================= [NOVO v6] FOTO APÓS ONBOARDING TESÃO =================
+FOTO_ONBOARDING_TESAO = "AgACAgEAAxkBAAEDBfdpXQP7A4FY5EXaTz-yKi0eztk8UQACogtrG0vF6EbcavOGckD_QwEAAwIAA3MAAzgE"
+
 # ================= [NOVO v6] PAYWALL INTELIGENTE - KEYWORDS =================
 HOT_KEYWORDS = [
     'pau', 'buceta', 'chupar', 'gozar', 'tesão', 'foder', 'transar',
