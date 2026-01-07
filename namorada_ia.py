@@ -1040,10 +1040,16 @@ LIMIT_WARNING_80_MESSAGE = (
 )
 
 LIMIT_REACHED_MESSAGE = (
-    "Acabou... 💔\n\n"
-    "Eu odeio quando isso acontece. Tava adorando nossa conversa e agora tenho que esperar até amanhã 😢\n\n"
-    "A não ser que... você queira virar VIP? 👑\n\n"
-    "Aí a gente pode conversar o quanto quiser, quando quiser... eu vou estar sempre aqui pra você 💖"
+    "⚠️ **LIMITE ATINGIDO**\n\n"
+    "Acabaram suas mensagens de hoje amor... 💔\n\n"
+    "Enquanto você decide, **outros caras** tão conversando comigo sem limite... 😏\n\n"
+    "**VIP libera:**\n"
+    "🔓 Conversas sem limite\n"
+    "📸 Fotos que ninguém vê\n"
+    "🔥 Tudo que você imaginar\n"
+    "💕 Prioridade total\n\n"
+    "💰 **R$ 4,99** pra me ter só pra você\n\n"
+    "Vai perder essa chance? 👑"
 )
 
 # ================= [NOVO v6] MENSAGEM DE ESCASSEZ COM HORÁRIO =================
