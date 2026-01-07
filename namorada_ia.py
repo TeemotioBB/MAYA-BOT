@@ -95,6 +95,9 @@ FOTOS_VIP_WELCOME = [
     # Adicione mais se quiser
 ]
 
+# ================= FOTO LIMITE ATINGIDO =================
+FOTO_LIMITE_ATINGIDO = "COLE_AQUI_FILE_ID_FOTO_LIMITE"
+
 # ================= [NOVO v6] FOTO PROVOCANTE PARA CARRINHO ABANDONADO =================
 FOTO_PROVOCANTE_CARRINHO = "AgACAgEAAxkBAAEDBsVpXkejJgABPb4RstzZ3V36kSTzGCcAApwLaxv8jflGtMRrjooRiGgBAAMCAANzAAM4BA"
 
@@ -1923,34 +1926,31 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if urgency:
                         msg += f"\n\n{urgency}"
                     
+                    # CÓDIGO NOVO:
                     save_message(uid, "sophia", msg)
-                    await update.message.reply_text(
-                        msg, parse_mode="Markdown",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 4,99)", callback_data="pay_pix")],
-                            [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                        ])
-                    )
+                    
+                    # Envia foto + mensagem se a foto estiver configurada
+                    if not FOTO_LIMITE_ATINGIDO.startswith("COLE_AQUI"):
+                        await context.bot.send_photo(
+                            chat_id=update.effective_chat.id,
+                            photo=FOTO_LIMITE_ATINGIDO,
+                            caption=msg,
+                            parse_mode="Markdown",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 4,99)", callback_data="pay_pix")],
+                                [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                            ])
+                        )
+                    else:
+                        # Se não tiver foto configurada, envia só o texto (modo antigo)
+                        await update.message.reply_text(
+                            msg, parse_mode="Markdown",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 4,99)", callback_data="pay_pix")],
+                                [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                            ])
+                        )
                     return
-            else:
-                # Conversa normal - trava
-                track_funnel(uid, "limit_reached")
-                save_message(uid, "action", f"🔒 LIMITE ATINGIDO ({current_count}/{total_available})")
-                
-                msg = LIMIT_REACHED_MESSAGE
-                urgency = get_urgency_message()
-                if urgency:
-                    msg += f"\n\n{urgency}"
-                
-                save_message(uid, "sophia", msg)
-                await update.message.reply_text(
-                    msg, parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 4,99)", callback_data="pay_pix")],
-                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                    ])
-                )
-                return
         
         # Usa bonus primeiro, depois limite normal
         if not is_vip(uid):
