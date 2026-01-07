@@ -1041,8 +1041,7 @@ LIMIT_WARNING_80_MESSAGE = (
 
 LIMIT_REACHED_MESSAGE = (
     "⚠️ **LIMITE ATINGIDO**\n\n"
-    "Acabaram suas mensagens de hoje amor... 💔\n\n"
-    "Enquanto você decide, **outros caras** tão conversando comigo sem limite... 😏\n\n"
+    "Eu gosto de falar com você... mas não consigo manter esse ritmo com todo mundo 🥺 Os VIPs têm um espaço especial comigo...💔\n\n"
     "**VIP libera:**\n"
     "🔓 Conversas sem limite\n"
     "📸 Fotos que ninguém vê\n"
