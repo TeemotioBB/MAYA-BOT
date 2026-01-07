@@ -1611,39 +1611,18 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     reset_ignored(uid)
     
-    # [NOVO] Retry com timeout
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            await update.message.reply_text(
-                TEXTS["pt"]["choose_lang"],
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
-                    InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
-                ]]),
-                read_timeout=20,
-                write_timeout=20
-            )
-            save_message(uid, "sophia", "[MENU DE IDIOMA EXIBIDO]")
-            break  # Sucesso - sai do loop
-            
-        except Exception as e:
-            logger.error(f"Erro /start (tentativa {attempt + 1}/{max_retries}): {e}")
-            save_message(uid, "error", f"❌ ERRO /start tentativa {attempt + 1}: {str(e)[:30]}")
-            
-            if attempt == max_retries - 1:
-                # Última tentativa - tenta enviar mensagem simples
-                try:
-                    await update.message.reply_text(
-                        "Oi! Desculpa a demora 💕\n\nDigita /start de novo pra gente começar!",
-                        read_timeout=10,
-                        write_timeout=10
-                    )
-                except:
-                    pass
-            else:
-                # Aguarda um pouco antes de tentar novamente
-                await asyncio.sleep(1)
+    try:
+        await update.message.reply_text(
+            TEXTS["pt"]["choose_lang"],
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
+                InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
+            ]])
+        )
+        save_message(uid, "sophia", "[MENU DE IDIOMA EXIBIDO]")
+    except Exception as e:
+        logger.error(f"Erro /start: {e}")
+        save_message(uid, "error", f"❌ ERRO /start: {str(e)[:30]}")
 
 # ================= [ALTERADO v6] CALLBACK COM ONBOARDING =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2781,30 +2760,9 @@ async def pausedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+# ================= CONFIGURAÇÃO DO BOT =================
 def setup_application():
-    # [NOVO] Configuração de timeouts aumentados
-    from telegram.ext import Defaults
-    from telegram.request import HTTPXRequest
-    
-    # Timeout de 60 segundos para requisições
-    request = HTTPXRequest(
-        connection_pool_size=8,
-        connect_timeout=30.0,
-        read_timeout=30.0,
-        write_timeout=30.0,
-        pool_timeout=30.0
-    )
-    
-    application = (
-        Application.builder()
-        .token(TELEGRAM_TOKEN)
-        .request(request)
-        .read_timeout(30)
-        .write_timeout(30)
-        .connect_timeout(30)
-        .pool_timeout(30)
-        .build()
-    )
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
     
     # Comandos usuário
     application.add_handler(CommandHandler("start", start_handler))
