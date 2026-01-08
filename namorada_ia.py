@@ -1610,15 +1610,22 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     reset_ignored(uid)
     
+    # Define idioma como PT automaticamente
+    set_lang(uid, "pt")
+    track_funnel(uid, "lang_selected")
+    
     try:
-        await update.message.reply_text(
-            TEXTS["pt"]["choose_lang"],
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
-                InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
-            ]])
+        # Envia foto + pergunta de onboarding direto
+        await update.message.reply_photo(
+            photo="AgACAgEAAxkBAAEDCClpYAABXOfIRIw2_C9N94kDCTh28CUAAoULaxu-iAFH-cEMZYHH-GQBAAMCAANzAAM4BA",
+            caption=ONBOARDING_QUESTION,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💕 Carente", callback_data="onboard_carente")],
+                [InlineKeyboardButton("🔥 Com tesão", callback_data="onboard_tesao")]
+            ])
         )
-        save_message(uid, "sophia", "[MENU DE IDIOMA EXIBIDO]")
+        save_message(uid, "sophia", "[FOTO + ONBOARDING EXIBIDO]")
     except Exception as e:
         logger.error(f"Erro /start: {e}")
         save_message(uid, "error", f"❌ ERRO /start: {str(e)[:30]}")
@@ -1641,32 +1648,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_message(uid, "action", f"🔘 CLICOU: {query.data}")
         
         reset_ignored(uid)
-        
-        # ============ IDIOMA ============
-        if query.data.startswith("lang_"):
-            lang = query.data.split("_")[1]
-            set_lang(uid, lang)
-            track_funnel(uid, "lang_selected")
-            save_message(uid, "info", f"🌍 Idioma: {lang.upper()}")
-            await query.message.edit_text(TEXTS[lang]["lang_ok"])
-            await asyncio.sleep(0.8)
-            
-            # [NOVO v6] Pergunta de onboarding em vez de ir direto pro áudio
-            if lang == "pt":
-                await context.bot.send_message(
-                    query.message.chat_id,
-                    ONBOARDING_QUESTION,
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("💕 Carente", callback_data="onboard_carente")],
-                        [InlineKeyboardButton("🔥 Com tesão", callback_data="onboard_tesao")]
-                    ])
-                )
-            else:
-                # Inglês - fluxo antigo
-                response = TEXTS[lang]["after_lang"]
-                save_message(uid, "sophia", response)
-                await context.bot.send_message(query.message.chat_id, response)
         
         # ============ [NOVO v6] ONBOARDING CHOICE ============
         elif query.data == "onboard_carente":
