@@ -2364,11 +2364,6 @@ async def getphotoid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# ================= COMANDOS ADMIN =================  ← Essa linha já existe
-async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ... resto do código continua
-
-
 # ================= COMANDOS ADMIN =================
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
