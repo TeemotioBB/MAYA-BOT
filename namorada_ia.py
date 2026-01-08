@@ -2325,45 +2325,6 @@ async def engagement_scheduler(bot):
             logger.error(f"Erro scheduler: {e}")
         await asyncio.sleep(3600)
 
-# ================= COMANDOS DE DEBUG (TEMPORÁRIOS) =================
-async def testphotos_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Testa envio das fotos VIP"""
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    
-    uid = update.effective_user.id
-    
-    await update.message.reply_text(f"🧪 Testando envio de {len(FOTOS_VIP_WELCOME)} fotos...")
-    
-    try:
-        await send_vip_welcome_photos(context.bot, uid)
-        await update.message.reply_text("✅ Fotos enviadas com sucesso!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Erro: {e}")
-        logger.error(f"Erro teste fotos: {e}")
-
-async def getphotoid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Responda uma foto com este comando para pegar o file_id"""
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    
-    if not update.message.reply_to_message:
-        await update.message.reply_text("❌ Responda uma FOTO com /getphotoid")
-        return
-    
-    if not update.message.reply_to_message.photo:
-        await update.message.reply_text("❌ Isso não é uma foto!")
-        return
-    
-    file_id = update.message.reply_to_message.photo[-1].file_id
-    
-    await update.message.reply_text(
-        f"📸 **FILE ID DA FOTO:**\n\n"
-        f"`{file_id}`\n\n"
-        f"Cole este ID na lista FOTOS_VIP_WELCOME",
-        parse_mode="Markdown"
-    )
-
 # ================= COMANDOS ADMIN =================
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
@@ -2863,10 +2824,6 @@ def setup_application():
     # Comandos usuário
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("status", status_cmd))
-
-    # Comandos admin (DEBUG)
-    application.add_handler(CommandHandler("testphotos", testphotos_cmd))     
-    application.add_handler(CommandHandler("getphotoid", getphotoid_cmd))  
     
     # Comandos admin
     application.add_handler(CommandHandler("reset", reset_cmd))
