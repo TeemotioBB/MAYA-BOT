@@ -2408,6 +2408,7 @@ async def funnel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+# ================= BROADCAST OTIMIZADO =================
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
@@ -2417,34 +2418,75 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     message = " ".join(context.args)
     users = get_all_active_users()
-    sent = failed = skipped = 0
     
-    await update.message.reply_text(f"📤 Filtrando {len(users)} usuários...")
-    
+    # Filtrar usuários elegíveis antecipadamente
+    eligible_users = []
     for uid in users:
         if is_blacklisted(uid):
-            skipped += 1
             continue
-        
         hours_inactive = get_hours_since_activity(uid)
         if hours_inactive is None or hours_inactive > 168:
-            skipped += 1
             continue
-        
-        try:
-            await context.bot.send_message(chat_id=uid, text=message)
-            sent += 1
-            await asyncio.sleep(0.1)
-        except Exception as e:
-            failed += 1
-            if "blocked" in str(e).lower() or "403" in str(e):
-                add_to_blacklist(uid)
-                logger.info(f"🚫 Usuário {uid} bloqueou o bot - adicionado à blacklist")
+        eligible_users.append(uid)
     
-    await update.message.reply_text(
+    total = len(eligible_users)
+    if total == 0:
+        await update.message.reply_text("❌ Nenhum usuário elegível")
+        return
+    
+    status_msg = await update.message.reply_text(
+        f"📤 Iniciando broadcast para {total} usuários..."
+    )
+    
+    # Contadores thread-safe
+    sent = failed = 0
+    sent_lock = asyncio.Lock()
+    
+    # Semáforo para controlar taxa (20 envios simultâneos)
+    semaphore = asyncio.Semaphore(20)
+    
+    async def send_to_user(uid):
+        nonlocal sent, failed
+        async with semaphore:
+            try:
+                await context.bot.send_message(chat_id=uid, text=message)
+                async with sent_lock:
+                    sent += 1
+                # Sleep mínimo para respeitar limites da API
+                await asyncio.sleep(0.03)
+            except Exception as e:
+                async with sent_lock:
+                    failed += 1
+                if "blocked" in str(e).lower() or "403" in str(e):
+                    add_to_blacklist(uid)
+                    logger.info(f"🚫 {uid} bloqueou o bot")
+    
+    # Processar em lotes de 100 para atualizar progresso
+    batch_size = 100
+    for i in range(0, total, batch_size):
+        batch = eligible_users[i:i + batch_size]
+        
+        # Enviar lote em paralelo
+        await asyncio.gather(*[send_to_user(uid) for uid in batch])
+        
+        # Atualizar progresso
+        progress = min(i + batch_size, total)
+        try:
+            await status_msg.edit_text(
+                f"📤 Enviando... {progress}/{total}\n"
+                f"✅ {sent} | ❌ {failed}"
+            )
+        except:
+            pass
+    
+    # Resultado final
+    await status_msg.edit_text(
+        f"✅ **BROADCAST CONCLUÍDO**\n\n"
+        f"📊 Total: {total}\n"
         f"✅ Enviados: {sent}\n"
-        f"⏭️ Pulados (inativos/blacklist): {skipped}\n"
-        f"❌ Falhas: {failed}"
+        f"❌ Falhas: {failed}\n"
+        f"⚡ Taxa: {sent/(total/20):.1f}x mais rápido",
+        parse_mode="Markdown"
     )
 
 async def send_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
