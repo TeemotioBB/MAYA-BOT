@@ -2891,20 +2891,14 @@ async def setup_webhook():
         logger.info(f"✅ Webhook: {webhook_url}")
         
         if not scheduler_started:
-            asyncio.ensure_future(engagement_scheduler(application.bot), loop=loop)
+            asyncio.create_task(engagement_scheduler(application.bot))
             scheduler_started = True
-            
     except Exception as e:
         logger.error(f"Erro webhook: {e}")
-        
 
 if __name__ == "__main__":
-    # Inicializa o application de forma síncrona
-    loop.run_until_complete(application.initialize())
-    loop.run_until_complete(application.start())
-    
-    # Configura webhook e inicia scheduler UMA ÚNICA VEZ
-    loop.run_until_complete(setup_webhook())
-    
-    logger.info(f"🌐 Flask iniciando na porta {PORT}")
+    asyncio.run_coroutine_threadsafe(application.initialize(), loop)
+    asyncio.run_coroutine_threadsafe(application.start(), loop)
+    asyncio.run_coroutine_threadsafe(engagement_scheduler(application.bot), loop)
+    logger.info(f"🌐 Flask porta {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
