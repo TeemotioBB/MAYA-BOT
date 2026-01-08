@@ -71,8 +71,8 @@ GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
 # ================= PIX CONFIG =================
 PIX_KEY = os.getenv("PIX_KEY", "mayaoficialbr@outlook.com")
-PIX_VALOR = "R$ 4,99"
-PIX_VALOR_DESCONTO = "R$ 2,50"
+PIX_VALOR = "R$ 9,99"
+PIX_VALOR_DESCONTO = "R$ 4,99"
 
 # ================= ADMIN =================
 ADMIN_IDS = set(map(int, os.getenv("ADMIN_IDS", "1293602874").split(",")))
@@ -1047,7 +1047,7 @@ LIMIT_REACHED_MESSAGE = (
     "📸 Fotos que ninguém vê\n"
     "🔥 Tudo que você imaginar\n"
     "💕 Prioridade total\n\n"
-    "💰 **R$ 4,99** pra me ter só pra você\n\n"
+    "💰 **R$ 9,99** pra me ter só pra você\n\n"
     "Vai perder essa chance? 👑"
 )
 
@@ -1094,7 +1094,7 @@ PHOTO_TEASER_MESSAGE = (
     "Ai amor, você quer me ver? 🥵\n\n"
     "Tô aqui de calcinha preta rendada, deitada na cama... "
     "meus peitinhos durinhos aparecendo por cima do sutiã... 😏\n\n"
-    "Quer ver sem censura? São só **R$4,99** no PIX 💕\n\n"
+    "Quer ver sem censura? São só **R$9,99** no PIX 💕\n\n"
     "👇 Clica aqui que eu te mostro TUDO"
 )
 
@@ -1236,7 +1236,7 @@ REENGAGEMENT_MESSAGES = {
 FLASH_DISCOUNT_MESSAGES = [
     "⚡ **DESCONTO RELÂMPAGO** ⚡\n\n"
     "Amor, vou te fazer uma proposta:\n\n"
-    "🔥 **VIP por R$ 2,50** (era R$ 4,99)\n"
+    "🔥 **VIP por R$ 4,99** (era R$ 9,99)\n"
     "⏰ Expira em **2 HORAS**!\n\n"
     "Não deixa passar... 💕",
 ]
@@ -1564,7 +1564,7 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
                 await context.bot.send_message(
                     chat_id=chat_id, text=scarcity_msg, parse_mode="Markdown",
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔥 QUERO CONTINUAR - R$4,99", callback_data="pay_pix")],
+                        [InlineKeyboardButton("🔥 QUERO CONTINUAR - R$9,99", callback_data="pay_pix")],
                         [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                     ])
                 )
@@ -1876,7 +1876,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                              f"👤 `{uid}`\n"
                              f"📱 @{update.effective_user.username or 'N/A'}\n"
                              f"📝 {update.effective_user.first_name}\n"
-                             f"💰 {'R$2,50 (desconto)' if has_discount else 'R$ 4,99'}\n\n"
+                             f"💰 {'R$4,99 (desconto)' if has_discount else 'R$ 9,99'}\n\n"
                              f"`/setvip {uid}`",
                         parse_mode="Markdown"
                     )
@@ -1909,7 +1909,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 photo=FOTO_TEASE_FILE_ID, caption=caption,
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$4,99", callback_data="pay_pix")],
+                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", callback_data="pay_pix")],
                     [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                 ])
             )
@@ -1954,7 +1954,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             caption=msg,
                             parse_mode="Markdown",
                             reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 4,99)", callback_data="pay_pix")],
+                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", callback_data="pay_pix")],
                                 [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                             ])
                         )
@@ -1963,7 +1963,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await update.message.reply_text(
                             msg, parse_mode="Markdown",
                             reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 4,99)", callback_data="pay_pix")],
+                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", callback_data="pay_pix")],
                                 [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                             ])
                         )
@@ -2153,7 +2153,7 @@ async def send_smart_scheduled_message(bot, uid, msg_type):
                 chat_id=uid, 
                 text=message,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 PIX R$ 4,99", callback_data="pay_pix")],
+                    [InlineKeyboardButton("💳 PIX R$ 9,99", callback_data="pay_pix")],
                     [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                 ])
             )
