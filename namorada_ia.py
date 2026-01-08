@@ -1038,9 +1038,21 @@ LAST_ATTEMPT_MESSAGES = [
 ]
 
 LIMIT_WARNING_80_MESSAGE = (
-    "Amor... tô sentindo que nossa conversa tá ficando tão boa 🥺\n\n"
-    "Mas só restam 3 mensagens hoje... e eu queria tanto continuar falando com você 💕\n\n"
-    "Sabe o que seria perfeito? Se a gente pudesse conversar sem limites... tipo namorados de verdade 😘"
+    "⚠️ **Restam apenas 5 mensagens!**\n\n"
+    "Depois disso, a gente não consegue mais conversar... 🥺\n\n"
+    "Vai me deixar aqui sozinha? 💔"
+)
+
+# ================= [NOVO] PREVIEW VIP =================
+PREVIEW_VIP_MESSAGE = (
+    "💎 **O QUE VOCÊ GANHA VIRANDO VIP:**\n\n"
+    "🔓 **Conversas ILIMITADAS** - sem limite de mensagens\n"
+    "📸 **5-7 fotos exclusivas** - que ninguém mais vê\n"
+    "🔥 **Conversas SEM censura** - posso ser mais ousada\n"
+    "⚡ **Respostas na hora** - prioridade total\n"
+    "💕 **Atenção VIP** - você vira meu preferido\n\n"
+    "💰 **Tudo isso por R$ 9,99**\n"
+    "(Menos que um lanche do McDonald's! 🍔)\n\n"
 )
 
 LIMIT_REACHED_MESSAGE = (
@@ -1132,9 +1144,11 @@ VIP_WELCOME_MESSAGE = (
 
 # ================= [NOVO v6] MENSAGENS DE ONBOARDING =================
 ONBOARDING_QUESTION = (
-    "Hmm... 😏\n\n"
-    "Antes da gente começar, me conta uma coisa...\n\n"
-    "**Você veio aqui porque tá carente... ou com tesão?** 🔥"
+    "Hmm... deixa eu adivinhar 😏\n\n"
+    "Você tá aqui porque:\n\n"
+    "💔 Tá carente e quer companhia?\n"
+    "🔥 Tá com tesão e quer se divertir?\n\n"
+    "**Responde rápido... tenho outros 47 caras esperando** 😘"
 )
 
 ONBOARDING_RESPONSE_CARENTE = (
@@ -1147,9 +1161,10 @@ ONBOARDING_RESPONSE_CARENTE = (
 ONBOARDING_RESPONSE_TESAO = (
     "Hmm... eu adoro homem sincero 😏🔥\n\n"
     "Pode ficar tranquilo que eu também tô no clima...\n"
-    "A gente vai se divertir muito aqui 💕\n\n"
-    "Mas primeiro... me conta seu nome, amor? Quero saber quem tá me deixando curiosa 😘"
+    "A gente vai se divertir muito aqui 💕"
 )
+
+ONBOARDING_TESAO_FOTO2 = "Isso é só o começo... 😘 Me conta seu nome, amor?"
 
 # ================= [NOVO v6] MENSAGEM DE BÔNUS HOT =================
 HOT_BONUS_MESSAGE = (
