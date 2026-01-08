@@ -1596,7 +1596,7 @@ async def send_flash_discount(bot, uid):
     except:
         return False
 
-# ================= START =================
+# ================= START - MODIFICADO =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
@@ -1610,20 +1610,28 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     reset_ignored(uid)
     
+    # Define idioma como PT por padrão
+    set_lang(uid, "pt")
+    track_funnel(uid, "lang_selected")
+    save_message(uid, "info", "🌍 Idioma: PT (padrão)")
+    
     try:
+        # Vai direto para a pergunta de onboarding
         await update.message.reply_text(
-            TEXTS["pt"]["choose_lang"],
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
-                InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
-            ]])
+            ONBOARDING_QUESTION,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💕 Carente", callback_data="onboard_carente")],
+                [InlineKeyboardButton("🔥 Com tesão", callback_data="onboard_tesao")]
+            ])
         )
-        save_message(uid, "sophia", "[MENU DE IDIOMA EXIBIDO]")
+        save_message(uid, "sophia", "[PERGUNTA ONBOARDING EXIBIDA]")
     except Exception as e:
         logger.error(f"Erro /start: {e}")
         save_message(uid, "error", f"❌ ERRO /start: {str(e)[:30]}")
 
-# ================= [ALTERADO v6] CALLBACK COM ONBOARDING =================
+
+# ================= CALLBACK - MODIFICADO (simplificado) =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     
@@ -1642,7 +1650,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         reset_ignored(uid)
         
-        # ============ IDIOMA ============
+        # ============ IDIOMA (mantido caso precise no futuro) ============
         if query.data.startswith("lang_"):
             lang = query.data.split("_")[1]
             set_lang(uid, lang)
@@ -1651,7 +1659,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.edit_text(TEXTS[lang]["lang_ok"])
             await asyncio.sleep(0.8)
             
-            # [NOVO v6] Pergunta de onboarding em vez de ir direto pro áudio
+            # Vai para onboarding
             if lang == "pt":
                 await context.bot.send_message(
                     query.message.chat_id,
@@ -1668,7 +1676,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 save_message(uid, "sophia", response)
                 await context.bot.send_message(query.message.chat_id, response)
         
-        # ============ [NOVO v6] ONBOARDING CHOICE ============
+        # ============ ONBOARDING CHOICE ============
         elif query.data == "onboard_carente":
             set_onboarding_choice(uid, "carente")
             save_message(uid, "info", "💕 Escolheu: CARENTE")
@@ -1703,7 +1711,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
             await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
 
-            # [NOVO] Envia foto provocante para quem escolheu tesão
+            # Envia foto provocante para quem escolheu tesão
             await asyncio.sleep(1.5)
             if not FOTO_ONBOARDING_TESAO.startswith("COLE_AQUI"):
                 save_message(uid, "sophia", "[📸 FOTO TESÃO]")
@@ -1718,7 +1726,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             track_funnel(uid, "clicked_pix")
             set_pix_clicked(uid)
             set_pix_interest(uid)
-            set_cart_abandoned(uid)  # [NOVO v6] Marca carrinho abandonado
+            set_cart_abandoned(uid)
             
             if query.data == "pay_pix_desconto" or has_flash_discount(uid):
                 set_flash_discount(uid, hours=2)
@@ -1764,7 +1772,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         elif query.data == "buy_vip":
             track_funnel(uid, "clicked_stars")
-            set_cart_abandoned(uid)  # [NOVO v6] Marca carrinho abandonado
+            set_cart_abandoned(uid)
             price = PRECO_VIP_DESCONTO_STARS if has_flash_discount(uid) else PRECO_VIP_STARS
             save_message(uid, "info", f"⭐ INICIOU COMPRA STARS ({price}⭐)")
             
