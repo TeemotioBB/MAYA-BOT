@@ -1650,7 +1650,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reset_ignored(uid)
         
         # ============ [NOVO v6] ONBOARDING CHOICE ============
-        elif query.data == "onboard_carente":
+        if query.data == "onboard_carente":
             set_onboarding_choice(uid, "carente")
             save_message(uid, "info", "💕 Escolheu: CARENTE")
             
@@ -1699,7 +1699,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             track_funnel(uid, "clicked_pix")
             set_pix_clicked(uid)
             set_pix_interest(uid)
-            set_cart_abandoned(uid)  # [NOVO v6] Marca carrinho abandonado
+            set_cart_abandoned(uid)
             
             if query.data == "pay_pix_desconto" or has_flash_discount(uid):
                 set_flash_discount(uid, hours=2)
@@ -1745,7 +1745,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         elif query.data == "buy_vip":
             track_funnel(uid, "clicked_stars")
-            set_cart_abandoned(uid)  # [NOVO v6] Marca carrinho abandonado
+            set_cart_abandoned(uid)
             price = PRECO_VIP_DESCONTO_STARS if has_flash_discount(uid) else PRECO_VIP_STARS
             save_message(uid, "info", f"⭐ INICIOU COMPRA STARS ({price}⭐)")
             
