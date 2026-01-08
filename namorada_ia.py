@@ -1596,6 +1596,9 @@ async def send_flash_discount(bot, uid):
     except:
         return False
 
+# ================= FOTO DO ONBOARDING =================
+FOTO_ONBOARDING_START = "AgACAgEAAxkBAAEDCClpYAABXOfIRIw2_C9N94kDCTh28CUAAoULaxu-iAFH-cEMZYHH-GQBAAMCAANzAAM4BA"
+
 # ================= START - MODIFICADO =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -1616,16 +1619,17 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_message(uid, "info", "🌍 Idioma: PT (padrão)")
     
     try:
-        # Vai direto para a pergunta de onboarding
-        await update.message.reply_text(
-            ONBOARDING_QUESTION,
+        # Vai direto para a pergunta de onboarding COM FOTO
+        await update.message.reply_photo(
+            photo=FOTO_ONBOARDING_START,
+            caption=ONBOARDING_QUESTION,
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💕 Carente", callback_data="onboard_carente")],
                 [InlineKeyboardButton("🔥 Com tesão", callback_data="onboard_tesao")]
             ])
         )
-        save_message(uid, "sophia", "[PERGUNTA ONBOARDING EXIBIDA]")
+        save_message(uid, "sophia", "[FOTO + PERGUNTA ONBOARDING EXIBIDA]")
     except Exception as e:
         logger.error(f"Erro /start: {e}")
         save_message(uid, "error", f"❌ ERRO /start: {str(e)[:30]}")
