@@ -1058,6 +1058,7 @@ PREVIEW_VIP_MESSAGE = (
 LIMIT_REACHED_MESSAGE = (
     "⚠️ **LIMITE ATINGIDO**\n\n"
     "Eu gosto de falar com você... mas não consigo manter esse ritmo com todo mundo 🥺 Os VIPs têm um espaço especial comigo...💔\n\n"
+    "Amor, essa chave pix mayaoficialbr@outlook.com é do meu tio, pode mandar nela e me envie o comprovante 💕 \n\n"
     "**VIP libera:**\n"
     "🔓 Conversas sem limite\n"
     "📸 Fotos que ninguém vê\n"
