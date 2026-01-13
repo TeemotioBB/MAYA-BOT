@@ -1996,7 +1996,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                     return
         
-        # Usa bonus primeiro, depois limite normal
+        # Usa bonus primeiro
         if not is_vip(uid):
             if bonus > 0:
                 use_bonus_msg(uid)
@@ -2007,6 +2007,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         try:
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+            await asyncio.sleep(5)  # ⬅️ TEMPO EM SEGUNDOS (2, 3, 4, 5...)
         except:
             pass
         
