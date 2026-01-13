@@ -1935,7 +1935,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 photo=FOTO_TEASE_FILE_ID, caption=caption,
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url="https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=SEU_ID_PIX_AQUI"  # ← Link PIX gerado
+                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", callback_data="pay_pix")],
                     [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                 ])
             )
