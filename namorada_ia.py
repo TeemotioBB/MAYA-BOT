@@ -121,7 +121,7 @@ HOT_KEYWORDS = [
 # Cole estas linhas APÓS a linha 33 (depois de PORT = ...)
 
 LINK_PIX_NORMAL = "https://app.pushinpay.com.br/service/pay/A0D4706A-6975-4B9A-BF91-ABEFD61B1E1A"
-LINK_PIX_DESCONTO = "https://app.pushinpay.com.br/service/pay/A0D4706A-6975-4B9A-BF91-ABEFD61B1E1A"
+LINK_PIX_DESCONTO = "https://app.pushinpay.com.br/service/pay/A0D47AD1-C1B9-4559-9B68-16F2FA22FF93"
 
 # ================= MEMÓRIA PERSISTENTE =================
 MAX_MEMORIA = 12
@@ -1506,7 +1506,7 @@ async def send_cart_followup_10min(bot, uid):
             chat_id=uid,
             text=CART_ABANDONED_10MIN,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💳 FINALIZAR PAGAMENTO", callback_data="pay_pix")]
+                [InlineKeyboardButton("💳 FINALIZAR PAGAMENTO", url=LINK_PIX_NORMAL)],
             ])
         )
         set_cart_followup_level(uid, 1)
@@ -1528,7 +1528,7 @@ async def send_cart_followup_1hour(bot, uid):
                 photo=foto_id,
                 caption=CART_ABANDONED_1HOUR,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 FINALIZAR PAGAMENTO", callback_data="pay_pix")]
+                    [InlineKeyboardButton("🔥 FINALIZAR PAGAMENTO", url=LINK_PIX_NORMAL)],
                 ])
             )
         else:
@@ -1537,7 +1537,7 @@ async def send_cart_followup_1hour(bot, uid):
                 chat_id=uid,
                 text=CART_ABANDONED_1HOUR,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 FINALIZAR PAGAMENTO", callback_data="pay_pix")]
+                    [InlineKeyboardButton("🔥 FINALIZAR PAGAMENTO", url=LINK_PIX_NORMAL)],
                 ])
             )
         
@@ -1620,7 +1620,7 @@ async def send_flash_discount(bot, uid):
         await bot.send_message(
             chat_id=uid, text=message, parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔥 QUERO!", callback_data="pay_pix_desconto")],
+                [InlineKeyboardButton("🔥 QUERO!", url=LINK_PIX_DESCONTO)],
                 [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
             ])
         )
@@ -1986,7 +1986,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             caption=msg,
                             parse_mode="Markdown",
                             reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", callback_data="pay_pix")],
+                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
                                 [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                             ])
                         )
@@ -1995,7 +1995,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await update.message.reply_text(
                             msg, parse_mode="Markdown",
                             reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", callback_data="pay_pix")],
+                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
                                 [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                             ])
                         )
