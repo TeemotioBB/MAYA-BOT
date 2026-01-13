@@ -117,6 +117,12 @@ HOT_KEYWORDS = [
     'excitado', 'excitada', 'molhada', 'duro', 'tesudo', 'tesuda'
 ]
 
+# ================= CONFIGURAÇÃO DOS LINKS PIX =================
+# Cole estas linhas APÓS a linha 33 (depois de PORT = ...)
+
+LINK_PIX_NORMAL = "https://app.pushinpay.com.br/service/pay/A0D4706A-6975-4B9A-BF91-ABEFD61B1E1A"
+LINK_PIX_DESCONTO = "https://app.pushinpay.com.br/service/pay/A0D4706A-6975-4B9A-BF91-ABEFD61B1E1A"
+
 # ================= MEMÓRIA PERSISTENTE =================
 MAX_MEMORIA = 12
 
@@ -1935,7 +1941,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 photo=FOTO_TEASE_FILE_ID, caption=caption,
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", callback_data="pay_pix")],
+                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
                     [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                 ])
             )
