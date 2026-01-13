@@ -339,8 +339,6 @@ def get_urgency_message():
         return f"⚠️ ATENÇÃO: Só restam **{slots} vagas VIP** esse mês!"
     elif slots <= 5:
         return f"🔥 Apenas **{slots} vagas VIP** disponíveis!"
-    elif slots <= 10:
-        return f"💎 Ainda tenho **{slots} vagas VIP** esse mês..."
     return None
 
 # ================= FUNÇÕES DE DESCONTO =================
