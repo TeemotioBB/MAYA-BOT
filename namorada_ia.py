@@ -1117,8 +1117,6 @@ def get_scarcity_message_with_time(remaining):
 # ================= [NOVO v6] MENSAGEM DE FOTO COM TEASER MELHORADO =================
 PHOTO_TEASER_MESSAGE = (
     "Ai amor, você quer me ver? 🥵\n\n"
-    "Tô aqui de calcinha preta rendada, deitada na cama... "
-    "meus peitinhos durinhos aparecendo por cima do sutiã... 😏\n\n"
     "Quer ver sem censura? São só **R$9,99** no PIX 💕\n\n"
     "👇 Clica aqui que eu te mostro TUDO"
 )
