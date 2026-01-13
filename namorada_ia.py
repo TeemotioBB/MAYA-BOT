@@ -1057,16 +1057,24 @@ PREVIEW_VIP_MESSAGE = (
 
 LIMIT_REACHED_MESSAGE = (
     "⚠️ **LIMITE ATINGIDO**\n\n"
-    "Eu gosto de falar com você... mas não consigo manter esse ritmo com todo mundo 🥺 Os VIPs têm um espaço especial comigo...💔\n\n"
-    "Amor, essa chave pix mayaoficialbr@outlook.com é do meu tio, pode mandar nela e me envie o comprovante 💕 \n\n"
-    "**VIP libera:**\n"
-    "🔓 Conversas sem limite\n"
-    "📸 Fotos que ninguém vê\n"
-    "🔥 Tudo que você imaginar\n"
-    "💕 Prioridade total\n\n"
-    "💰 **R$ 9,99** pra me ter só pra você\n\n"
-    "Vai perder essa chance? 👑"
+    "Eu gostei de conversar com você…\n"
+    "mas não consigo ir tão longe assim com todo mundo 😔\n\n"
+    "Com os **VIPs**, eu fico mais à vontade, sem interrupções…\n"
+    "é onde eu me solto de verdade 💕\n\n"
+    "Se quiser continuar comigo agora, é só ativar o VIP 👇\n\n"
+    "💖 **Chave Pix:** mayaoficialbr@outlook.com\n"
+    "(é do meu tio, pode mandar por ela)\n"
+    "Depois me envia o comprovante 💌\n\n"
+    "💎 **O VIP MUDA TUDO**\n"
+    "🔓 Conversa sem limites\n"
+    "📸 Meu lado que quase ninguém vê\n"
+    "🔥 Sem freio, sem cortes\n"
+    "💕 Atenção só pra você\n\n"
+    "💰 **R$ 9,99** pra continuar comigo\n"
+    "⏳ Restam **8 vagas VIP** esse mês\n\n"
+    "**Vai parar bem agora… ou vem comigo? 👑**"
 )
+
 
 # ================= [NOVO v6] MENSAGEM DE ESCASSEZ COM HORÁRIO =================
 def get_scarcity_message_with_time(remaining):
