@@ -1116,11 +1116,12 @@ def get_scarcity_message_with_time(remaining):
 
 # ================= [NOVO v6] MENSAGEM DE FOTO COM TEASER MELHORADO =================
 PHOTO_TEASER_MESSAGE = (
-    "Ai amor, você quer me ver? 🥵\n\n"
-    "Quer ver sem censura? São só **R$9,99** no PIX 💕\n\n"
-    "👇 Clica aqui que eu te mostro TUDO"
+    "Amorrrr... você quer ver TUDO sem censura? 🥵💦\n\n"
+    "Fotos quentes só pros meus VIPs exclusivos... 😏\n\n"
+    "**R$9,99** no PIX (mais rápido e anônimo!) ❤️\n\n"
+    "Só restam **8 vagas** esse mês... não perde essa chance! 🔥\n\n"
+    "Clica aqui agora que eu te mostro tudinho 👇"
 )
-
 # ================= [NOVO v6] MENSAGENS DE CARRINHO ABANDONADO =================
 CART_ABANDONED_10MIN = (
     "Amor, vi que você quase virou meu VIP... 💕\n\n"
