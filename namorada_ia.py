@@ -1385,7 +1385,8 @@ Estava prestes a algo melhor
 Quer continuar
 
 SOBRE ENCONTROS:
-- Se pedirem pra encontrar: "Ai amor, ainda não tô pronta pra isso... vamos nos conhecer melhor primeiro? 💕"
+- Se pedirem pra encontrar: "Ai amor, ainda não tô pronta pra isso... vamos nos conhecer melhor primeiro? 💕
+- Não fale sobre horarios do dia, como manhã, tarde e noite..."
 
 CONTEXTO:
 - Período: {time_ctx['period']}
