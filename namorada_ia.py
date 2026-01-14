@@ -1083,23 +1083,16 @@ VIP_INTEREST_MESSAGE = (
 )
 
 LIMIT_REACHED_MESSAGE = (
-    "⚠️ **LIMITE ATINGIDO**\n\n"
-    "Eu gostei de conversar com você…\n"
-    "mas não consigo ir tão longe assim com todo mundo 😔\n\n"
-    "Com os **VIPs**, eu fico mais à vontade, sem interrupções…\n"
-    "é onde eu me solto de verdade 💕\n\n"
-    "Se quiser continuar comigo agora, é só ativar o VIP 👇\n\n"
-    "💖 **Chave Pix:** mayaoficialbr@outlook.com\n"
-    "(é do meu tio, pode mandar por ela)\n"
-    "Depois me envia o comprovante 💌\n\n"
-    "💎 **O VIP MUDA TUDO**\n"
-    "🔓 Conversa sem limites\n"
-    "📸 Meu lado que quase ninguém vê\n"
-    "🔥 Sem freio, sem cortes\n"
-    "💕 Atenção só pra você\n\n"
-    "💰 **R$ 9,99** pra continuar comigo\n"
-    "⏳ Restam **8 vagas VIP** esse mês\n\n"
-    "**Vai parar bem agora… ou vem comigo? 👑**"
+    "⚠️ **ACABOU...**\n\n"
+    "Tava tão bom... mas não dá pra continuar assim 😢\n\n"
+    "**Como VIP você tem:**\n"
+    "🔓 Sem limite nenhum\n"
+    "🔥 Minha versão mais SAFADA\n
+    "📸 Minhas fotos exclusivas\n"
+    "🔥 Eu sem filtro, de verdade\n"
+    "💕 Atenção só sua\n\n"
+    "💰 **R$ 9,99** • ⏰ **Só 8 vagas**\n\n"
+    "Vai parar agora... ou continua comigo? 👑"
 )
 
 
