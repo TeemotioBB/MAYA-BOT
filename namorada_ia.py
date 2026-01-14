@@ -2101,6 +2101,8 @@ EXEMPLOS:
 Responda AGORA:"""
 
             try:
+                logger.info(f"🔥 Tentando Grok após limite - User disse: '{text[:50]}'")
+                
                 payload = {
                     "model": MODELO,
                     "messages": [
@@ -2121,11 +2123,17 @@ Responda AGORA:"""
                         },
                         json=payload
                     ) as resp:
+                        logger.info(f"🔥 Status resposta Grok: {resp.status}")
+                        
                         if resp.status == 200:
                             data = await resp.json()
                             reply = data["choices"][0]["message"]["content"]
+                            logger.info(f"✅ Grok respondeu: '{reply[:100]}'")
                         else:
+                            error = await resp.text()
+                            logger.error(f"❌ Grok deu erro {resp.status}: {error[:200]}")
                             reply = get_next_limit_message(uid)
+                            logger.info(f"⚠️ Usando fallback fixo: '{reply[:50]}'")
                 
                 await update.message.reply_text(
                     reply,
@@ -2138,8 +2146,10 @@ Responda AGORA:"""
                 return
                 
             except Exception as e:
-                logger.error(f"Erro Grok após limite: {e}")
+                logger.error(f"❌ EXCEÇÃO ao chamar Grok: {e}")
                 variation_msg = get_next_limit_message(uid)
+                logger.info(f"⚠️ Usando fallback por exceção: '{variation_msg[:50]}'")
+                
                 await update.message.reply_text(
                     variation_msg,
                     reply_markup=InlineKeyboardMarkup([
