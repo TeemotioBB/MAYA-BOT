@@ -2038,6 +2038,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                             ])
                         )
+                        return
                     else:
                         # Se não tiver foto configurada, envia só o texto (modo antigo)
                         await update.message.reply_text(
@@ -2047,7 +2048,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                             ])
                         )
-                    return
+                        return
         
         # Usa bonus primeiro
         if not is_vip(uid):
