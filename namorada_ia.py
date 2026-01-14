@@ -2011,9 +2011,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     bonus_msg = HOT_BONUS_MESSAGE.format(amount=amount)
                     save_message(uid, "system", f"🔥 Bônus hot: +{amount} msgs")
                     await update.message.reply_text(bonus_msg)
-                    
-                    # Atualiza o total disponível
-                    total_available = LIMITE_DIARIO + get_bonus_msgs(uid)
+                             
                     # NÃO retorna - deixa continuar pro fluxo normal
                 else:
                     # Já deu bônus hoje - agora trava de verdade
