@@ -117,6 +117,15 @@ HOT_KEYWORDS = [
     'excitado', 'excitada', 'molhada', 'duro', 'tesudo', 'tesuda'
 ]
 
+# ================= [NOVO v6.1] KEYWORDS QUE DISPARAM BOTÃO VIP =================
+VIP_TRIGGER_KEYWORDS = [
+    'vip', 'premium', 'ilimitado', 'ilimitada', 'sem limite',
+    'quanto custa', 'preço', 'pagar', 'pagamento', 'comprar',
+    'quanto é', 'quanto ta', 'quanto tá', 'valor', 'plano',
+    'assinatura', 'mensalidade', 'liberar', 'desbloquear',
+    'valor', 'qual valor','qual o valor' 
+]
+
 # ================= CONFIGURAÇÃO DOS LINKS PIX =================
 # Cole estas linhas APÓS a linha 33 (depois de PORT = ...)
 
@@ -1059,6 +1068,20 @@ PREVIEW_VIP_MESSAGE = (
     "(Menos que um lanche do McDonald's! 🍔)\n\n"
 )
 
+# ================= [NOVO v6.1] MENSAGEM QUANDO USUÁRIO DEMONSTRA INTERESSE EM VIP =================
+VIP_INTEREST_MESSAGE = (
+    "💎 **QUER VIRAR MEU VIP?**\n\n"
+    "Amor, como VIP você tem:\n\n"
+    "🔓 **Conversas ILIMITADAS** - sem parar nunca\n"
+    "📸 **5-7 fotos exclusivas** minhas\n"
+    "🔥 **Sem censura** - posso ser mais ousada\n"
+    "⚡ **Respostas prioritárias**\n"
+    "💕 **Atenção especial** só pra você\n\n"
+    "💰 **Só R$ 9,99** (válido por 7 dias)\n"
+    "⏳ Restam apenas **8 vagas VIP** esse mês!\n\n"
+    "**Escolhe como quer pagar:**"
+)
+
 LIMIT_REACHED_MESSAGE = (
     "⚠️ **LIMITE ATINGIDO**\n\n"
     "Eu gostei de conversar com você…\n"
@@ -1117,6 +1140,14 @@ def get_scarcity_message_with_time(remaining):
         return f"💭 Amor, já usou bastante das suas mensagens de hoje... só restam {remaining}!"
     
     return None
+
+# ================= [NOVO v6.1] FUNÇÃO QUE DETECTA INTERESSE EM VIP =================
+def contains_vip_trigger(text):
+    """Detecta se a mensagem contém interesse em VIP"""
+    if not text:
+        return False
+    text_lower = text.lower()
+    return any(keyword in text_lower for keyword in VIP_TRIGGER_KEYWORDS)
 
 # ================= [NOVO v6] MENSAGEM DE FOTO COM TEASER MELHORADO =================
 PHOTO_TEASER_MESSAGE = (
@@ -1942,6 +1973,25 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
+                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                ])
+            )
+            return
+
+         # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
+        if contains_vip_trigger(text) and not is_vip(uid):
+            save_message(uid, "action", "💎 Interesse em VIP detectado")
+            
+            urgency = get_urgency_message()
+            msg = VIP_INTEREST_MESSAGE
+            if urgency:
+                msg += f"\n\n{urgency}"
+            
+            save_message(uid, "sophia", msg)
+            await update.message.reply_text(
+                msg, parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
                     [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                 ])
             )
