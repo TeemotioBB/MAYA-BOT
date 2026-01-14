@@ -2027,7 +2027,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     save_message(uid, "sophia", msg)
                     
                     # Envia foto + mensagem se a foto estiver configurada
-                    if not FOTO_LIMITE_ATINGIDO.startswith("AgACAgEAAxkBAAEDDKBpaBgoO5g2PHKxoO_rYHqmEToHWgACwwxrGyq7QUcE44wK__3HJwEAAwIAA3MAAzgE"):
+                    if FOTO_LIMITE_ATINGIDO and not FOTO_LIMITE_ATINGIDO.startswith("AgACAgEAAxkBAAEDDKBpaBgoO5g2PHKxoO_rYHqmEToHWgACwwxrGyq7QUcE44wK__3HJwEAAwIAA3MAAzgE"):
                         await context.bot.send_photo(
                             chat_id=update.effective_chat.id,
                             photo=FOTO_LIMITE_ATINGIDO,
