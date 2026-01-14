@@ -2022,7 +2022,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bonus = get_bonus_msgs(uid)
         total_available = LIMITE_DIARIO + bonus
         
-        if not is_vip(uid) and current_count >= total_available:
+        if not is_vip(uid) and current_count == total_available:
             # [NOVO v6] PAYWALL INTELIGENTE - Verifica se conversa está quente
             if is_hot_conversation(uid):
                 gave_bonus, amount = give_hot_bonus(uid)
