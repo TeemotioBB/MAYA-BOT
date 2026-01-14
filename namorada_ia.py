@@ -2109,7 +2109,7 @@ async def send_pix_reminder(bot, uid):
         await bot.send_message(
             chat_id=uid, text=message, parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💳 PIX", callback_data="pay_pix")],
+                [InlineKeyboardButton("💳 PIX", url=LINK_PIX_NORMAL)],
                 [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
             ])
         )
