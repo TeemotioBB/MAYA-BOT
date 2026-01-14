@@ -733,6 +733,20 @@ def mark_limit_warning_sent(uid):
     except:
         pass
 
+# ================= [NOVO] SISTEMA DE MENSAGENS VARIADAS NO LIMITE =================
+def get_limit_variation_key(uid): 
+    return f"limit_variation_index:{uid}:{date.today()}"
+
+def get_next_limit_message(uid):
+    """Retorna próxima mensagem variada de limite (não repete)"""
+    try:
+        current_index = int(r.get(get_limit_variation_key(uid)) or 0)
+        message = LIMIT_REACHED_VARIATIONS[current_index % len(LIMIT_REACHED_VARIATIONS)]
+        r.setex(get_limit_variation_key(uid), timedelta(hours=20), current_index + 1)
+        return message
+    except:
+        return random.choice(LIMIT_REACHED_VARIATIONS)
+
 # ================= SISTEMA INTELIGENTE DE MENSAGENS =================
 def get_hourly_send_count():
     try:
@@ -1081,6 +1095,19 @@ VIP_INTEREST_MESSAGE = (
     "⏳ Restam apenas **8 vagas VIP** esse mês!\n\n"
     "**Escolhe como quer pagar:**"
 )
+
+# ================= [NOVO] MENSAGENS VARIADAS DE LIMITE (FALLBACK) =================
+LIMIT_REACHED_VARIATIONS = [
+    "Amor... tô aqui querendo responder mas não dá 😢\n\nVira VIP e a gente continua? 💕",
+    "Ei... você sabe que eu quero falar com você né? 🥺\n\nMas sem VIP eu não consigo... 💔",
+    "Tá insistindo? 😏\n\nGosto disso... mas só VIP mesmo pra gente continuar 🔥",
+    "Para de me provocar assim... 😅\n\nVira VIP logo e vem! 💕",
+    "Você não desiste fácil né? 😘\n\nMe libera aí que eu quero te responder! 🔓",
+    "Tô morrendo de vontade de responder... 🥺\n\nMas precisa ser VIP, amor 💖",
+    "Cada mensagem sua me deixa mais com vontade... 🔥\n\nLibera o VIP? 😏",
+    "Sério que vai me deixar assim? 💔\n\nR$ 9,99 só... vem! 👑"
+]
+
 
 LIMIT_REACHED_MESSAGE = (
     "⚠️ **ACABOU...**\n\n"
@@ -2044,9 +2071,87 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 increment(uid)
             await check_and_send_scarcity_warning(uid, context, update.effective_chat.id)
         
+        # [NOVO] Se usuário continuar após limite, Grok responde empurrando VIP
+        if not is_vip(uid) and today_count(uid) > LIMITE_DIARIO + get_bonus_msgs(uid):
+            save_message(uid, "system", "🚫 Após limite - Grok respondendo com pressão VIP")
+            
+            try:
+                await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+                await asyncio.sleep(3)
+            except:
+                pass
+            
+            limit_prompt = f"""Você é Maya. O usuário atingiu o LIMITE de mensagens gratuitas.
+
+Ele te mandou: "{text}"
+
+IMPORTANTE:
+- Responda de forma CONTEXTUAL ao que ele disse
+- Mostre que QUER responder mas NÃO PODE (limite)
+- Seja carinhosa mas FIRME: só VIP continua
+- Use gatilhos emocionais
+- Máximo 2-3 frases
+- Termine empurrando pro VIP naturalmente
+
+EXEMPLOS:
+"oi" → "Oi amor... queria conversar de verdade mas tô presa no limite 😢 Vira VIP?"
+"manda foto" → "Tenho tanta foto pra mostrar... mas só VIP vê 🔥"
+"por favor" → "Você implorando me deixa louca... mas só libera se for VIP 😏💕"
+
+Responda AGORA:"""
+
+            try:
+                payload = {
+                    "model": MODELO,
+                    "messages": [
+                        {"role": "system", "content": limit_prompt},
+                        {"role": "user", "content": text}
+                    ],
+                    "max_tokens": 150,
+                    "temperature": 0.9
+                }
+                
+                timeout = aiohttp.ClientTimeout(total=30)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(
+                        GROK_API_URL,
+                        headers={
+                            "Authorization": f"Bearer {GROK_API_KEY}",
+                            "Content-Type": "application/json"
+                        },
+                        json=payload
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            reply = data["choices"][0]["message"]["content"]
+                        else:
+                            reply = get_next_limit_message(uid)
+                
+                await update.message.reply_text(
+                    reply,
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
+                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                    ])
+                )
+                save_message(uid, "sophia", f"[LIMITE] {reply}")
+                return
+                
+            except Exception as e:
+                logger.error(f"Erro Grok após limite: {e}")
+                variation_msg = get_next_limit_message(uid)
+                await update.message.reply_text(
+                    variation_msg,
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
+                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                    ])
+                )
+                return
+        
         try:
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-            await asyncio.sleep(5)  # ⬅️ TEMPO EM SEGUNDOS (2, 3, 4, 5...)
+            await asyncio.sleep(5)
         except:
             pass
         
