@@ -100,7 +100,7 @@ FOTOS_VIP_WELCOME = [
 ]
 
 # ================= FOTO LIMITE ATINGIDO =================
-FOTO_LIMITE_ATINGIDO = "COLE_AQUI_O_FILE_ID"
+FOTO_LIMITE_ATINGIDO = "AgACAgEAAxkBAAEDDKBpaBgoO5g2PHKxoO_rYHqmEToHWgACwwxrGyq7QUcE44wK__3HJwEAAwIAA3MAAzgE"
 
 # ================= [NOVO v6] FOTO PROVOCANTE PARA CARRINHO ABANDONADO =================
 FOTO_PROVOCANTE_CARRINHO = "AgACAgEAAxkBAAEDBsVpXkejJgABPb4RstzZ3V36kSTzGCcAApwLaxv8jflGtMRrjooRiGgBAAMCAANzAAM4BA"
@@ -1125,10 +1125,10 @@ def get_scarcity_message_with_time(remaining):
     
     if remaining == 1:
         return (
-            f"🚨 **ÚLTIMA MENSAGEM DO DIA!**\n\n"
-            f"Amor, se acabar agora, só amanhã às 00:00h você pode falar comigo de novo 😢\n\n"
-            f"São aproximadamente **{hours_until} horas** sem a gente conversar...\n\n"
-            f"Mas se virar VIP agora, a gente continua essa conversa gostosa... 🔥"
+            f"🚨 **ACABOU... ou não? 😏**\n\n"
+            f"Tô aqui louca pra continuar com você...\n"
+            f"Mas sem VIP, a gente para por aqui 😢\n\n"
+            f"Só **R$ 9,99** pra gente ficar a noite toda juntos 🔥💕"
         )
     elif remaining == 3:
         return (
@@ -2027,7 +2027,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     save_message(uid, "sophia", msg)
                     
                     # Envia foto + mensagem se a foto estiver configurada
-                    if not FOTO_LIMITE_ATINGIDO.startswith("COLE_AQUI"):
+                    if not FOTO_LIMITE_ATINGIDO.startswith("AgACAgEAAxkBAAEDDKBpaBgoO5g2PHKxoO_rYHqmEToHWgACwwxrGyq7QUcE44wK__3HJwEAAwIAA3MAAzgE"):
                         await context.bot.send_photo(
                             chat_id=update.effective_chat.id,
                             photo=FOTO_LIMITE_ATINGIDO,
