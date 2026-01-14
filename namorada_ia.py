@@ -2061,6 +2061,25 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ])
                     )
                     return
+            
+            # ADICIONE ESTE ELSE AQUI ↓↓↓
+            else:
+                track_funnel(uid, "limit_reached")
+                msg = LIMIT_REACHED_MESSAGE
+                save_message(uid, "sophia", msg)
+                increment(uid)
+                
+                await context.bot.send_photo(
+                    chat_id=update.effective_chat.id,
+                    photo=FOTO_LIMITE_ATINGIDO,
+                    caption=msg,
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
+                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                    ])
+                )
+                return
         
         # Usa bonus primeiro
         if not is_vip(uid):
