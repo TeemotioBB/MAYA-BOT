@@ -1087,7 +1087,7 @@ LIMIT_REACHED_MESSAGE = (
     "Tava tão bom... mas não dá pra continuar assim 😢\n\n"
     "**Como VIP você tem:**\n"
     "🔓 Sem limite nenhum\n"
-    "🔥 Minha versão mais SAFADA\n
+    "🔥 Minha versão mais SAFADA\n"
     "📸 Minhas fotos exclusivas\n"
     "🔥 Eu sem filtro, de verdade\n"
     "💕 Atenção só sua\n\n"
