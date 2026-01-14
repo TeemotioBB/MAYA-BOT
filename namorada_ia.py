@@ -2026,29 +2026,21 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # CÓDIGO NOVO:
                     save_message(uid, "sophia", msg)
                     
-                    # Envia foto + mensagem se a foto estiver configurada
-                    if FOTO_LIMITE_ATINGIDO and not FOTO_LIMITE_ATINGIDO.startswith("AgACAgEAAxkBAAEDDKBpaBgoO5g2PHKxoO_rYHqmEToHWgACwwxrGyq7QUcE44wK__3HJwEAAwIAA3MAAzgE"):
-                        await context.bot.send_photo(
-                            chat_id=update.effective_chat.id,
-                            photo=FOTO_LIMITE_ATINGIDO,
-                            caption=msg,
-                            parse_mode="Markdown",
-                            reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
-                                [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                            ])
-                        )
-                        return
-                    else:
-                        # Se não tiver foto configurada, envia só o texto (modo antigo)
-                        await update.message.reply_text(
-                            msg, parse_mode="Markdown",
-                            reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
-                                [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                            ])
-                        )
-                        return
+                    # CÓDIGO NOVO:
+                    save_message(uid, "sophia", msg)
+                    
+                    # Envia foto + mensagem
+                    await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=FOTO_LIMITE_ATINGIDO,
+                        caption=msg,
+                        parse_mode="Markdown",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
+                            [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                        ])
+                    )
+                    return
         
         # Usa bonus primeiro
         if not is_vip(uid):
