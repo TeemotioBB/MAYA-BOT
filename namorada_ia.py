@@ -3080,12 +3080,6 @@ async def pausedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-    async def pausedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ... código existente ...
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-# ← COLE AQUI EMBAIXO (deixe 2 linhas vazias antes)
-
 
 async def pixclicks_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Lista todos que clicaram no PIX"""
