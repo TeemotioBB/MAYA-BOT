@@ -85,7 +85,7 @@ AUDIO_PT_2 = "CQACAgEAAxkBAAEDAAEmaVRmPJ5iuBOaXyukQ06Ui23TSokAAocGAAIZwaFGkIERRm
 
 # ================= FOTO TEASER =================
 FOTO_TEASE_FILE_ID = (
-    "AgACAgEAAxkBAAEDBsVpXkejJgABPb4RstzZ3V36kSTzGCcAApwLaxv8jflGtMRrjooRiGgBAAMCAANzAAM4BA"
+    "AgACAgEAAxkBAAEDDJppZ_Tv1wrdLTJte6E4K82AEAfuyAACtQxrGyq7QUfmqwhH4eDJIAEAAwIAA3MAAzgE"
 )
 
 # ================= [NOVO v6] FOTOS PÓS-VENDA VIP =================
