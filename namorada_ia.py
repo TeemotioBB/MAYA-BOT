@@ -3463,6 +3463,7 @@ def track_pix_navigation():
         logger.error(f"Erro track navigation: {e}")
         return "error", 500
 
+# ⚠️ CHAMAR APENAS UMA VEZ
 adicionar_rota_webhook(app, application, loop)
 
 if __name__ == "__main__":
