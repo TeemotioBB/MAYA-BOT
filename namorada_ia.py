@@ -1893,14 +1893,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ============ PIX ============
         elif query.data in ["pay_pix", "pay_pix_desconto"]:
             track_funnel(uid, "clicked_pix")
-            set_pix_clicked(uid)
-            set_pix_interest(uid)
-            set_cart_abandoned(uid)
-
-            mark_awaiting_payment(uid)
-            
-            elif query.data in ["pay_pix", "pay_pix_desconto"]:
-            track_funnel(uid, "clicked_pix")
             
             # NOVO: Registrar clique detalhado
             tipo_pagamento = "desconto" if (query.data == "pay_pix_desconto" or has_flash_discount(uid)) else "normal"
@@ -1924,7 +1916,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             save_message(uid, "sophia", "[TELA PIX EXIBIDA]")
             await context.bot.send_message(
-                chat_id=query.message.chat_id, text=text, parse_mode="Markdown",
+                chat_id=query.message.chat_id,
+                text=text,
+                parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("💳 ABRIR PAGAMENTO", url=pix_redirect_url)]
                 ])
