@@ -29,6 +29,8 @@ from telegram.ext import (
     Application, MessageHandler, ContextTypes, filters,
     CallbackQueryHandler, PreCheckoutQueryHandler, CommandHandler
 )
+from webhook_pushinpay import adicionar_rota_webhook, mark_awaiting_payment
+
 
 # ================= LOG =================
 logging.basicConfig(
@@ -1814,6 +1816,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             set_pix_clicked(uid)
             set_pix_interest(uid)
             set_cart_abandoned(uid)
+
+            mark_awaiting_payment(uid)
             
             if query.data == "pay_pix_desconto" or has_flash_discount(uid):
                 set_flash_discount(uid, hours=2)
@@ -3123,6 +3127,8 @@ async def setup_webhook():
             scheduler_started = True
     except Exception as e:
         logger.error(f"Erro webhook: {e}")
+        
+adicionar_rota_webhook(app, application, loop)
 
 if __name__ == "__main__":
     asyncio.run_coroutine_threadsafe(application.initialize(), loop)
