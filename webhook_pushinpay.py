@@ -152,7 +152,7 @@ def identificar_usuario_por_valor_e_tempo(valor: float):
                 if timestamp_str:
                     timestamp = datetime.fromisoformat(timestamp_str)
                     # Se clicou há menos de 2 horas
-                    if (datetime.now() - timestamp).total_seconds() < 7200:
+                    if (datetime.now() - timestamp).total_seconds() < 1200:
                         candidatos.append((uid, timestamp))
         
         if not candidatos:
