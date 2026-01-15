@@ -186,52 +186,6 @@ def pix_clicked_key(uid): return f"pix_clicked:{uid}"
 def daily_messages_sent_key(uid): return f"daily_msg_sent:{uid}:{date.today()}"
 def all_users_key(): return "all_users"
 
-# ================= KEYS PARA RASTREAMENTO DE CLIQUES PIX =================
-def pix_clicks_key(): return "pix_clicks_all"
-def pix_click_timestamp_key(uid): return f"pix_click_time:{uid}"
-
-def register_pix_click(uid):
-    """Registra clique no botão PIX"""
-    try:
-        r.sadd(pix_clicks_key(), str(uid))
-        r.set(pix_click_timestamp_key(uid), datetime.now().isoformat())
-        logger.info(f"💳 Clique PIX registrado: {uid}")
-        return True
-    except Exception as e:
-        logger.error(f"Erro ao registrar clique PIX: {e}")
-        return False
-
-def get_all_pix_clicks():
-    """Retorna lista de todos que clicaram no PIX"""
-    try:
-        clicks = r.smembers(pix_clicks_key())
-        return [int(uid) for uid in clicks]
-    except:
-        return []
-
-def get_pix_click_time(uid):
-    """Retorna quando usuário clicou no PIX"""
-    try:
-        timestamp = r.get(pix_click_timestamp_key(uid))
-        if timestamp:
-            return datetime.fromisoformat(timestamp)
-        return None
-    except:
-        return None
-
-def clear_all_pix_clicks():
-    """Limpa todos os registros de cliques PIX"""
-    try:
-        clicks = get_all_pix_clicks()
-        r.delete(pix_clicks_key())
-        for uid in clicks:
-            r.delete(pix_click_timestamp_key(uid))
-        logger.info(f"🗑️ {len(clicks)} cliques PIX limpos")
-        return len(clicks)
-    except Exception as e:
-        logger.error(f"Erro ao limpar cliques: {e}")
-        return 0
-
 # ================= KEYS v3/v4 =================
 def streak_key(uid): return f"streak:{uid}"
 def streak_last_day_key(uid): return f"streak_last:{uid}"
@@ -1859,7 +1813,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ============ PIX ============
         elif query.data in ["pay_pix", "pay_pix_desconto"]:
             track_funnel(uid, "clicked_pix")
-            register_pix_click(uid)
             set_pix_clicked(uid)
             set_pix_interest(uid)
             set_cart_abandoned(uid)
@@ -3080,72 +3033,6 @@ async def pausedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-
-async def pixclicks_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Lista todos que clicaram no PIX"""
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    
-    clicks = get_all_pix_clicks()
-    
-    if not clicks:
-        await update.message.reply_text("📊 Nenhum clique no PIX registrado ainda")
-        return
-    
-    pending = []
-    converted = []
-    
-    for uid in clicks:
-        if is_vip(uid):
-            converted.append(uid)
-        else:
-            click_time = get_pix_click_time(uid)
-            hours_ago = (datetime.now() - click_time).total_seconds() / 3600 if click_time else 0
-            pending.append((uid, hours_ago))
-    
-    pending.sort(key=lambda x: x[1])
-    
-    msg = f"💳 **CLIQUES NO PIX**\n\n"
-    msg += f"📊 Total: {len(clicks)}\n"
-    msg += f"✅ Convertidos: {len(converted)}\n"
-    msg += f"⏳ Pendentes: {len(pending)}\n\n"
-    
-    if pending:
-        msg += f"🔔 **PENDENTES:**\n\n"
-        for uid, hours in pending[:20]:
-            if hours < 1:
-                time_str = f"{int(hours * 60)}min atrás"
-            elif hours < 24:
-                time_str = f"{int(hours)}h atrás"
-            else:
-                time_str = f"{int(hours/24)}d atrás"
-            msg += f"• `{uid}` - {time_str}\n"
-        
-        if len(pending) > 20:
-            msg += f"\n... e mais {len(pending) - 20}"
-    
-    if converted:
-        msg += f"\n\n✅ **CONVERTIDOS:**\n"
-        for uid in converted[:10]:
-            msg += f"• `{uid}`\n"
-        if len(converted) > 10:
-            msg += f"... e mais {len(converted) - 10}"
-    
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-
-async def resetclicks_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Limpa todos os registros de cliques PIX"""
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    
-    count = clear_all_pix_clicks()
-    await update.message.reply_text(
-        f"🗑️ **CLIQUES LIMPOS**\n\n"
-        f"Foram removidos {count} registros.",
-        parse_mode="Markdown"
-    )
-
 # ================= CONFIGURAÇÃO DO BOT =================
 def setup_application():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -3172,8 +3059,6 @@ def setup_application():
     application.add_handler(CommandHandler("unblacklist", unblacklist_cmd))
     application.add_handler(CommandHandler("unpause", unpause_cmd))
     application.add_handler(CommandHandler("pausedlist", pausedlist_cmd))
-    application.add_handler(CommandHandler("pixclicks", pixclicks_cmd))
-    application.add_handler(CommandHandler("resetclicks", resetclicks_cmd))
     
     # Handlers
     application.add_handler(CallbackQueryHandler(callback_handler))
