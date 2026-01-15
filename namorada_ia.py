@@ -1890,62 +1890,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     caption="Gostou? 😏🔥"
                 )
         
-        # ============ PIX ============
-        elif query.data in ["pay_pix", "pay_pix_desconto"]:
-            track_funnel(uid, "clicked_pix")
-            
-            # Registrar clique detalhado
-            tipo_pagamento = "desconto" if (query.data == "pay_pix_desconto" or has_flash_discount(uid)) else "normal"
-            register_pix_click(uid, tipo_pagamento)
-            
-            set_cart_abandoned(uid)
-            mark_awaiting_payment(uid)
-            
-            if query.data == "pay_pix_desconto" or has_flash_discount(uid):
-                set_flash_discount(uid, hours=2)
-                link_direto = LINK_PIX_DESCONTO
-                save_message(uid, "info", "💰 CLICOU PIX COM DESCONTO - R$ 4,99")
-            else:
-                link_direto = LINK_PIX_NORMAL
-                save_message(uid, "info", "💳 CLICOU PIX NORMAL - R$ 9,99")
-            
-            save_message(uid, "sophia", "[REDIRECIONANDO CHECKOUT]")
-            
-            # Responde ao callback sem alerta
-            await query.answer()
-            
-            # Envia botão com link direto
-            await query.message.reply_text(
-                "💳 Clique no botão abaixo para pagar:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 PAGAR AGORA", url=link_direto)]
-                ])
-            )
-        
-        elif query.data == "copy_pix":
-            set_pix_interest(uid)
-            save_message(uid, "info", "📋 COPIOU CHAVE PIX")
-            await query.answer(TEXTS["pt"]["pix_copied"], show_alert=True)
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=f"`{PIX_KEY}`",
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📸 ENVIAR COMPROVANTE", callback_data="send_receipt")]
-                ])
-            )
-        
-        elif query.data == "send_receipt":
-            set_pix_pending(uid)
-            set_pix_interest(uid)
-            track_funnel(uid, "sent_receipt")
-            save_message(uid, "info", "📸 AGUARDANDO COMPROVANTE")
-            await context.bot.send_message(
-                query.message.chat_id,
-                "📸 Envie o comprovante como **foto** ou **documento** 💕",
-                parse_mode="Markdown"
-            )
-        
         elif query.data == "buy_vip":
             track_funnel(uid, "clicked_stars")
             set_cart_abandoned(uid)
@@ -2141,8 +2085,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=msg,
                         parse_mode="Markdown",
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", callback_data="pay_pix")],
-                            [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                            [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=f"{WEBHOOK_BASE_URL}/pix-redirect/{uid}?tipo=normal")],
+                            [
                         ])
                     )
                     return
@@ -3321,9 +3265,14 @@ async def setup_webhook():
 def pix_redirect(uid):
     """Página intermediária que rastreia antes de redirecionar pro PushInPay"""
     
+    # Pegar tipo (desconto ou normal)
     tipo = request.args.get('tipo', 'normal')
     link_pix = LINK_PIX_DESCONTO if tipo == 'desconto' else LINK_PIX_NORMAL
     
+    # REGISTRAR CLIQUE NO REDIS
+    register_pix_click(uid, tipo)
+    
+    # Registrar que chegou na página de redirect
     try:
         r.setex(f"pix_redirect_opened:{uid}", timedelta(hours=24), datetime.now().isoformat())
         logger.info(f"🔗 Usuário {uid} abriu página de redirect ({tipo})")
