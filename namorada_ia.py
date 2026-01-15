@@ -2460,7 +2460,7 @@ async def send_smart_scheduled_message(bot, uid, msg_type):
                     [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                 ])
             )
-            save_message(uid, "system", f"Msg programada (travado): {msg_type}"))
+            save_message(uid, "system", f"Msg programada (travado): {msg_type}")
         else:
             await bot.send_message(chat_id=uid, text=message)
             save_message(uid, "system", f"Msg programada: {msg_type}")
