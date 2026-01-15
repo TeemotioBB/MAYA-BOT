@@ -1894,7 +1894,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data in ["pay_pix", "pay_pix_desconto"]:
             track_funnel(uid, "clicked_pix")
             
-            # NOVO: Registrar clique detalhado
+            # Registrar clique detalhado
             tipo_pagamento = "desconto" if (query.data == "pay_pix_desconto" or has_flash_discount(uid)) else "normal"
             register_pix_click(uid, tipo_pagamento)
             
@@ -1903,24 +1903,22 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if query.data == "pay_pix_desconto" or has_flash_discount(uid):
                 set_flash_discount(uid, hours=2)
-                text = TEXTS["pt"]["pix_info_desconto"]
-                pix_redirect_url = f"{WEBHOOK_BASE_URL}/pix-redirect/{uid}?tipo=desconto"
+                link_direto = LINK_PIX_DESCONTO
                 save_message(uid, "info", "💰 CLICOU PIX COM DESCONTO - R$ 4,99")
             else:
-                text = TEXTS["pt"]["pix_info"]
-                urgency = get_urgency_message()
-                if urgency:
-                    text += f"\n\n{urgency}"
-                pix_redirect_url = f"{WEBHOOK_BASE_URL}/pix-redirect/{uid}?tipo=normal"
+                link_direto = LINK_PIX_NORMAL
                 save_message(uid, "info", "💳 CLICOU PIX NORMAL - R$ 9,99")
             
-            save_message(uid, "sophia", "[TELA PIX EXIBIDA]")
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=text,
-                parse_mode="Markdown",
+            save_message(uid, "sophia", "[REDIRECIONANDO CHECKOUT]")
+            
+            # Responde ao callback sem alerta
+            await query.answer()
+            
+            # Envia botão com link direto
+            await query.message.reply_text(
+                "💳 Clique no botão abaixo para pagar:",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 ABRIR PAGAMENTO", url=pix_redirect_url)]
+                    [InlineKeyboardButton("💳 PAGAR AGORA", url=link_direto)]
                 ])
             )
         
