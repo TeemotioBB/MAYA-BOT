@@ -60,7 +60,7 @@ def mark_awaiting_payment(uid):
     try:
         timestamp = datetime.now().isoformat()
         # Expira em 2 horas
-        r.setex(awaiting_payment_key(uid), timedelta(hours=2), timestamp)
+        r.setex(awaiting_payment_key(uid), timedelta(minutes=20), timestamp)
         logger.info(f"💳 User {uid} aguardando pagamento")
     except:
         pass
