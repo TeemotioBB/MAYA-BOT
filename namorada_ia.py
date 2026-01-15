@@ -186,6 +186,86 @@ def pix_clicked_key(uid): return f"pix_clicked:{uid}"
 def daily_messages_sent_key(uid): return f"daily_msg_sent:{uid}:{date.today()}"
 def all_users_key(): return "all_users"
 
+# ================= KEYS PARA TRACKING PIX DETALHADO =================
+def pix_click_timestamp_key(uid): return f"pix_click_ts:{uid}"
+def pix_click_type_key(uid): return f"pix_click_type:{uid}"
+def all_pix_clickers_key(): return "all_pix_clickers"
+
+def register_pix_click(uid, tipo="normal"):
+    """Registra clique detalhado no botão PIX"""
+    try:
+        timestamp = datetime.now().isoformat()
+        
+        # Salvar timestamp do clique
+        r.setex(pix_click_timestamp_key(uid), timedelta(days=7), timestamp)
+        
+        # Salvar tipo (normal ou desconto)
+        r.setex(pix_click_type_key(uid), timedelta(days=7), tipo)
+        
+        # Adicionar na lista de todos que clicaram
+        r.sadd(all_pix_clickers_key(), str(uid))
+        
+        # Marcar interesse PIX (já existia)
+        set_pix_interest(uid)
+        set_pix_clicked(uid)
+        
+        logger.info(f"💳 PIX CLICK registrado: {uid} ({tipo}) em {timestamp}")
+        return True
+    except Exception as e:
+        logger.error(f"Erro ao registrar clique PIX: {e}")
+        return False
+
+def get_pix_click_info(uid):
+    """Retorna informações do clique PIX"""
+    try:
+        timestamp = r.get(pix_click_timestamp_key(uid))
+        tipo = r.get(pix_click_type_key(uid))
+        
+        if timestamp:
+            return {
+                "uid": uid,
+                "timestamp": timestamp,
+                "tipo": tipo or "normal",
+                "datetime": datetime.fromisoformat(timestamp)
+            }
+        return None
+    except:
+        return None
+
+def get_all_pix_clickers():
+    """Retorna lista de todos que clicaram em PIX"""
+    try:
+        clickers = r.smembers(all_pix_clickers_key())
+        result = []
+        
+        for uid_str in clickers:
+            uid = int(uid_str)
+            info = get_pix_click_info(uid)
+            
+            if info:
+                # Adicionar informações extras
+                info['is_vip'] = is_vip(uid)
+                info['username'] = get_user_profile(uid).get('username', 'N/A')
+                info['name'] = get_user_profile(uid).get('name', 'N/A')
+                info['hours_ago'] = (datetime.now() - info['datetime']).total_seconds() / 3600
+                result.append(info)
+        
+        # Ordenar por mais recente
+        result.sort(key=lambda x: x['datetime'], reverse=True)
+        return result
+    except Exception as e:
+        logger.error(f"Erro ao buscar clickers: {e}")
+        return []
+
+def clear_pix_click_data(uid):
+    """Limpa dados de clique PIX"""
+    try:
+        r.delete(pix_click_timestamp_key(uid))
+        r.delete(pix_click_type_key(uid))
+        r.srem(all_pix_clickers_key(), str(uid))
+    except:
+        pass
+
 # ================= KEYS v3/v4 =================
 def streak_key(uid): return f"streak:{uid}"
 def streak_last_day_key(uid): return f"streak_last:{uid}"
@@ -1819,21 +1899,34 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             mark_awaiting_payment(uid)
             
+            elif query.data in ["pay_pix", "pay_pix_desconto"]:
+            track_funnel(uid, "clicked_pix")
+            
+            # NOVO: Registrar clique detalhado
+            tipo_pagamento = "desconto" if (query.data == "pay_pix_desconto" or has_flash_discount(uid)) else "normal"
+            register_pix_click(uid, tipo_pagamento)
+            
+            set_cart_abandoned(uid)
+            mark_awaiting_payment(uid)
+            
             if query.data == "pay_pix_desconto" or has_flash_discount(uid):
                 set_flash_discount(uid, hours=2)
                 text = TEXTS["pt"]["pix_info_desconto"]
-                save_message(uid, "info", "💰 DESCONTO ATIVO - R$ 4,99")
+                pix_redirect_url = f"{WEBHOOK_BASE_URL}/pix-redirect/{uid}?tipo=desconto"
+                save_message(uid, "info", "💰 CLICOU PIX COM DESCONTO - R$ 4,99")
             else:
                 text = TEXTS["pt"]["pix_info"]
                 urgency = get_urgency_message()
                 if urgency:
                     text += f"\n\n{urgency}"
+                pix_redirect_url = f"{WEBHOOK_BASE_URL}/pix-redirect/{uid}?tipo=normal"
+                save_message(uid, "info", "💳 CLICOU PIX NORMAL - R$ 9,99")
             
             save_message(uid, "sophia", "[TELA PIX EXIBIDA]")
             await context.bot.send_message(
                 chat_id=query.message.chat_id, text=text, parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📋 COPIAR CHAVE", callback_data="copy_pix")]
+                    [InlineKeyboardButton("💳 ABRIR PAGAMENTO", url=pix_redirect_url)]
                 ])
             )
         
@@ -2588,12 +2681,21 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     clear_pix_pending(uid)
     clear_pix_clicked(uid)
     clear_pix_interest(uid)
-    clear_cart_abandoned(uid)  # [NOVO v6]
+    clear_cart_abandoned(uid)
     clear_flash_discount(uid)
+    
+    # Dados PIX mantidos para análise (não limpar)
+    # clear_pix_click_data(uid)
+    
     decrease_vip_slots()
     track_funnel(uid, "became_vip")
     
-    await update.message.reply_text(f"✅ VIP ativado!\n👤 {uid}\n⏰ Até: {vip_until.strftime('%d/%m/%Y')}")
+    await update.message.reply_text(
+        f"✅ VIP ativado!\n"
+        f"👤 {uid}\n"
+        f"⏰ Até: {vip_until.strftime('%d/%m/%Y')}\n\n"
+        f"💳 Dados PIX mantidos para análise"
+    )
     
     try:
         # [NOVO v6] Mensagem de boas-vindas melhorada
@@ -3033,6 +3135,101 @@ async def pausedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
+    async def pixclickers_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mostra lista de todos que clicaram em PIX"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    
+    clickers = get_all_pix_clickers()
+    
+    if not clickers:
+        await update.message.reply_text("📭 Ninguém clicou em PIX ainda")
+        return
+    
+    # Separar por status
+    pending = [c for c in clickers if not c['is_vip']]
+    converted = [c for c in clickers if c['is_vip']]
+    
+    msg = f"💳 **CLIQUES EM PIX** (últimos 7 dias)\n\n"
+    msg += f"📊 Total: {len(clickers)}\n"
+    msg += f"⏳ Pendentes: {len(pending)}\n"
+    msg += f"✅ Convertidos: {len(converted)}\n"
+    msg += f"📈 Taxa conversão: {(len(converted)/len(clickers)*100) if clickers else 0:.1f}%\n\n"
+    
+    # Mostrar pendentes primeiro (mais importantes)
+    if pending:
+        msg += "⏳ **PENDENTES:**\n"
+        for c in pending[:15]:  # Limitar a 15
+            hours = int(c['hours_ago'])
+            tipo_emoji = "🔥" if c['tipo'] == "desconto" else "💳"
+            msg += f"{tipo_emoji} `{c['uid']}` - há {hours}h\n"
+        
+        if len(pending) > 15:
+            msg += f"\n... e mais {len(pending) - 15} pendentes\n"
+    
+    # Mostrar alguns convertidos
+    if converted:
+        msg += f"\n✅ **CONVERTIDOS** (últimos 5):\n"
+        for c in converted[:5]:
+            hours = int(c['hours_ago'])
+            msg += f"💎 `{c['uid']}` - há {hours}h\n"
+    
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+async def pixinfo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mostra detalhes do clique PIX de um usuário específico"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    
+    if not context.args:
+        await update.message.reply_text("Uso: /pixinfo <user_id>")
+        return
+    
+    uid = int(context.args[0])
+    info = get_pix_click_info(uid)
+    
+    if not info:
+        await update.message.reply_text(f"❌ Usuário {uid} não clicou em PIX nos últimos 7 dias")
+        return
+    
+    profile = get_user_profile(uid)
+    hours_ago = int(info['hours_ago'])
+    
+    # Verificar navegação
+    left_page = r.exists(f"pix_nav:{uid}:left_redirect_page")
+    opened_redirect = r.exists(f"pix_redirect_opened:{uid}")
+    
+    msg = f"💳 **DETALHES PIX CLICK**\n\n"
+    msg += f"👤 ID: `{uid}`\n"
+    msg += f"📝 Nome: {profile.get('name', 'N/A')}\n"
+    msg += f"📱 User: @{profile.get('username', 'N/A')}\n\n"
+    
+    msg += f"🕐 Clicou há: **{hours}h**\n"
+    msg += f"💰 Tipo: **{info['tipo'].upper()}**\n"
+    msg += f"🔗 Abriu redirect: {'✅' if opened_redirect else '❌'}\n"
+    msg += f"🚀 Foi pro PushInPay: {'✅' if left_page else '❌'}\n\n"
+    
+    msg += f"💎 Status: {'**VIP ATIVO ✅**' if is_vip(uid) else '**PENDENTE ⏳**'}\n\n"
+    
+    if not is_vip(uid):
+        msg += f"⚡ Use: `/setvip {uid}` para ativar"
+    
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+async def clearpixdata_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Limpa dados de clique PIX de um usuário"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    
+    if not context.args:
+        await update.message.reply_text("Uso: /clearpixdata <user_id>")
+        return
+    
+    uid = int(context.args[0])
+    clear_pix_click_data(uid)
+    
+    await update.message.reply_text(f"🗑️ Dados PIX limpos: {uid}")
+
 # ================= CONFIGURAÇÃO DO BOT =================
 def setup_application():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -3059,6 +3256,9 @@ def setup_application():
     application.add_handler(CommandHandler("unblacklist", unblacklist_cmd))
     application.add_handler(CommandHandler("unpause", unpause_cmd))
     application.add_handler(CommandHandler("pausedlist", pausedlist_cmd))
+    application.add_handler(CommandHandler("pixclickers", pixclickers_cmd))
+    application.add_handler(CommandHandler("pixinfo", pixinfo_cmd))
+    application.add_handler(CommandHandler("clearpixdata", clearpixdata_cmd))
     
     # Handlers
     application.add_handler(CallbackQueryHandler(callback_handler))
@@ -3128,6 +3328,147 @@ async def setup_webhook():
     except Exception as e:
         logger.error(f"Erro webhook: {e}")
         
+adicionar_rota_webhook(app, application, loop)
+
+# ================= ROTA DE REDIRECIONAMENTO PIX =================
+@app.route("/pix-redirect/<int:uid>", methods=["GET"])
+def pix_redirect(uid):
+    """Página intermediária que rastreia antes de redirecionar pro PushInPay"""
+    
+    # Pegar tipo (desconto ou normal)
+    tipo = request.args.get('tipo', 'normal')
+    link_pix = LINK_PIX_DESCONTO if tipo == 'desconto' else LINK_PIX_NORMAL
+    
+    # Registrar que chegou na página de redirect
+    try:
+        r.setex(f"pix_redirect_opened:{uid}", timedelta(hours=24), datetime.now().isoformat())
+        logger.info(f"🔗 Usuário {uid} abriu página de redirect ({tipo})")
+    except:
+        pass
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Abrindo pagamento...</title>
+        <style>
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+            }}
+            .container {{
+                text-align: center;
+                max-width: 400px;
+                width: 100%;
+            }}
+            h2 {{
+                font-size: 28px;
+                margin-bottom: 20px;
+                font-weight: 600;
+            }}
+            .loader {{
+                margin: 40px auto;
+                width: 60px;
+                height: 60px;
+                border: 6px solid rgba(255,255,255,0.2);
+                border-top-color: white;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            }}
+            @keyframes spin {{
+                to {{ transform: rotate(360deg); }}
+            }}
+            p {{
+                font-size: 18px;
+                opacity: 0.9;
+                line-height: 1.5;
+            }}
+            .price {{
+                font-size: 32px;
+                font-weight: bold;
+                margin: 20px 0;
+                text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }}
+            .info {{
+                font-size: 14px;
+                opacity: 0.8;
+                margin-top: 30px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>💕 Abrindo pagamento...</h2>
+            <div class="loader"></div>
+            <p class="price">{'R$ 4,99' if tipo == 'desconto' else 'R$ 9,99'}</p>
+            <p>Você será redirecionado em instantes 😘</p>
+            <p class="info">Aguarde...</p>
+        </div>
+        
+        <script>
+            let redirected = false;
+            
+            // Detectar quando usuário sai da página
+            document.addEventListener('visibilitychange', function() {{
+                if (document.hidden && !redirected) {{
+                    // Usuário saiu (provavelmente foi pro PushInPay)
+                    fetch('{WEBHOOK_BASE_URL}/track-pix-navigation', {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{
+                            uid: {uid},
+                            action: 'left_redirect_page',
+                            tipo: '{tipo}'
+                        }})
+                    }}).catch(() => {{}});
+                }}
+            }});
+            
+            // Redirecionar após 2 segundos
+            setTimeout(() => {{
+                redirected = true;
+                window.location.href = '{link_pix}';
+            }}, 2000);
+        </script>
+    </body>
+    </html>
+    """
+    return html
+
+@app.route("/track-pix-navigation", methods=["POST"])
+def track_pix_navigation():
+    """Rastreia navegação do usuário durante processo PIX"""
+    try:
+        data = request.json
+        uid = data.get("uid")
+        action = data.get("action")
+        tipo = data.get("tipo", "normal")
+        
+        if uid:
+            timestamp = datetime.now().isoformat()
+            key = f"pix_nav:{uid}:{action}"
+            r.setex(key, timedelta(hours=24), timestamp)
+            
+            logger.info(f"🔍 PIX Navigation: {uid} - {action} ({tipo})")
+            
+        return "ok", 200
+    except Exception as e:
+        logger.error(f"Erro track navigation: {e}")
+        return "error", 500
+
 adicionar_rota_webhook(app, application, loop)
 
 if __name__ == "__main__":
