@@ -3321,19 +3321,15 @@ async def setup_webhook():
             scheduler_started = True
     except Exception as e:
         logger.error(f"Erro webhook: {e}")
-        
-adicionar_rota_webhook(app, application, loop)
 
 # ================= ROTA DE REDIRECIONAMENTO PIX =================
 @app.route("/pix-redirect/<int:uid>", methods=["GET"])
 def pix_redirect(uid):
     """Página intermediária que rastreia antes de redirecionar pro PushInPay"""
     
-    # Pegar tipo (desconto ou normal)
     tipo = request.args.get('tipo', 'normal')
     link_pix = LINK_PIX_DESCONTO if tipo == 'desconto' else LINK_PIX_NORMAL
     
-    # Registrar que chegou na página de redirect
     try:
         r.setex(f"pix_redirect_opened:{uid}", timedelta(hours=24), datetime.now().isoformat())
         logger.info(f"🔗 Usuário {uid} abriu página de redirect ({tipo})")
@@ -3415,10 +3411,8 @@ def pix_redirect(uid):
         <script>
             let redirected = false;
             
-            // Detectar quando usuário sai da página
             document.addEventListener('visibilitychange', function() {{
                 if (document.hidden && !redirected) {{
-                    // Usuário saiu (provavelmente foi pro PushInPay)
                     fetch('{WEBHOOK_BASE_URL}/track-pix-navigation', {{
                         method: 'POST',
                         headers: {{'Content-Type': 'application/json'}},
@@ -3431,7 +3425,6 @@ def pix_redirect(uid):
                 }}
             }});
             
-            // Redirecionar após 2 segundos
             setTimeout(() => {{
                 redirected = true;
                 window.location.href = '{link_pix}';
@@ -3463,9 +3456,10 @@ def track_pix_navigation():
         logger.error(f"Erro track navigation: {e}")
         return "error", 500
 
-# ⚠️ CHAMAR APENAS UMA VEZ
+# ⚠️ WEBHOOK PUSHINPAY - CHAMAR APENAS UMA VEZ!
 adicionar_rota_webhook(app, application, loop)
 
+# ================= INICIALIZAÇÃO =================
 if __name__ == "__main__":
     asyncio.run_coroutine_threadsafe(application.initialize(), loop)
     asyncio.run_coroutine_threadsafe(application.start(), loop)
