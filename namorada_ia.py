@@ -131,8 +131,8 @@ VIP_TRIGGER_KEYWORDS = [
 # ================= CONFIGURAÇÃO DOS LINKS PIX =================
 # Cole estas linhas APÓS a linha 33 (depois de PORT = ...)
 
-LINK_PIX_NORMAL = "https://app.pushinpay.com.br/service/pay/A0D4706A-6975-4B9A-BF91-ABEFD61B1E1A"
-LINK_PIX_DESCONTO = "https://app.pushinpay.com.br/service/pay/A0D47AD1-C1B9-4559-9B68-16F2FA22FF93"
+LINK_PIX_NORMAL = "https://app.pushinpay.com.br/service/pay/A0D7D476-E44F-42EB-AECA-1EF20EE5C01E"
+LINK_PIX_DESCONTO = "https://app.pushinpay.com.br/service/pay/A0D7D45D-A4F7-474D-9637-F8E24AAE5867"
 
 # ================= MEMÓRIA PERSISTENTE =================
 MAX_MEMORIA = 12
