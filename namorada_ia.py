@@ -3129,7 +3129,7 @@ async def pausedlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-    async def pixclickers_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def pixclickers_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Mostra lista de todos que clicaram em PIX"""
     if update.effective_user.id not in ADMIN_IDS:
         return
