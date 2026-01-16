@@ -1703,8 +1703,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_funnel(uid, "lang_selected")
     save_message(uid, "info", "🌍 Idioma: PT (padrão)")
     
-    # Marca como primeiro contato para enviar áudios na primeira resposta
-    mark_first_contact(uid)
+    # NÃO chama mark_first_contact aqui!
     
     try:
         # Envia foto + texto direto (sem botões)
@@ -2002,8 +2001,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(response)
             return
         
-        if is_first_contact(uid):
-            track_funnel(uid, "first_message")
         
         # ========== [ALTERADO v6] BLOQUEIO DE FOTO COM TEASER MELHORADO ==========
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
