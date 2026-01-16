@@ -1703,16 +1703,19 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_funnel(uid, "lang_selected")
     save_message(uid, "info", "🌍 Idioma: PT (padrão)")
     
+    # Marca como primeiro contato para enviar áudios na primeira resposta
+    mark_first_contact(uid)
+    
     try:
-        # Vai direto para a pergunta de onboarding COM FOTO
+        # Envia foto + texto direto (sem botões)
         await update.message.reply_photo(
             photo=FOTO_ONBOARDING_START,
-            caption=ONBOARDING_QUESTION,
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💕 Carente", callback_data="onboard_carente")],
-                [InlineKeyboardButton("🔥 Com tesão", callback_data="onboard_tesao")]
-            ])
+            caption=(
+                "Hmm... deixa eu adivinhar 😏\n\n"
+                "Você tá aqui porque tá carente ou com tesão?\n\n"
+                "Responde rápido... tenho outros 47 caras esperando 😘"
+            ),
+            parse_mode="Markdown"
         )
         save_message(uid, "sophia", "[FOTO + PERGUNTA ONBOARDING EXIBIDA]")
     except Exception as e:
@@ -1766,49 +1769,49 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(query.message.chat_id, response)
         
         # ============ ONBOARDING CHOICE ============
-        elif query.data == "onboard_carente":
-            set_onboarding_choice(uid, "carente")
-            save_message(uid, "info", "💕 Escolheu: CARENTE")
+        #elif query.data == "onboard_carente":
+            #set_onboarding_choice(uid, "carente")
+            #save_message(uid, "info", "💕 Escolheu: CARENTE")
             
-            await context.bot.send_message(
-                query.message.chat_id,
-                ONBOARDING_RESPONSE_CARENTE
-            )
+            #await context.bot.send_message(
+            #    query.message.chat_id,
+             #   ONBOARDING_RESPONSE_CARENTE
+           # )
             
             # Agora envia os áudios
-            await asyncio.sleep(1.5)
-            save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-            await asyncio.sleep(2.0)
-            save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+           # await asyncio.sleep(1.5)
+           # save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
+          #  await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
+           # await asyncio.sleep(2.0)
+          #  save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
+            #await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
-        elif query.data == "onboard_tesao":
-            set_onboarding_choice(uid, "tesao")
-            save_message(uid, "info", "🔥 Escolheu: COM TESÃO")
+       # elif query.data == "onboard_tesao":
+         #   set_onboarding_choice(uid, "tesao")
+         #   save_message(uid, "info", "🔥 Escolheu: COM TESÃO")
             
-            await context.bot.send_message(
-                query.message.chat_id,
-                ONBOARDING_RESPONSE_TESAO
-            )
+          #  await context.bot.send_message(
+          #      query.message.chat_id,
+          #      ONBOARDING_RESPONSE_TESAO
+          #  )
             
             # Envia os áudios
-            await asyncio.sleep(1.5)
-            save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-            await asyncio.sleep(2.0)
-            save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+           # await asyncio.sleep(1.5)
+          #  save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
+          #  await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
+          #  await asyncio.sleep(2.0)
+          #  save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
+          #  await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
 
             # Envia foto provocante para quem escolheu tesão
-            await asyncio.sleep(1.5)
-            if not FOTO_ONBOARDING_TESAO.startswith("COLE_AQUI"):
-                save_message(uid, "sophia", "[📸 FOTO TESÃO]")
-                await context.bot.send_photo(
-                    query.message.chat_id,
-                    FOTO_ONBOARDING_TESAO,
-                    caption="Gostou? 😏🔥"
-                )
+           # await asyncio.sleep(1.5)
+           # if not FOTO_ONBOARDING_TESAO.startswith("COLE_AQUI"):
+           #     save_message(uid, "sophia", "[📸 FOTO TESÃO]")
+           #     await context.bot.send_photo(
+            #        query.message.chat_id,
+            #        FOTO_ONBOARDING_TESAO,
+              #      caption="Gostou? 😏🔥"
+              #  )
         
         # ============ PIX ============
         elif query.data in ["pay_pix", "pay_pix_desconto"]:
@@ -1893,6 +1896,26 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     streak, streak_updated = update_streak(uid)
     
     reset_ignored(uid)
+
+    reset_ignored(uid)
+    
+    # ========== ENVIO DE ÁUDIOS NO PRIMEIRO CONTATO ==========
+    if is_first_contact(uid):
+        mark_first_contact(uid)
+        
+        # Envia os áudios
+        try:
+            await asyncio.sleep(1.5)
+            save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
+            await context.bot.send_audio(update.effective_chat.id, AUDIO_PT_1)
+            
+            await asyncio.sleep(2.0)
+            save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
+            await context.bot.send_audio(update.effective_chat.id, AUDIO_PT_2)
+        except Exception as e:
+            logger.error(f"Erro ao enviar áudios: {e}")
+    
+    # ========== TAKEOVER: ADMIN NO CONTROLE ==========
     
     # ========== TAKEOVER: ADMIN NO CONTROLE ==========
     if is_takeover_active(uid):
