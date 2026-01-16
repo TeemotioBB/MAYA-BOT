@@ -1703,18 +1703,16 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_funnel(uid, "lang_selected")
     save_message(uid, "info", "🌍 Idioma: PT (padrão)")
     
-    # NÃO chama mark_first_contact aqui!
-    
     try:
-        # Envia foto + texto direto (sem botões)
+        # Vai direto para a pergunta de onboarding COM FOTO
         await update.message.reply_photo(
             photo=FOTO_ONBOARDING_START,
-            caption=(
-                "Hmm... deixa eu adivinhar 😏\n\n"
-                "Você tá aqui porque tá carente ou com tesão?\n\n"
-                "Responde rápido... tenho outros 47 caras esperando 😘"
-            ),
-            parse_mode="Markdown"
+            caption=ONBOARDING_QUESTION,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💕 Carente", callback_data="onboard_carente")],
+                [InlineKeyboardButton("🔥 Com tesão", callback_data="onboard_tesao")]
+            ])
         )
         save_message(uid, "sophia", "[FOTO + PERGUNTA ONBOARDING EXIBIDA]")
     except Exception as e:
@@ -1768,49 +1766,49 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(query.message.chat_id, response)
         
         # ============ ONBOARDING CHOICE ============
-        #elif query.data == "onboard_carente":
-            #set_onboarding_choice(uid, "carente")
-            #save_message(uid, "info", "💕 Escolheu: CARENTE")
+        elif query.data == "onboard_carente":
+            set_onboarding_choice(uid, "carente")
+            save_message(uid, "info", "💕 Escolheu: CARENTE")
             
-            #await context.bot.send_message(
-            #    query.message.chat_id,
-             #   ONBOARDING_RESPONSE_CARENTE
-           # )
+            await context.bot.send_message(
+                query.message.chat_id,
+                ONBOARDING_RESPONSE_CARENTE
+            )
             
             # Agora envia os áudios
-           # await asyncio.sleep(1.5)
-           # save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
-          #  await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-           # await asyncio.sleep(2.0)
-          #  save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
-            #await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+            await asyncio.sleep(1.5)
+            save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
+            await asyncio.sleep(2.0)
+            save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
         
-       # elif query.data == "onboard_tesao":
-         #   set_onboarding_choice(uid, "tesao")
-         #   save_message(uid, "info", "🔥 Escolheu: COM TESÃO")
+        elif query.data == "onboard_tesao":
+            set_onboarding_choice(uid, "tesao")
+            save_message(uid, "info", "🔥 Escolheu: COM TESÃO")
             
-          #  await context.bot.send_message(
-          #      query.message.chat_id,
-          #      ONBOARDING_RESPONSE_TESAO
-          #  )
+            await context.bot.send_message(
+                query.message.chat_id,
+                ONBOARDING_RESPONSE_TESAO
+            )
             
             # Envia os áudios
-           # await asyncio.sleep(1.5)
-          #  save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
-          #  await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-          #  await asyncio.sleep(2.0)
-          #  save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
-          #  await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
+            await asyncio.sleep(1.5)
+            save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
+            await asyncio.sleep(2.0)
+            save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
+            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
 
             # Envia foto provocante para quem escolheu tesão
-           # await asyncio.sleep(1.5)
-           # if not FOTO_ONBOARDING_TESAO.startswith("COLE_AQUI"):
-           #     save_message(uid, "sophia", "[📸 FOTO TESÃO]")
-           #     await context.bot.send_photo(
-            #        query.message.chat_id,
-            #        FOTO_ONBOARDING_TESAO,
-              #      caption="Gostou? 😏🔥"
-              #  )
+            await asyncio.sleep(1.5)
+            if not FOTO_ONBOARDING_TESAO.startswith("COLE_AQUI"):
+                save_message(uid, "sophia", "[📸 FOTO TESÃO]")
+                await context.bot.send_photo(
+                    query.message.chat_id,
+                    FOTO_ONBOARDING_TESAO,
+                    caption="Gostou? 😏🔥"
+                )
         
         # ============ PIX ============
         elif query.data in ["pay_pix", "pay_pix_desconto"]:
@@ -1896,8 +1894,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     reset_ignored(uid)
     
-    
-    
     # ========== TAKEOVER: ADMIN NO CONTROLE ==========
     if is_takeover_active(uid):
         text = update.message.text or ""
@@ -1914,65 +1910,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"🎮 Takeover ativo para {uid} - IA não responde")
         return
     
-    # ================= [ALTERADO v6] MESSAGE HANDLER COM PAYWALL INTELIGENTE =================
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    
-    if is_blacklisted(uid):
-        save_message(uid, "blocked", "Mensagem bloqueada - usuário na blacklist")
-        return
-    
-    update_last_activity(uid)
-    streak, streak_updated = update_streak(uid)
-    
-    reset_ignored(uid)
-    
-    # ========== TAKEOVER: ADMIN NO CONTROLE ==========
-    if is_takeover_active(uid):
-        text = update.message.text or ""
-        has_photo = bool(update.message.photo)
-        has_doc = bool(update.message.document)
-        
-        if text:
-            save_message(uid, "user", text)
-        elif has_photo:
-            save_message(uid, "user", "[📷 FOTO ENVIADA]")
-        elif has_doc:
-            save_message(uid, "user", "[📄 DOCUMENTO ENVIADO]")
-        
-        logger.info(f"🎮 Takeover ativo para {uid} - IA não responde")
-        return
-    
-    # ========== ENVIO DE ÁUDIOS NO PRIMEIRO CONTATO ==========
-    primeiro_contato = is_first_contact(uid)
-    
-    if primeiro_contato:
-        mark_first_contact(uid)
-        track_funnel(uid, "first_message")
-        
-        logger.info(f"🎵 Primeiro contato detectado para {uid} - enviando áudios")
-        
-        # Envia os áudios PRIMEIRO
-        try:
-            save_message(uid, "sophia", "[🎵 ENVIANDO ÁUDIO 1]")
-            await context.bot.send_audio(update.effective_chat.id, AUDIO_PT_1)
-            logger.info(f"✅ Áudio 1 enviado para {uid}")
-            
-            await asyncio.sleep(2.0)
-            
-            save_message(uid, "sophia", "[🎵 ENVIANDO ÁUDIO 2]")
-            await context.bot.send_audio(update.effective_chat.id, AUDIO_PT_2)
-            logger.info(f"✅ Áudio 2 enviado para {uid}")
-            
-            await asyncio.sleep(1.0)
-            
-            # RETORNA AQUI - não processa mensagem no primeiro contato
-            return
-            
-        except Exception as e:
-            logger.error(f"❌ Erro ao enviar áudios para {uid}: {e}")
-    
-    # A partir daqui, só processa se NÃO for primeiro contato
     try:
         has_photo = bool(update.message.photo)
         has_doc = bool(update.message.document)
@@ -2014,7 +1951,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             clear_pix_pending(uid)
             clear_pix_clicked(uid)
             clear_pix_interest(uid)
-            clear_cart_abandoned(uid)
+            clear_cart_abandoned(uid)  # [NOVO v6] Limpa carrinho abandonado
             
             has_discount = has_flash_discount(uid)
             
@@ -2042,7 +1979,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(response)
             return
         
-        # ========== BLOQUEIO DE FOTO ==========
+        if is_first_contact(uid):
+            track_funnel(uid, "first_message")
+        
+        # ========== [ALTERADO v6] BLOQUEIO DE FOTO COM TEASER MELHORADO ==========
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
             save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
             urgency = get_urgency_message()
@@ -2062,7 +2002,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # ========== DETECÇÃO DE INTERESSE EM VIP ==========
+         # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
         if contains_vip_trigger(text) and not is_vip(uid):
             save_message(uid, "action", "💎 Interesse em VIP detectado")
             
