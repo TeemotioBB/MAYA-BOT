@@ -1895,8 +1895,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     streak, streak_updated = update_streak(uid)
     
     reset_ignored(uid)
-
-    reset_ignored(uid)
     
     # ========== ENVIO DE ÁUDIOS NO PRIMEIRO CONTATO ==========
     if is_first_contact(uid):
@@ -1914,7 +1912,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Erro ao enviar áudios: {e}")
     
-    # ========== TAKEOVER: ADMIN NO CONTROLE ==========
     
     # ========== TAKEOVER: ADMIN NO CONTROLE ==========
     if is_takeover_active(uid):
@@ -1932,18 +1929,34 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"🎮 Takeover ativo para {uid} - IA não responde")
         return
     
-    try:
-        has_photo = bool(update.message.photo)
-        has_doc = bool(update.message.document)
-        text = update.message.text or ""
-        lang = get_lang(uid)
+    # ========== ENVIO DE ÁUDIOS NO PRIMEIRO CONTATO ==========
+    primeiro_contato = is_first_contact(uid)
+    
+    if primeiro_contato:
+        mark_first_contact(uid)
+        track_funnel(uid, "first_message")
         
-        if text:
-            save_message(uid, "user", text)
-        elif has_photo:
-            save_message(uid, "user", "[📷 FOTO ENVIADA]")
-        elif has_doc:
-            save_message(uid, "user", "[📄 DOCUMENTO ENVIADO]")
+        logger.info(f"🎵 Primeiro contato detectado para {uid} - enviando áudios")
+        
+        # Envia os áudios PRIMEIRO
+        try:
+            save_message(uid, "sophia", "[🎵 ENVIANDO ÁUDIO 1]")
+            await context.bot.send_audio(update.effective_chat.id, AUDIO_PT_1)
+            logger.info(f"✅ Áudio 1 enviado para {uid}")
+            
+            await asyncio.sleep(2.0)
+            
+            save_message(uid, "sophia", "[🎵 ENVIANDO ÁUDIO 2]")
+            await context.bot.send_audio(update.effective_chat.id, AUDIO_PT_2)
+            logger.info(f"✅ Áudio 2 enviado para {uid}")
+            
+            await asyncio.sleep(1.0)
+            
+            # RETORNA AQUI - não processa mensagem no primeiro contato
+            return
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao enviar áudios para {uid}: {e}")
         
         # ========== FOTO PARA IA ==========
         if has_photo and not (is_pix_pending(uid) or has_pix_interest(uid)):
