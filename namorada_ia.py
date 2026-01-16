@@ -1896,22 +1896,36 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     reset_ignored(uid)
     
-    # ========== ENVIO DE ÁUDIOS NO PRIMEIRO CONTATO ==========
-    if is_first_contact(uid):
-        mark_first_contact(uid)
-        
-        # Envia os áudios
-        try:
-            await asyncio.sleep(1.5)
-            save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
-            await context.bot.send_audio(update.effective_chat.id, AUDIO_PT_1)
-            
-            await asyncio.sleep(2.0)
-            save_message(uid, "sophia", "[🎵 ÁUDIO 2]")
-            await context.bot.send_audio(update.effective_chat.id, AUDIO_PT_2)
-        except Exception as e:
-            logger.error(f"Erro ao enviar áudios: {e}")
     
+    
+    # ========== TAKEOVER: ADMIN NO CONTROLE ==========
+    if is_takeover_active(uid):
+        text = update.message.text or ""
+        has_photo = bool(update.message.photo)
+        has_doc = bool(update.message.document)
+        
+        if text:
+            save_message(uid, "user", text)
+        elif has_photo:
+            save_message(uid, "user", "[📷 FOTO ENVIADA]")
+        elif has_doc:
+            save_message(uid, "user", "[📄 DOCUMENTO ENVIADO]")
+        
+        logger.info(f"🎮 Takeover ativo para {uid} - IA não responde")
+        return
+    
+    # ================= [ALTERADO v6] MESSAGE HANDLER COM PAYWALL INTELIGENTE =================
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    
+    if is_blacklisted(uid):
+        save_message(uid, "blocked", "Mensagem bloqueada - usuário na blacklist")
+        return
+    
+    update_last_activity(uid)
+    streak, streak_updated = update_streak(uid)
+    
+    reset_ignored(uid)
     
     # ========== TAKEOVER: ADMIN NO CONTROLE ==========
     if is_takeover_active(uid):
@@ -1957,6 +1971,20 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         except Exception as e:
             logger.error(f"❌ Erro ao enviar áudios para {uid}: {e}")
+    
+    # A partir daqui, só processa se NÃO for primeiro contato
+    try:
+        has_photo = bool(update.message.photo)
+        has_doc = bool(update.message.document)
+        text = update.message.text or ""
+        lang = get_lang(uid)
+        
+        if text:
+            save_message(uid, "user", text)
+        elif has_photo:
+            save_message(uid, "user", "[📷 FOTO ENVIADA]")
+        elif has_doc:
+            save_message(uid, "user", "[📄 DOCUMENTO ENVIADO]")
         
         # ========== FOTO PARA IA ==========
         if has_photo and not (is_pix_pending(uid) or has_pix_interest(uid)):
@@ -1986,7 +2014,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             clear_pix_pending(uid)
             clear_pix_clicked(uid)
             clear_pix_interest(uid)
-            clear_cart_abandoned(uid)  # [NOVO v6] Limpa carrinho abandonado
+            clear_cart_abandoned(uid)
             
             has_discount = has_flash_discount(uid)
             
@@ -2014,8 +2042,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(response)
             return
         
-        
-        # ========== [ALTERADO v6] BLOQUEIO DE FOTO COM TEASER MELHORADO ==========
+        # ========== BLOQUEIO DE FOTO ==========
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
             save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
             urgency = get_urgency_message()
@@ -2035,7 +2062,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-         # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
+        # ========== DETECÇÃO DE INTERESSE EM VIP ==========
         if contains_vip_trigger(text) and not is_vip(uid):
             save_message(uid, "action", "💎 Interesse em VIP detectado")
             
