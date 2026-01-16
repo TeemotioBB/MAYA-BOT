@@ -1213,7 +1213,6 @@ ONBOARDING_QUESTION = (
     "Você tá aqui porque:\n\n"
     "💔 Tá carente e quer companhia?\n"
     "🔥 Tá com tesão e quer se divertir?\n\n"
-    "**Responde rápido... tenho outros 24 caras esperando** 😘"
 )
 
 ONBOARDING_RESPONSE_CARENTE = (
