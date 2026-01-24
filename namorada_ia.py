@@ -1984,7 +1984,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             clear_pix_pending(uid)
             clear_pix_clicked(uid)
             clear_pix_interest(uid)
-            clear_cart_abandoned(uid)  # [NOVO v6] Limpa carrinho abandonado
+            clear_cart_abandoned(uid)
             
             has_discount = has_flash_discount(uid)
             
@@ -2019,21 +2019,18 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if PEDIDO_PREVIEW_REGEX.search(text) and not is_vip(uid):
             save_message(uid, "action", "📸 Enviando foto preview/amostra")
             
-            # Mostra "digitando..."
             try:
                 await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
                 await asyncio.sleep(2)
             except:
                 pass
             
-            # Mostra "enviando foto..."
             try:
                 await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
                 await asyncio.sleep(3)
             except:
                 pass
             
-            # Envia foto preview (SEM mensagem de venda)
             await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
                 photo=FOTO_PREVIEW_FILE_ID
@@ -2041,27 +2038,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             return
         
-        # ========== BLOCO 2: FOTO/NUDE (teaser com venda) ==========
-if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-    save_message(uid, "action", "🔥 Pediu foto - enviando teaser + IA vai responder")
-    urgency = get_urgency_message()
-    caption = TEXTS[lang]["photo_block"]
-    if urgency:
-        caption += f"\n\n{urgency}"
-    
-    save_message(uid, "sophia", caption)
-    await context.bot.send_photo(
-        chat_id=update.effective_chat.id,
-        photo=FOTO_TEASE_FILE_ID,
-        caption=caption,
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
-            [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-        ])
-    )
-    # REMOVIDO O RETURN! Agora a IA também vai responder
-    await asyncio.sleep(2)  # Pequena pausa antes da IA responder
+        # ========== BLOCO 2: FOTO/NUDE - COMENTADO (IA vai lidar) ==========
+        # Deixando a IA responder naturalmente a pedidos de foto
+        # O prompt já está instruído para provocar e empurrar VIP
         
         # ========== LIMITE DIÁRIO ==========
         current_count = today_count(uid)
@@ -2069,18 +2048,14 @@ if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
         total_available = LIMITE_DIARIO + bonus
         
         if not is_vip(uid) and current_count == total_available:
-            # [NOVO v6] PAYWALL INTELIGENTE - Verifica se conversa está quente
+            # PAYWALL INTELIGENTE - Verifica se conversa está quente
             if is_hot_conversation(uid):
                 gave_bonus, amount = give_hot_bonus(uid)
                 if gave_bonus:
-                    # Deu bônus! Avisa o usuário e deixa continuar
                     bonus_msg = HOT_BONUS_MESSAGE.format(amount=amount)
                     save_message(uid, "system", f"🔥 Bônus hot: +{amount} msgs")
                     await update.message.reply_text(bonus_msg)
-                             
-                    # NÃO retorna - deixa continuar pro fluxo normal
                 else:
-                    # Já deu bônus hoje - agora trava de verdade
                     track_funnel(uid, "limit_reached")
                     save_message(uid, "action", f"🔒 LIMITE ATINGIDO (após bônus hot)")
                     
@@ -2089,13 +2064,8 @@ if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
                     if urgency:
                         msg += f"\n\n{urgency}"
                     
-                    # CÓDIGO NOVO:
                     save_message(uid, "sophia", msg)
                     
-                    # CÓDIGO NOVO:
-                    save_message(uid, "sophia", msg)
-                    
-                    # Envia foto + mensagem
                     await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=FOTO_LIMITE_ATINGIDO,
@@ -2107,8 +2077,6 @@ if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
                         ])
                     )
                     return
-            
-            # ADICIONE ESTE ELSE AQUI ↓↓↓
             else:
                 track_funnel(uid, "limit_reached")
                 msg = LIMIT_REACHED_MESSAGE
@@ -2136,7 +2104,7 @@ if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
                 increment(uid)
             await check_and_send_scarcity_warning(uid, context, update.effective_chat.id)
         
-        # [NOVO] Se usuário continuar após limite, Grok responde empurrando VIP
+        # Se usuário continuar após limite, Grok responde empurrando VIP
         if not is_vip(uid) and today_count(uid) > LIMITE_DIARIO + get_bonus_msgs(uid):
             save_message(uid, "system", "🚫 Após limite - Grok respondendo com pressão VIP")
             
