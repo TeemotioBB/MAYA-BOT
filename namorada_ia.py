@@ -88,6 +88,11 @@ FOTO_TEASE_FILE_ID = (
     "AgACAgEAAxkBAAEDDJppZ_Tv1wrdLTJte6E4K82AEAfuyAACtQxrGyq7QUfmqwhH4eDJIAEAAwIAA3MAAzgE"
 )
 
+# ================= FOTO PREVIEW/AMOSTRA =================
+FOTO_PREVIEW_FILE_ID = (
+    "AgACAgEAAxkBAAEDE9NpdSvsXzRLeDduo_Bf-K7EwQ8xRAACkQtrG8DXsUfLjuvyveskEAEAAwIAA3MAAzgE"  # ← Troque pelo file_id da sua foto
+)
+
 # ================= [NOVO v6] FOTOS PÓS-VENDA VIP =================
 # COLE AQUI OS FILE_IDs DAS FOTOS VIP (3-5 fotos)
 FOTOS_VIP_WELCOME = [
@@ -1529,7 +1534,25 @@ grok = Grok()
 
 # ================= REGEX =================
 PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|pelada|nude|naked)",
+    r"(foto|selfie|imagem|photo|pic|picture"
+    r"|pelada|nude|naked|nua|sem roupa"
+    # PREVIEW/PRÉVIA
+    r"|preview|previa|prévia|previ|previas|prévias"
+    r"|pre via|pré via|pre-via|pré-via"
+    # AMOSTRA
+    r"|amostra|amostras|amostrinha|amostrinhas"
+    r"|amostr|amstra"
+    # DEMONSTRAÇÃO
+    r"|demonstração|demonstracao|demonstraçao"
+    r"|demonstra|demo|demos"
+    # TESTE/PROVA
+    r"|teste|tester|prova|provinha|testar"
+    # MOSTRA/EXEMPLO
+    r"|mostra|mostrar|mostre|sample|exemplo|exemplar"
+    # TEASER
+    r"|teaser|tease|tizer"
+    # PACK
+    r"|pack|pacote|album|galeria)",
     re.IGNORECASE
 )
 
@@ -1994,24 +2017,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_first_contact(uid):
             track_funnel(uid, "first_message")
         
-        # ========== [ALTERADO v6] BLOQUEIO DE FOTO COM TEASER MELHORADO ==========
+        # ========== [MODIFICADO] ENVIA FOTO DE PREVIEW SEM MENSAGEM ==========
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-            save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
-            urgency = get_urgency_message()
-            caption = TEXTS[lang]["photo_block"]
-            if urgency:
-                caption += f"\n\n{urgency}"
+            save_message(uid, "action", "📸 Enviando foto preview")
             
-            save_message(uid, "sophia", caption)
+            # Envia APENAS a foto (sem mensagem, sem botões)
             await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
-                photo=FOTO_TEASE_FILE_ID, caption=caption,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
-                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                ])
+                photo=FOTO_PREVIEW_FILE_ID
             )
+            
             return
 
          # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
