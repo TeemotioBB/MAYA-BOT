@@ -2017,35 +2017,30 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_first_contact(uid):
             track_funnel(uid, "first_message")
         
-        # ========== [MODIFICADO] ENVIA FOTO DE PREVIEW SEM MENSAGEM ==========
+        # ========== [MODIFICADO] ENVIA FOTO DE PREVIEW COM DELAY ==========
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
             save_message(uid, "action", "📸 Enviando foto preview")
             
-            # Envia APENAS a foto (sem mensagem, sem botões)
+            # Primeiro mostra "digitando..." (como se tivesse pensando)
+            try:
+                await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+                await asyncio.sleep(2)  # 2 segundos digitando
+            except:
+                pass
+            
+            # Depois mostra "enviando foto..." (como se tivesse procurando a foto)
+            try:
+                await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
+                await asyncio.sleep(3)  # 3 segundos "procurando" a foto
+            except:
+                pass
+            
+            # Finalmente envia a foto
             await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
                 photo=FOTO_PREVIEW_FILE_ID
             )
             
-            return
-
-         # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
-        if contains_vip_trigger(text) and not is_vip(uid):
-            save_message(uid, "action", "💎 Interesse em VIP detectado")
-            
-            urgency = get_urgency_message()
-            msg = VIP_INTEREST_MESSAGE
-            if urgency:
-                msg += f"\n\n{urgency}"
-            
-            save_message(uid, "sophia", msg)
-            await update.message.reply_text(
-                msg, parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
-                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                ])
-            )
             return
         
         # ========== LIMITE DIÁRIO ==========
