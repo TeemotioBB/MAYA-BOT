@@ -2038,9 +2038,30 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             return
         
-        # ========== BLOCO 2: FOTO/NUDE - COMENTADO (IA vai lidar) ==========
-        # Deixando a IA responder naturalmente a pedidos de foto
-        # O prompt já está instruído para provocar e empurrar VIP
+        # ========== BLOCO 2: FOTO/NUDE (teaser com venda + IA responde) ==========
+        if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
+            save_message(uid, "action", "🔥 Pediu foto - enviando teaser + IA vai responder")
+            urgency = get_urgency_message()
+            caption = TEXTS[lang]["photo_block"]
+            if urgency:
+                caption += f"\n\n{urgency}"
+            
+            save_message(uid, "sophia", "[FOTO TEASER ENVIADA]")
+            
+            # Envia a foto teaser
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=FOTO_TEASE_FILE_ID,
+                caption=caption,
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
+                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                ])
+            )
+            
+            # NÃO faz return - deixa a IA responder também
+            await asyncio.sleep(2)  # Pausa de 2 segundos antes da IA responder
         
         # ========== LIMITE DIÁRIO ==========
         current_count = today_count(uid)
