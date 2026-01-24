@@ -64,7 +64,7 @@ except Exception as e:
     raise
 
 # ================= CONFIG =================
-LIMITE_DIARIO = 15
+LIMITE_DIARIO = 9999999
 DIAS_VIP = 7
 PRECO_VIP_STARS = 250
 PRECO_VIP_DESCONTO_STARS = 150
