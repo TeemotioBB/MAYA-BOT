@@ -2036,56 +2036,23 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # ========== [MODIFICADO] BLOQUEIO DE FOTO - SÓ 1 VEZ ==========
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-            # Verifica se JÁ enviou a foto preview antes
             if not has_sent_photo_preview(uid):
-                # PRIMEIRA VEZ - envia a foto preview SEM mensagem de venda
-                save_message(uid, "action", "📸 ENVIANDO FOTO PREVIEW (1ª vez)")
-                
-                # Envia a foto SEM caption e SEM botões
+                save_message(uid, "action", "Enviando foto preview")
                 await context.bot.send_photo(
                     chat_id=update.effective_chat.id,
                     photo=FOTO_PREVIEW_FILE_ID
                 )
-                
-                # Marca que já enviou
                 mark_photo_preview_sent(uid)
-                
-                # Agora deixa o GROK responder naturalmente
                 save_message(uid, "user", text)
-                
-                # Adiciona instrução especial pro Grok sobre a foto
                 try:
                     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
                     await asyncio.sleep(3)
                 except:
                     pass
-                
-                # Grok vai responder sobre a foto
                 reply = await grok.reply(uid, f"{text}\n\n[CONTEXTO: Você acabou de enviar uma foto preview para o usuário. Comente sobre a foto de forma provocante e mencione naturalmente que sendo VIP ele vê MUITO mais fotos exclusivas suas. Seja curta e flertadora, máximo 2 frases.]")
                 await update.message.reply_text(reply)
-                
-                return  # Para aqui
-            
-            # Se JÁ ENVIOU A PREVIEW ANTES - deixa o Grok responder normalmente
-            save_message(uid, "info", "📸 Pediu foto novamente - Grok vai responder")
-            # NÃO retorna - continua pro fluxo normal da IA
-```
-
----
-
-## 🎯 O QUE VAI ACONTECER AGORA:
-
-### **1ª vez que pede foto:**
-```
-User: "manda uma foto"
-Bot: 📸 [Envia foto preview]
-Bot: "Gostou amor? 😏 Sendo VIP você vê muito mais fotos minhas, sem censura 🔥"
-```
-
-### **2ª vez em diante:**
-```
-User: "manda foto de novo"
-Bot: "Ai amor, ia te mandar outra mas só VIP tem acesso ilimitado às minhas fotos 🥺"
+                return
+            save_message(uid, "info", "Pediu foto novamente - Grok vai responder")
 
          # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
         if contains_vip_trigger(text) and not is_vip(uid):
