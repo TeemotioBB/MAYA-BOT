@@ -64,7 +64,7 @@ except Exception as e:
     raise
 
 # ================= CONFIG =================
-LIMITE_DIARIO = 99999999
+LIMITE_DIARIO = 15
 DIAS_VIP = 7
 PRECO_VIP_STARS = 250
 PRECO_VIP_DESCONTO_STARS = 150
@@ -86,6 +86,11 @@ AUDIO_PT_2 = "CQACAgEAAxkBAAEDAAEmaVRmPJ5iuBOaXyukQ06Ui23TSokAAocGAAIZwaFGkIERRm
 # ================= FOTO TEASER =================
 FOTO_TEASE_FILE_ID = (
     "AgACAgEAAxkBAAEDDJppZ_Tv1wrdLTJte6E4K82AEAfuyAACtQxrGyq7QUfmqwhH4eDJIAEAAwIAA3MAAzgE"
+)
+
+# ================= FOTO PREVIEW/AMOSTRA (ENVIADA SÓ 1 VEZ) =================
+FOTO_PREVIEW_FILE_ID = (
+    "AgACAgEAAxkBAAEDE9NpdSvsXzRLeDduo_Bf-K7EwQ8xRAACkQtrG8DXsUfLjuvyveskEAEAAwIAA3MAAzgE"  # ← COLE O FILE_ID DA FOTO QUE QUER USAR
 )
 
 # ================= [NOVO v6] FOTOS PÓS-VENDA VIP =================
@@ -185,6 +190,7 @@ def last_reengagement_key(uid): return f"last_reengagement:{uid}"
 def pix_clicked_key(uid): return f"pix_clicked:{uid}"
 def daily_messages_sent_key(uid): return f"daily_msg_sent:{uid}:{date.today()}"
 def all_users_key(): return "all_users"
+def photo_preview_sent_key(uid): return f"photo_preview_sent:{uid}"  # ← ADICIONA AQUI
 
 # ================= KEYS v3/v4 =================
 def streak_key(uid): return f"streak:{uid}"
@@ -630,6 +636,20 @@ def mark_daily_message_sent(uid, msg_type):
         r.expire(daily_messages_sent_key(uid), 86400)
     except:
         pass
+
+def has_sent_photo_preview(uid):
+    try:
+        return r.exists(photo_preview_sent_key(uid))
+    except:
+        return False
+
+def mark_photo_preview_sent(uid):
+    try:
+        r.setex(photo_preview_sent_key(uid), timedelta(days=30), "1")
+        logger.info(f"📸 Preview marcado como enviado: {uid}")
+    except:
+        pass
+
 
 def was_daily_message_sent(uid, msg_type):
     try:
@@ -1529,7 +1549,27 @@ grok = Grok()
 
 # ================= REGEX =================
 PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|pelada|nude|naked)",
+    r"(foto|selfie|imagem|photo|pic|picture"
+    r"|pelada|nude|naked|nua|sem roupa"
+    # PREVIEW/PRÉVIA - todas as variações
+    r"|preview|previa|prévia|previ|previas|prévias"
+    r"|pre via|pré via|pre-via|pré-via"
+    # AMOSTRA - todas as variações  
+    r"|amostra|amostras|amostrinha|amostrinhas"
+    r"|amostr|amstra"
+    # DEMONSTRAÇÃO
+    r"|demonstração|demonstracao|demonstraçao|demonstraçã"
+    r"|demonstra|demo|demos"
+    # TESTE/PROVA
+    r"|teste|tester|prova|provinha|testar"
+    # MOSTRA/VER/EXEMPLO
+    r"|mostra|mostrar|mostre|sample|exemplo|exemplos|exemplar"
+    # TEASER
+    r"|teaser|tease|tizer"
+    # PACK/CONJUNTO
+    r"|pack|pacote|album|galeria|conjunto"
+    # CORPO/PARTES
+    r"|corpo|peito|peitos|bunda|biquini|lingerie)",
     re.IGNORECASE
 )
 
@@ -1994,25 +2034,37 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_first_contact(uid):
             track_funnel(uid, "first_message")
         
-        # ========== [ALTERADO v6] BLOQUEIO DE FOTO COM TEASER MELHORADO ==========
+        # ========== [MODIFICADO] BLOQUEIO DE FOTO - SÓ 1 VEZ ==========
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-            save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
-            urgency = get_urgency_message()
-            caption = TEXTS[lang]["photo_block"]
-            if urgency:
-                caption += f"\n\n{urgency}"
+            # Verifica se JÁ enviou a foto preview antes
+            if not has_sent_photo_preview(uid):
+                # PRIMEIRA VEZ - envia a foto preview
+                save_message(uid, "action", "📸 ENVIANDO FOTO PREVIEW (1ª vez)")
+                urgency = get_urgency_message()
+                caption = TEXTS[lang]["photo_block"]
+                if urgency:
+                    caption += f"\n\n{urgency}"
+                
+                save_message(uid, "sophia", caption)
+                await context.bot.send_photo(
+                    chat_id=update.effective_chat.id,
+                    photo=FOTO_PREVIEW_FILE_ID, 
+                    caption=caption,
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
+                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                    ])
+                )
+                
+                # Marca que já enviou
+                mark_photo_preview_sent(uid)
+                
+                return  # Para aqui - não processa mais nada
             
-            save_message(uid, "sophia", caption)
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
-                photo=FOTO_TEASE_FILE_ID, caption=caption,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
-                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                ])
-            )
-            return
+            # Se JÁ ENVIOU A PREVIEW ANTES - deixa o Grok responder normalmente
+            save_message(uid, "info", "📸 Pediu foto novamente - Grok vai responder")
+            # NÃO retorna - continua pro fluxo normal da IA
 
          # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
         if contains_vip_trigger(text) and not is_vip(uid):
