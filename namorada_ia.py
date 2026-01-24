@@ -88,11 +88,6 @@ FOTO_TEASE_FILE_ID = (
     "AgACAgEAAxkBAAEDDJppZ_Tv1wrdLTJte6E4K82AEAfuyAACtQxrGyq7QUfmqwhH4eDJIAEAAwIAA3MAAzgE"
 )
 
-# ================= FOTO PREVIEW/AMOSTRA =================
-FOTO_PREVIEW_FILE_ID = (
-    "AgACAgEAAxkBAAEDE9NpdSvsXzRLeDduo_Bf-K7EwQ8xRAACkQtrG8DXsUfLjuvyveskEAEAAwIAA3MAAzgE"  # ← Troque pelo file_id da sua foto
-)
-
 # ================= [NOVO v6] FOTOS PÓS-VENDA VIP =================
 # COLE AQUI OS FILE_IDs DAS FOTOS VIP (3-5 fotos)
 FOTOS_VIP_WELCOME = [
@@ -1532,28 +1527,12 @@ class Grok:
 
 grok = Grok()
 
-# ================= REGEX - PREVIEW/AMOSTRA =================
-PEDIDO_PREVIEW_REGEX = re.compile(
-    r"(preview|previa|prévia|previ|previas|prévias"
-    r"|pre via|pré via|pre-via|pré-via"
-    r"|amostra|amostras|amostrinha|amostrinhas"
-    r"|amostr|amstra"
-    r"|demonstração|demonstracao|demonstraçao"
-    r"|demonstra|demo|demos"
-    r"|teste|tester|prova|provinha|testar"
-    r"|mostra|mostrar|mostre|sample|exemplo|exemplar"
-    r"|teaser|tease|tizer)",
+# ================= REGEX =================
+PEDIDO_FOTO_REGEX = re.compile(
+    r"(foto|selfie|imagem|photo|pic|pelada|nude|naked)",
     re.IGNORECASE
 )
 
-# ================= REGEX - FOTO/NUDE =================
-PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|picture"
-    r"|pelada|nude|naked|nua|sem roupa"
-    r"|pack|pacote|album|galeria"
-    r"|corpo|peito|peitos|bunda|biquini|lingerie)",
-    re.IGNORECASE
-)
 # ================= [NOVO v6] ENVIO DE FOTOS VIP PÓS-VENDA =================
 async def send_vip_welcome_photos(bot, uid):
     """Envia fotos de boas-vindas para novos VIPs"""
@@ -1984,7 +1963,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             clear_pix_pending(uid)
             clear_pix_clicked(uid)
             clear_pix_interest(uid)
-            clear_cart_abandoned(uid)
+            clear_cart_abandoned(uid)  # [NOVO v6] Limpa carrinho abandonado
             
             has_discount = has_flash_discount(uid)
             
@@ -2015,53 +1994,44 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_first_contact(uid):
             track_funnel(uid, "first_message")
         
-        # ========== BLOCO 1: PREVIEW/AMOSTRA (foto limpa, sem venda) ==========
-        if PEDIDO_PREVIEW_REGEX.search(text) and not is_vip(uid):
-            save_message(uid, "action", "📸 Enviando foto preview/amostra")
-            
-            try:
-                await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-                await asyncio.sleep(2)
-            except:
-                pass
-            
-            try:
-                await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
-                await asyncio.sleep(3)
-            except:
-                pass
-            
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
-                photo=FOTO_PREVIEW_FILE_ID
-            )
-            
-            return
-        
-        # ========== BLOCO 2: FOTO/NUDE (teaser com venda + IA responde) ==========
+        # ========== [ALTERADO v6] BLOQUEIO DE FOTO COM TEASER MELHORADO ==========
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-            save_message(uid, "action", "🔥 Pediu foto - enviando teaser + IA vai responder")
+            save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
             urgency = get_urgency_message()
             caption = TEXTS[lang]["photo_block"]
             if urgency:
                 caption += f"\n\n{urgency}"
             
-            save_message(uid, "sophia", "[FOTO TEASER ENVIADA]")
-            
-            # Envia a foto teaser
+            save_message(uid, "sophia", caption)
             await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
-                photo=FOTO_TEASE_FILE_ID,
-                caption=caption,
+                photo=FOTO_TEASE_FILE_ID, caption=caption,
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
                     [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
                 ])
             )
+            return
+
+         # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
+        if contains_vip_trigger(text) and not is_vip(uid):
+            save_message(uid, "action", "💎 Interesse em VIP detectado")
             
-            # NÃO faz return - deixa a IA responder também
-            await asyncio.sleep(2)  # Pausa de 2 segundos antes da IA responder
+            urgency = get_urgency_message()
+            msg = VIP_INTEREST_MESSAGE
+            if urgency:
+                msg += f"\n\n{urgency}"
+            
+            save_message(uid, "sophia", msg)
+            await update.message.reply_text(
+                msg, parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
+                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                ])
+            )
+            return
         
         # ========== LIMITE DIÁRIO ==========
         current_count = today_count(uid)
@@ -2069,14 +2039,18 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total_available = LIMITE_DIARIO + bonus
         
         if not is_vip(uid) and current_count == total_available:
-            # PAYWALL INTELIGENTE - Verifica se conversa está quente
+            # [NOVO v6] PAYWALL INTELIGENTE - Verifica se conversa está quente
             if is_hot_conversation(uid):
                 gave_bonus, amount = give_hot_bonus(uid)
                 if gave_bonus:
+                    # Deu bônus! Avisa o usuário e deixa continuar
                     bonus_msg = HOT_BONUS_MESSAGE.format(amount=amount)
                     save_message(uid, "system", f"🔥 Bônus hot: +{amount} msgs")
                     await update.message.reply_text(bonus_msg)
+                             
+                    # NÃO retorna - deixa continuar pro fluxo normal
                 else:
+                    # Já deu bônus hoje - agora trava de verdade
                     track_funnel(uid, "limit_reached")
                     save_message(uid, "action", f"🔒 LIMITE ATINGIDO (após bônus hot)")
                     
@@ -2085,8 +2059,13 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if urgency:
                         msg += f"\n\n{urgency}"
                     
+                    # CÓDIGO NOVO:
                     save_message(uid, "sophia", msg)
                     
+                    # CÓDIGO NOVO:
+                    save_message(uid, "sophia", msg)
+                    
+                    # Envia foto + mensagem
                     await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=FOTO_LIMITE_ATINGIDO,
@@ -2098,6 +2077,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ])
                     )
                     return
+            
+            # ADICIONE ESTE ELSE AQUI ↓↓↓
             else:
                 track_funnel(uid, "limit_reached")
                 msg = LIMIT_REACHED_MESSAGE
@@ -2125,7 +2106,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 increment(uid)
             await check_and_send_scarcity_warning(uid, context, update.effective_chat.id)
         
-        # Se usuário continuar após limite, Grok responde empurrando VIP
+        # [NOVO] Se usuário continuar após limite, Grok responde empurrando VIP
         if not is_vip(uid) and today_count(uid) > LIMITE_DIARIO + get_bonus_msgs(uid):
             save_message(uid, "system", "🚫 Após limite - Grok respondendo com pressão VIP")
             
