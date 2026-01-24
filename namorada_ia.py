@@ -1532,30 +1532,28 @@ class Grok:
 
 grok = Grok()
 
-# ================= REGEX =================
-PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|picture"
-    r"|pelada|nude|naked|nua|sem roupa"
-    # PREVIEW/PRÉVIA
-    r"|preview|previa|prévia|previ|previas|prévias"
+# ================= REGEX - PREVIEW/AMOSTRA =================
+PEDIDO_PREVIEW_REGEX = re.compile(
+    r"(preview|previa|prévia|previ|previas|prévias"
     r"|pre via|pré via|pre-via|pré-via"
-    # AMOSTRA
     r"|amostra|amostras|amostrinha|amostrinhas"
     r"|amostr|amstra"
-    # DEMONSTRAÇÃO
     r"|demonstração|demonstracao|demonstraçao"
     r"|demonstra|demo|demos"
-    # TESTE/PROVA
     r"|teste|tester|prova|provinha|testar"
-    # MOSTRA/EXEMPLO
     r"|mostra|mostrar|mostre|sample|exemplo|exemplar"
-    # TEASER
-    r"|teaser|tease|tizer"
-    # PACK
-    r"|pack|pacote|album|galeria)",
+    r"|teaser|tease|tizer)",
     re.IGNORECASE
 )
 
+# ================= REGEX - FOTO/NUDE =================
+PEDIDO_FOTO_REGEX = re.compile(
+    r"(foto|selfie|imagem|photo|pic|picture"
+    r"|pelada|nude|naked|nua|sem roupa"
+    r"|pack|pacote|album|galeria"
+    r"|corpo|peito|peitos|bunda|biquini|lingerie)",
+    re.IGNORECASE
+)
 # ================= [NOVO v6] ENVIO DE FOTOS VIP PÓS-VENDA =================
 async def send_vip_welcome_photos(bot, uid):
     """Envia fotos de boas-vindas para novos VIPs"""
@@ -2017,30 +2015,51 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_first_contact(uid):
             track_funnel(uid, "first_message")
         
-        # ========== [MODIFICADO] ENVIA FOTO DE PREVIEW COM DELAY ==========
-        if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-            save_message(uid, "action", "📸 Enviando foto preview")
+        # ========== BLOCO 1: PREVIEW/AMOSTRA (foto limpa, sem venda) ==========
+        if PEDIDO_PREVIEW_REGEX.search(text) and not is_vip(uid):
+            save_message(uid, "action", "📸 Enviando foto preview/amostra")
             
-            # Primeiro mostra "digitando..." (como se tivesse pensando)
+            # Mostra "digitando..."
             try:
                 await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-                await asyncio.sleep(2)  # 2 segundos digitando
+                await asyncio.sleep(2)
             except:
                 pass
             
-            # Depois mostra "enviando foto..." (como se tivesse procurando a foto)
+            # Mostra "enviando foto..."
             try:
                 await context.bot.send_chat_action(update.effective_chat.id, ChatAction.UPLOAD_PHOTO)
-                await asyncio.sleep(3)  # 3 segundos "procurando" a foto
+                await asyncio.sleep(3)
             except:
                 pass
             
-            # Finalmente envia a foto
+            # Envia foto preview (SEM mensagem de venda)
             await context.bot.send_photo(
                 chat_id=update.effective_chat.id,
                 photo=FOTO_PREVIEW_FILE_ID
             )
             
+            return
+        
+        # ========== BLOCO 2: FOTO/NUDE (teaser com venda) ==========
+        if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
+            save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
+            urgency = get_urgency_message()
+            caption = TEXTS[lang]["photo_block"]
+            if urgency:
+                caption += f"\n\n{urgency}"
+            
+            save_message(uid, "sophia", caption)
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=FOTO_TEASE_FILE_ID,
+                caption=caption,
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
+                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                ])
+            )
             return
         
         # ========== LIMITE DIÁRIO ==========
