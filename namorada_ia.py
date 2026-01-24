@@ -2042,25 +2042,26 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         # ========== BLOCO 2: FOTO/NUDE (teaser com venda) ==========
-        if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-            save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
-            urgency = get_urgency_message()
-            caption = TEXTS[lang]["photo_block"]
-            if urgency:
-                caption += f"\n\n{urgency}"
-            
-            save_message(uid, "sophia", caption)
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
-                photo=FOTO_TEASE_FILE_ID,
-                caption=caption,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
-                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                ])
-            )
-            return
+if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
+    save_message(uid, "action", "🔥 Pediu foto - enviando teaser + IA vai responder")
+    urgency = get_urgency_message()
+    caption = TEXTS[lang]["photo_block"]
+    if urgency:
+        caption += f"\n\n{urgency}"
+    
+    save_message(uid, "sophia", caption)
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id,
+        photo=FOTO_TEASE_FILE_ID,
+        caption=caption,
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
+            [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+        ])
+    )
+    # REMOVIDO O RETURN! Agora a IA também vai responder
+    await asyncio.sleep(2)  # Pequena pausa antes da IA responder
         
         # ========== LIMITE DIÁRIO ==========
         current_count = today_count(uid)
