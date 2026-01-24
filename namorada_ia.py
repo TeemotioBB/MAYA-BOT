@@ -1995,6 +1995,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             track_funnel(uid, "first_message")
         
         # ========== [ALTERADO v6] BLOQUEIO DE FOTO COM TEASER MELHORADO ==========
+        logger.info(f"🔍 CHECK FOTO: text='{text}', match={bool(PEDIDO_FOTO_REGEX.search(text))}, vip={is_vip(uid)}")
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
             save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
             urgency = get_urgency_message()
@@ -2003,15 +2004,28 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption += f"\n\n{urgency}"
             
             save_message(uid, "sophia", caption)
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
-                photo=FOTO_TEASE_FILE_ID, caption=caption,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
-                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                ])
-            )
+            try:
+                await context.bot.send_photo(
+                    chat_id=update.effective_chat.id,
+                    photo=FOTO_TEASE_FILE_ID, caption=caption,
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
+                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                    ])
+                )
+            except Exception as e:
+                logger.error(f"❌ ERRO ao enviar foto teaser: {e}")
+                # Fallback: envia só texto se foto falhar
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=caption,
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
+                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
+                    ])
+                )
             return
 
          # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
