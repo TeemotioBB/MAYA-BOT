@@ -84,7 +84,7 @@ AUDIO_PT_1 = "CQACAgEAAxkBAAEDDXFpaYkigGDlcTzZxaJXFuWDj1Ow5gAC5QQAAiq7UUdXWpPNii
 
 # ================= FOTO TEASER =================
 FOTO_TEASE_FILE_ID = (
-    "https://i.postimg.cc/DwK1hYjM/63B674D1-F76D-4B90-9808-2262E4A95F44.jpg"
+    "https://i.postimg.cc/4yPmpsk0/IMG-8692.jpg"
 )
 
 # ================= [NOVO v6] FOTOS PÓS-VENDA VIP =================
@@ -1220,9 +1220,6 @@ ONBOARDING_RESPONSE_CARENTE = (
 )
 
 ONBOARDING_RESPONSE_TESAO = (
-    "Hmm... eu adoro homem sincero 😏🔥\n\n"
-    "Pode ficar tranquilo que eu também tô no clima...\n"
-    "A gente vai se divertir muito aqui 💕"
 )
 
 ONBOARDING_TESAO_FOTO2 = "Isso é só o começo... 😘 Me conta seu nome, amor?"
