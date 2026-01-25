@@ -91,13 +91,11 @@ FOTO_TEASE_FILE_ID = (
 # ================= [NOVO v6] FOTOS PÓS-VENDA VIP =================
 # COLE AQUI OS FILE_IDs DAS FOTOS VIP (3-5 fotos)
 FOTOS_VIP_WELCOME = [
-    "AgACAgEAAxkBAAEDCGRpYDdvZ7-wu_S21Byz1fzVYgPx4QACGQxrGxhjAAFH3vklPrzMxqIBAAMCAAN5AAM4BA",
-    "AgACAgEAAxkBAAEDCGZpYDd73debHgEmczIBknJpT0icWwACGgxrGxhjAAFHtUw2zQfnPvMBAAMCAAN5AAM4BA",
-    "AgACAgEAAxkBAAEDCGhpYDeLOftxX9egLqPZTkFZnx_vwAACGwxrGxhjAAFH_O602Y3tZCsBAAMCAAN5AAM4BA",
-    "AgACAgEAAxkBAAEDCGppYDeWDGPI6wHO7vVIlT4bNhBTPwACHAxrGxhjAAFHOpNgl0OWGeUBAAMCAANzAAM4BA",
-    "AgACAgEAAxkBAAEDCGxpYDemS11jJM18v5qV29Dq9XhGlAACHQxrGxhjAAFHFMTXiqZhifgBAAMCAANzAAM4BA",
-    "AgACAgEAAxkBAAEDCG5pYDe04rLpMAABVbJMcWw0Ox2WwYkAAh4MaxsYYwABR-zBknbTEyY0AQADAgADcwADOAQ",
-    "AgACAgEAAxkBAAEDCHBpYDe_TlVzlnYSJwuEaoumIY21dQACHwxrGxhjAAFHraHB34VlAvsBAAMCAANzAAM4BA",
+    "https://i.postimg.cc/0jnb7P1v/IMG-9571.jpg",
+    "https://i.postimg.cc/4ysYKnMP/IMG-8430.jpg",
+    "https://i.postimg.cc/hvsfVcRq/IMG-9569.jpg",
+    "https://i.postimg.cc/T1fKyhFG/IMG-8691.jpg",
+    "https://i.postimg.cc/NFD5RBvB/IMG-9573.jpg",
     # Adicione mais se quiser
 ]
 
@@ -108,7 +106,7 @@ FOTO_LIMITE_ATINGIDO = "AgACAgEAAxkBAAEDDKBpaBgoO5g2PHKxoO_rYHqmEToHWgACwwxrGyq7
 FOTO_PROVOCANTE_CARRINHO = "AgACAgEAAxkBAAEDBsVpXkejJgABPb4RstzZ3V36kSTzGCcAApwLaxv8jflGtMRrjooRiGgBAAMCAANzAAM4BA"
 
 # ================= [NOVO v6] FOTO APÓS ONBOARDING TESÃO =================
-FOTO_ONBOARDING_TESAO = "AgACAgEAAxkBAAEDE-9pdVIEzsYnieW_2LCIjDtAtDhcvgACHgxrG8DXsUefCRsFnMk6SgEAAwIAA3MAAzgE"
+FOTO_ONBOARDING_TESAO = "https://i.postimg.cc/GtKHvdn0/IMG-8697.jpg"
 
 # ================= [NOVO v6] PAYWALL INTELIGENTE - KEYWORDS =================
 HOT_KEYWORDS = [
