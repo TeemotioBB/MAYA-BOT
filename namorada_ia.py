@@ -100,10 +100,10 @@ FOTOS_VIP_WELCOME = [
 ]
 
 # ================= FOTO LIMITE ATINGIDO =================
-FOTO_LIMITE_ATINGIDO = "AgACAgEAAxkBAAEDDKBpaBgoO5g2PHKxoO_rYHqmEToHWgACwwxrGyq7QUcE44wK__3HJwEAAwIAA3MAAzgE"
+FOTO_LIMITE_ATINGIDO = "https://i.postimg.cc/Y0Mv4jV5/IMG-8508.jpg"
 
 # ================= [NOVO v6] FOTO PROVOCANTE PARA CARRINHO ABANDONADO =================
-FOTO_PROVOCANTE_CARRINHO = "AgACAgEAAxkBAAEDBsVpXkejJgABPb4RstzZ3V36kSTzGCcAApwLaxv8jflGtMRrjooRiGgBAAMCAANzAAM4BA"
+FOTO_PROVOCANTE_CARRINHO = "https://i.postimg.cc/Y0Mv4jV5/IMG-8508.jpg"
 
 # ================= [NOVO v6] FOTO APÓS ONBOARDING TESÃO =================
 FOTO_ONBOARDING_TESAO = "https://i.postimg.cc/GtKHvdn0/IMG-8697.jpg"
