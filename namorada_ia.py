@@ -1691,7 +1691,7 @@ async def send_flash_discount(bot, uid):
         return False
 
 # ================= FOTO DO ONBOARDING =================
-FOTO_ONBOARDING_START = "AgACAgEAAxkBAAEDCClpYAABXOfIRIw2_C9N94kDCTh28CUAAoULaxu-iAFH-cEMZYHH-GQBAAMCAANzAAM4BA"
+FOTO_ONBOARDING_START = "https://i.postimg.cc/yxsDJW5L/IMG-8436.png"
 
 # ================= START - MODIFICADO =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
