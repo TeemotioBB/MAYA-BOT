@@ -2005,25 +2005,107 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_first_contact(uid):
             track_funnel(uid, "first_message")
         
-        # ========== [ALTERADO v6] BLOQUEIO DE FOTO COM TEASER MELHORADO ==========
-        if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-            save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
-            urgency = get_urgency_message()
-            caption = TEXTS[lang]["photo_block"]
-            if urgency:
-                caption += f"\n\n{urgency}"
-            
-            save_message(uid, "sophia", caption)
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
-                photo=FOTO_TEASE_FILE_ID, caption=caption,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔥 VER FOTOS AGORA - R$9,99", url=LINK_PIX_NORMAL)], 
-                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                ])
-            )
-            return
+        # ========== [ALTERADO v7] FOTO TEASER + RESPOSTA GROK CONTEXTUAL (SEM BOTÕES) ==========
+17        if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
+18            save_message(uid, "action", "📸 Pediu foto - enviando teaser + resposta Grok")
+19            
+20            # 1. Primeiro envia a foto teaser SEM legenda
+21            try:
+22                await context.bot.send_photo(
+23                    chat_id=update.effective_chat.id,
+24                    photo=FOTO_TEASE_FILE_ID
+25                )
+26                save_message(uid, "sophia", "[📸 FOTO TEASER ENVIADA]")
+27            except Exception as e:
+28                logger.error(f"Erro ao enviar foto teaser: {e}")
+29            
+30            # 2. Adiciona contexto na memória de que enviou a foto
+31            add_to_memory(uid, "user", text)
+32            add_to_memory(uid, "assistant", "[Maya enviou uma foto sensual de preview/teaser para o usuário]")
+33            
+34            # 3. Agora o Grok responde sabendo que acabou de enviar a foto
+35            try:
+36                await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+37                await asyncio.sleep(2)
+38                
+39                # Prompt especial para quando envia foto
+40                photo_context_prompt = f"""Você é Maya, 22 anos. Você ACABOU DE ENVIAR uma foto sensual de preview para o usuário.
+41
+42Ele pediu: "{text}"
+43
+44CONTEXTO: Você mandou uma foto provocante mostrando um pouco, mas não tudo. Agora responda de forma:
+45- CURTA (1-2 frases no máximo)
+46- PROVOCANTE e safada
+47- Faça ele querer VER MAIS
+48- Mencione que tem fotos SEM CENSURA / mais ousadas no VIP
+49- Use tom de quem está se exibindo e gostando
+50- NÃO use botões, links ou formatação - só texto natural
+51
+52Exemplos de respostas boas:
+53- "Gostou amor? 😏 no VIP eu mostro tudinho..."
+54- "Essa é só uma provinha... quer ver sem nada? 🔥"
+55- "Hmm te provoquei né? 😈 vira VIP que eu te mostro mais"
+56- "Ai que delícia mostrar pra vc... mas o melhor é só no VIP 💕"
+57- "Olha o que vc me faz fazer... 🔥 quer ver mais? só no VIP"
+58- "Tá gostando? Tenho muito mais... mas só pra meus VIPs 😏"
+59
+60Responda naturalmente, como se tivesse acabado de mandar a foto. NUNCA mencione preços ou links."""
+61
+62                payload = {
+63                    "model": MODELO,
+64                    "messages": [
+65                        {"role": "system", "content": photo_context_prompt},
+66                        {"role": "user", "content": text}
+67                    ],
+68                    "max_tokens": 100,
+69                    "temperature": 0.9
+70                }
+71                
+72                timeout = aiohttp.ClientTimeout(total=20)
+73                async with aiohttp.ClientSession(timeout=timeout) as session:
+74                    async with session.post(
+75                        GROK_API_URL,
+76                        headers={
+77                            "Authorization": f"Bearer {GROK_API_KEY}",
+78                            "Content-Type": "application/json"
+79                        },
+80                        json=payload
+81                    ) as resp:
+82                        if resp.status == 200:
+83                            data = await resp.json()
+84                            reply = data["choices"][0]["message"]["content"]
+85                            logger.info(f"✅ Grok respondeu após foto: {reply[:50]}")
+86                        else:
+87                            # Fallback se Grok falhar
+88                            reply = random.choice([
+89                                "Gostou amor? 😏 no VIP eu mostro tudinho...",
+90                                "Essa é só uma provinha... quer ver sem nada? 🔥",
+91                                "Hmm te provoquei né? 😈 vira VIP que eu te mostro mais",
+92                                "Ai que delícia mostrar pra vc... mas o melhor é só no VIP 💕",
+93                                "Olha o que vc me faz fazer... 🔥 quer ver o resto?",
+94                                "Tá gostando? Tenho muito mais... 😏"
+95                            ])
+96                            logger.warning(f"⚠️ Grok falhou, usando fallback")
+97                
+98                # Salva a resposta na memória
+99                add_to_memory(uid, "assistant", reply)
+100                save_message(uid, "sophia", reply)
+101                
+102                # 4. Envia a resposta SEM BOTÕES - só texto natural
+103                await update.message.reply_text(reply)
+104                
+105            except Exception as e:
+106                logger.error(f"Erro Grok foto: {e}")
+107                # Fallback com mensagem padrão
+108                fallback = random.choice([
+109                    "Gostou amor? 😏 no VIP eu mostro tudinho...",
+110                    "Essa é só uma provinha... quer ver sem nada? 🔥",
+111                    "Te deixei com vontade né? 😈 vira VIP!"
+112                ])
+113                save_message(uid, "sophia", fallback)
+114                await update.message.reply_text(fallback)
+115            
+116            return
 
          # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
         if contains_vip_trigger(text) and not is_vip(uid):
