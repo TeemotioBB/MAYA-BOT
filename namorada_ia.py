@@ -1693,7 +1693,6 @@ async def send_flash_discount(bot, uid):
 # ================= FOTO DO ONBOARDING =================
 FOTO_ONBOARDING_START = "https://i.postimg.cc/yxsDJW5L/IMG-8436.png"
 
-# ================= START - MODIFICADO =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
@@ -1712,18 +1711,32 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_funnel(uid, "lang_selected")
     save_message(uid, "info", "🌍 Idioma: PT (padrão)")
     
+    # Define onboarding como tesão automaticamente
+    set_onboarding_choice(uid, "tesao")
+    
     try:
-        # Vai direto para a pergunta de onboarding COM FOTO
+        # Envia foto + mensagem de boas-vindas
         await update.message.reply_photo(
             photo=FOTO_ONBOARDING_START,
-            caption=ONBOARDING_QUESTION,
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💕 Carente", callback_data="onboard_carente")],
-                [InlineKeyboardButton("🔥 Com tesão", callback_data="onboard_tesao")]
-            ])
+            caption=ONBOARDING_RESPONSE_TESAO,
+            parse_mode="Markdown"
         )
-        save_message(uid, "sophia", "[FOTO + PERGUNTA ONBOARDING EXIBIDA]")
+        save_message(uid, "sophia", "[FOTO + ONBOARDING TESÃO]")
+        
+        # Envia o áudio
+        await asyncio.sleep(1.5)
+        save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
+        await context.bot.send_audio(update.effective_chat.id, AUDIO_PT_1)
+        
+        # Envia foto provocante
+        await asyncio.sleep(1.5)
+        save_message(uid, "sophia", "[📸 FOTO TESÃO]")
+        await context.bot.send_photo(
+            update.effective_chat.id,
+            FOTO_ONBOARDING_TESAO,
+            caption="Gostou? 😏🔥 Me conta seu nome, amor?"
+        )
+        
     except Exception as e:
         logger.error(f"Erro /start: {e}")
         save_message(uid, "error", f"❌ ERRO /start: {str(e)[:30]}")
