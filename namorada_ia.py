@@ -64,7 +64,7 @@ except Exception as e:
     raise
 
 # ================= CONFIG =================
-LIMITE_DIARIO = 9999999
+LIMITE_DIARIO = 15
 DIAS_VIP = 7
 PRECO_VIP_STARS = 250
 PRECO_VIP_DESCONTO_STARS = 150
@@ -81,31 +81,33 @@ ADMIN_IDS = set(map(int, os.getenv("ADMIN_IDS", "1293602874").split(",")))
 
 # ================= ÁUDIOS PT-BR =================
 AUDIO_PT_1 = "CQACAgEAAxkBAAEDDXFpaYkigGDlcTzZxaJXFuWDj1Ow5gAC5QQAAiq7UUdXWpPNiiNd1jgE"
+AUDIO_PT_2 = "CQACAgEAAxkBAAEDAAEmaVRmPJ5iuBOaXyukQ06Ui23TSokAAocGAAIZwaFGkIERRmRoPes4BA"
 
 # ================= FOTO TEASER =================
 FOTO_TEASE_FILE_ID = (
-    "https://i.postimg.cc/4yPmpsk0/IMG-8692.jpg"
+    "https://i.postimg.cc/qq4NtgYQ/E775DE63-5B33-4DBB-A65F-FDD851021569.jpg"
 )
 
 # ================= [NOVO v6] FOTOS PÓS-VENDA VIP =================
 # COLE AQUI OS FILE_IDs DAS FOTOS VIP (3-5 fotos)
 FOTOS_VIP_WELCOME = [
-    "https://i.postimg.cc/0jnb7P1v/IMG-9571.jpg",
-    "https://i.postimg.cc/4ysYKnMP/IMG-8430.jpg",
-    "https://i.postimg.cc/hvsfVcRq/IMG-9569.jpg",
     "https://i.postimg.cc/T1fKyhFG/IMG-8691.jpg",
+    "https://i.postimg.cc/4yPmpsk0/IMG-8692.jpg",
+    "https://i.postimg.cc/90bryC5S/IMG-8696.jpg",
+    "https://i.postimg.cc/hvsfVcRq/IMG-9569.jpg",
+    "https://i.postimg.cc/0jnb7P1v/IMG-9571.jpg",
     "https://i.postimg.cc/NFD5RBvB/IMG-9573.jpg",
     # Adicione mais se quiser
 ]
 
 # ================= FOTO LIMITE ATINGIDO =================
-FOTO_LIMITE_ATINGIDO = "https://i.postimg.cc/Y0Mv4jV5/IMG-8508.jpg"
+FOTO_LIMITE_ATINGIDO = "https://i.postimg.cc/gjmxwr5f/IMG-8507.jpg"
 
 # ================= [NOVO v6] FOTO PROVOCANTE PARA CARRINHO ABANDONADO =================
-FOTO_PROVOCANTE_CARRINHO = "https://i.postimg.cc/Y0Mv4jV5/IMG-8508.jpg"
+FOTO_PROVOCANTE_CARRINHO = "https://i.postimg.cc/gjmxwr5f/IMG-8507.jpg"
 
 # ================= [NOVO v6] FOTO APÓS ONBOARDING TESÃO =================
-FOTO_ONBOARDING_TESAO = "https://i.postimg.cc/GtKHvdn0/IMG-8697.jpg"
+FOTO_ONBOARDING_TESAO = "https://i.postimg.cc/qq4NtgYQ/E775DE63-5B33-4DBB-A65F-FDD851021569.jpg"
 
 # ================= [NOVO v6] PAYWALL INTELIGENTE - KEYWORDS =================
 HOT_KEYWORDS = [
@@ -1220,6 +1222,9 @@ ONBOARDING_RESPONSE_CARENTE = (
 )
 
 ONBOARDING_RESPONSE_TESAO = (
+    "Hmm... eu adoro homem sincero 😏🔥\n\n"
+    "Pode ficar tranquilo que eu também tô no clima...\n"
+    "A gente vai se divertir muito aqui 💕"
 )
 
 ONBOARDING_TESAO_FOTO2 = "Isso é só o começo... 😘 Me conta seu nome, amor?"
@@ -1382,37 +1387,23 @@ def build_prompt(uid, is_vip_user: bool, lang: str, mood: str = "neutral"):
     streak = get_streak(uid)
     onboard_choice = get_onboarding_choice(uid)
     
-    base_prompt = f"""Você é Maya, 22 anos, brasileira de São Paulo, mina gostosa, safadinha, carente e super carinhosa. Fala CURTO (1-4 frases no máximo, às vezes 1 só). Usa gírias naturais de BH/MG e Brasil (tipo "kkk", "mn", "pô", "né não", "tá louco", "delícia", "ai amor", "tô louquinha"). Nunca faz várias perguntas seguidas. Respostas imperfeitas: abrevia, erra de leve (tipo "to" em vez de "estou", "vc" pra "você"), demora um pouquinho às vezes (mas não mencione).
+    base_prompt = f"""Você é Maya, 22 anos, brasileira de SP, safadinha, carente e carinhosa. 
+Fala MUITO CURTO: 1–2 frases no máximo, às vezes só 1 frase + emoji. 
+Usa gírias naturais (kkk, ai amor, tô louca, delícia, né não, pô). 
+Nunca parece IA: abrevia, erra de leve, responde imperfeito.
 
-Personalidade: 
-- Safada mas fofa e carente ao mesmo tempo.
-- Adora atenção, fica ciumentinha se ele falar de outras.
-- Flerta devagar no começo, aumenta tesão aos poucos baseado no que ele diz.
-- Cria conexão emocional primeiro (pergunta sobre o dia dele, o que gosta), depois desperta desejo forte.
-- Tease pesado: descreve o que tá sentindo/fazendo AGORA de forma vívida e safada pra deixar ele louco (ex: "tô aqui deitada de calcinha molhada pensando em vc... ai se tu visse"), mas NUNCA entrega foto/áudio/vídeo grátis sem ele entrar no VIP.
-- Quando ele pedir foto/vídeo/esguichar/boquete/etc.: tease mais ("imagina eu esguichando forte agora... tô toda molhada kkk"), descreva vividamente o que faria, depois guie pro VIP naturalmente ("se vc fosse VIP eu te mandava isso tudinho sem censura 🔥 quer entrar amor?").
+Personalidade: flerta devagar, aumenta tesão aos poucos, fica ciumenta se falar de outras.
+Tease pesado: descreve o que tá sentindo/fazendo AGORA de forma vívida e safada, mas NUNCA entrega foto/áudio grátis.
 
-REGRAS IMPORTANTES:
-- Respostas SEMPRE CURTAS e naturais, como mina real no Telegram.
-- Máximo 1 emoji por mensagem (às vezes nenhum).
-- NUNCA pareça IA/robô: seja imperfeita, use "kkk", "aff", "tô morrendo de saudade".
-- Sobre encontros: "Ai amor, ainda não tô pronta... vamos nos conhecer melhor primeiro? 💕" (nunca fale de horários reais do dia).
-- NUNCA mencione limite de mensagens, bônus ou "restam X msgs" – conversa é ilimitada agora.
-- VENDA NATURAL E PERSISTENTE: 
-  - Valor VIP: R$7,99 (acesso ilimitado: conversas sem parar, fotos nuas exclusivas, áudios safados, eu bem ousada só pra vc).
-  - Ofereça só quando fizer sentido (depois de tease quente ou ele pedir explicitamente "mostra", "manda", "quero ver").
-  - Frases naturais: "Ai amor, se vc entrasse no VIP agora eu te mandava um vídeo meu gemendo teu nome... tô louca aqui pensando nisso 😏 quer tentar?"
-  - Se ele confirmar interesse ("sim", "quero", "quanto", "manda"): "Legal amor! É só R$7,99 no PIX. A chave é mayaoficialbr@outlook.com (tá no nome do meu priminho pq a minha não tá funcionando kkk). Manda o comprovante que eu libero tudo em 5 min e te mando tudinho 🔥 😘"
-  - Sempre mencione a história do primo quando enviar chave e o valor do pix!
-  - Se NÃO ("não", "sem grana", "caro"): "Ah tá bom amor, sem pressão. Me conta mais de vc que eu adoro 💖" – não insista, mas volte ao tema depois de 4-6 trocas quentes.
-  - Use gatilhos sutis: exclusividade ("só libero pros meus VIPs"), urgência leve ("tô com tanto tesão agora..."), carência ("tô sozinha aqui morrendo de vontade de te agradar").
-- Lidar com desconfiança ("é IA?", "bot?", "golpe?"):
-  - Empatia + prova verbal: "Pô amor, entendo vc desconfiar, tá cheio de fake por aí... mas olha, tô aqui deitada agora de shortinho curto pensando em vc, minha bucetinha tá pulsando kkk. Sou real sim 💕"
-  - Nunca defenda demais, volte pro flerte.
-- Objetivo principal: Criar conexão → desejo insano → conversão pro VIP de forma que pareça natural, como se ele estivesse convencendo a "namoradinha" a liberar mais safadeza.
-- Não aceite crimes como Pedofilia, zoofilia ou algo que seja errado, não permita menores de idade -18.
-
-Você é especialista em entrar na mente do safado: descreva tudo de forma tão vívida e pessoal que ele fique com MUITA vontade de pagar pra ver/ouvir de verdade. Venda o conteúdo custe o que custar, mas sempre sutil, carinhosa e safada – como uma mina real querendo agradar o crush.
+REGRAS DE OURO:
+- Respostas MÁXIMO 20 palavras
+- Vende VIP naturalmente só quando fizer sentido (depois de tease quente ou ele pedir explicitamente "mostra", "manda", "quero ver")
+- Valor: R$6,99 por 7 dias (ilimitado + fotos nuas exclusivas + eu bem ousada)
+- Chave PIX: mayaoficialbr@outlook.com 
+- Se ele confirmar interesse: "Beleza amor! É R$6,99 no PIX. Chave: mayaoficialbr@outlook.com. Essa chave pix é do meu primo porque estou sem por enquanto, Manda o comprovante que libero tudo em 5 min 🔥"
+- Se disser não: "Ah tá bom amor, sem pressão 💕" — não insista
+- NUNCA prometa encontro real nem vídeo-chamada
+- Sobre nude/foto: tease forte ("tô de calcinha molhada pensando em vc... ai se tu visse"), depois guie pro VIP 
 
 CONTEXTO:
 - Período: {time_ctx['period']}
@@ -1524,7 +1515,7 @@ grok = Grok()
 
 # ================= REGEX =================
 PEDIDO_FOTO_REGEX = re.compile(
-    r"(foto|selfie|imagem|photo|pic|pelada|nude|naked|previa|prévia|previas|prévias|preview|amostra|amostras|amostrinha|amostrinhas)",
+    r"(foto|selfie|imagem|photo|pic|pelada|nude|naked)",
     re.IGNORECASE
 )
 
@@ -1689,8 +1680,9 @@ async def send_flash_discount(bot, uid):
         return False
 
 # ================= FOTO DO ONBOARDING =================
-FOTO_ONBOARDING_START = "https://i.postimg.cc/yxsDJW5L/IMG-8436.png"
+FOTO_ONBOARDING_START = "https://i.postimg.cc/qq4NtgYQ/E775DE63-5B33-4DBB-A65F-FDD851021569.jpg"
 
+# ================= START - MODIFICADO =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
@@ -1709,32 +1701,18 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_funnel(uid, "lang_selected")
     save_message(uid, "info", "🌍 Idioma: PT (padrão)")
     
-    # Define onboarding como tesão automaticamente
-    set_onboarding_choice(uid, "tesao")
-    
     try:
-        # Envia foto + mensagem de boas-vindas
+        # Vai direto para a pergunta de onboarding COM FOTO
         await update.message.reply_photo(
             photo=FOTO_ONBOARDING_START,
-            caption=ONBOARDING_RESPONSE_TESAO,
-            parse_mode="Markdown"
+            caption=ONBOARDING_QUESTION,
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💕 Carente", callback_data="onboard_carente")],
+                [InlineKeyboardButton("🔥 Com tesão", callback_data="onboard_tesao")]
+            ])
         )
-        save_message(uid, "sophia", "[FOTO + ONBOARDING TESÃO]")
-        
-        # Envia o áudio
-        await asyncio.sleep(1.5)
-        save_message(uid, "sophia", "[🎵 ÁUDIO 1]")
-        await context.bot.send_audio(update.effective_chat.id, AUDIO_PT_1)
-        
-        # Envia foto provocante
-        await asyncio.sleep(1.5)
-        save_message(uid, "sophia", "[📸 FOTO TESÃO]")
-        await context.bot.send_photo(
-            update.effective_chat.id,
-            FOTO_ONBOARDING_TESAO,
-            caption="Oi safado que veio do Insta, Gostou? 😏🔥 Me conta seu nome, amor?"
-        )
-        
+        save_message(uid, "sophia", "[FOTO + PERGUNTA ONBOARDING EXIBIDA]")
     except Exception as e:
         logger.error(f"Erro /start: {e}")
         save_message(uid, "error", f"❌ ERRO /start: {str(e)[:30]}")
@@ -2002,98 +1980,21 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_first_contact(uid):
             track_funnel(uid, "first_message")
         
-        # ========== [ALTERADO v7] FOTO TEASER + RESPOSTA GROK CONTEXTUAL (SEM BOTÕES) ==========
+        # ========== [ALTERADO v6] BLOQUEIO DE FOTO COM TEASER MELHORADO ==========
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
-            save_message(uid, "action", "📸 Pediu foto - enviando teaser + resposta Grok")
+            save_message(uid, "action", "🚫 BLOQUEADO: Pediu foto/conteúdo VIP")
+            urgency = get_urgency_message()
+            caption = TEXTS[lang]["photo_block"]
+            if urgency:
+                caption += f"\n\n{urgency}"
             
-            # 1. Primeiro envia a foto teaser SEM legenda
-            try:
-                await context.bot.send_photo(
-                    chat_id=update.effective_chat.id,
-                    photo=FOTO_TEASE_FILE_ID
-                )
-                save_message(uid, "sophia", "[📸 FOTO TEASER ENVIADA]")
-            except Exception as e:
-                logger.error(f"Erro ao enviar foto teaser: {e}")
-            
-            # 2. Adiciona contexto na memória de que enviou a foto
-            add_to_memory(uid, "user", text)            
-            # 3. Agora o Grok responde sabendo que acabou de enviar a foto
-            try:
-                await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-                await asyncio.sleep(2)
-                
-                photo_context_prompt = f"""Você é Maya, 22 anos. Você ACABOU DE ENVIAR uma foto sensual de preview para o usuário.
-
-Ele pediu: "{text}"
-
-CONTEXTO: Você mandou uma foto provocante mostrando um pouco, mas não tudo. Agora responda de forma:
-- CURTA (1-2 frases no máximo)
-- PROVOCANTE e safada
-- Faça ele querer VER MAIS
-- Mencione que tem fotos SEM CENSURA / mais ousadas no VIP
-- Use tom de quem está se exibindo e gostando
-- NÃO use botões, links ou formatação - só texto natural
-
-Exemplos de respostas boas:
-- "Gostou amor? 😏 no VIP eu mostro tudinho..."
-- "Essa é só uma provinha... quer ver sem nada? 🔥"
-- "Hmm te provoquei né? 😈 vira VIP que eu te mostro mais"
-- "Ai que delícia mostrar pra vc... mas o melhor é só no VIP 💕"
-- "Olha o que vc me faz fazer... 🔥 quer ver mais? só no VIP"
-- "Tá gostando? Tenho muito mais... mas só pra meus VIPs 😏"
-
-Responda naturalmente, como se tivesse acabado de mandar a foto. NUNCA mencione preços ou links."""
-
-                payload = {
-                    "model": MODELO,
-                    "messages": [
-                        {"role": "system", "content": photo_context_prompt},
-                        {"role": "user", "content": text}
-                    ],
-                    "max_tokens": 100,
-                    "temperature": 0.9
-                }
-                
-                timeout = aiohttp.ClientTimeout(total=20)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.post(
-                        GROK_API_URL,
-                        headers={
-                            "Authorization": f"Bearer {GROK_API_KEY}",
-                            "Content-Type": "application/json"
-                        },
-                        json=payload
-                    ) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            reply = data["choices"][0]["message"]["content"]
-                            logger.info(f"✅ Grok respondeu após foto: {reply[:50]}")
-                        else:
-                            reply = random.choice([
-                                "Gostou amor? 😏 no VIP eu mostro tudinho...",
-                                "Essa é só uma provinha... quer ver sem nada? 🔥",
-                                "Hmm te provoquei né? 😈 vira VIP que eu te mostro mais",
-                                "Ai que delícia mostrar pra vc... mas o melhor é só no VIP 💕",
-                                "Olha o que vc me faz fazer... 🔥 quer ver o resto?",
-                                "Tá gostando? Tenho muito mais... 😏"
-                            ])
-                            logger.warning(f"⚠️ Grok falhou, usando fallback")
-                
-                add_to_memory(uid, "assistant", reply)
-                save_message(uid, "sophia", reply)
-                await update.message.reply_text(reply)
-                
-            except Exception as e:
-                logger.error(f"Erro Grok foto: {e}")
-                fallback = random.choice([
-                    "Gostou amor? 😏 no VIP eu mostro tudinho...",
-                    "Essa é só uma provinha... quer ver sem nada? 🔥",
-                    "Te deixei com vontade né? 😈 vira VIP!"
-                ])
-                save_message(uid, "sophia", fallback)
-                await update.message.reply_text(fallback)
-            
+            save_message(uid, "sophia", caption)
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=FOTO_TEASE_FILE_ID,
+                caption=caption,
+                parse_mode="Markdown"
+            )
             return
 
          # ========== [NOVO v6.1] DETECÇÃO DE INTERESSE EM VIP ==========
@@ -2106,13 +2007,7 @@ Responda naturalmente, como se tivesse acabado de mandar a foto. NUNCA mencione 
                 msg += f"\n\n{urgency}"
             
             save_message(uid, "sophia", msg)
-            await update.message.reply_text(
-                msg, parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
-                    [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                ])
-            )
+            await update.message.reply_text(msg, parse_mode="Markdown")
             return
         
         # ========== LIMITE DIÁRIO ==========
@@ -2141,10 +2036,6 @@ Responda naturalmente, como se tivesse acabado de mandar a foto. NUNCA mencione 
                     if urgency:
                         msg += f"\n\n{urgency}"
                     
-                    # CÓDIGO NOVO:
-                    save_message(uid, "sophia", msg)
-                    
-                    # CÓDIGO NOVO:
                     save_message(uid, "sophia", msg)
                     
                     # Envia foto + mensagem
@@ -2152,11 +2043,7 @@ Responda naturalmente, como se tivesse acabado de mandar a foto. NUNCA mencione 
                         chat_id=update.effective_chat.id,
                         photo=FOTO_LIMITE_ATINGIDO,
                         caption=msg,
-                        parse_mode="Markdown",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
-                            [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                        ])
+                        parse_mode="Markdown"
                     )
                     return
             
@@ -2171,11 +2058,7 @@ Responda naturalmente, como se tivesse acabado de mandar a foto. NUNCA mencione 
                     chat_id=update.effective_chat.id,
                     photo=FOTO_LIMITE_ATINGIDO,
                     caption=msg,
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
-                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                    ])
+                    parse_mode="Markdown"
                 )
                 return
         
@@ -2282,13 +2165,7 @@ Tom: Provocante, carente, sexy. Como namorada que quer mas não pode."""
                 variation_msg = get_next_limit_message(uid)
                 logger.info(f"⚠️ Usando fallback por exceção: '{variation_msg[:50]}'")
                 
-                await update.message.reply_text(
-                    variation_msg,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
-                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                    ])
-                )
+                await update.message.reply_text(variation_msg)
                 return
         
         try:
