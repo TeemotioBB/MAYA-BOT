@@ -1088,13 +1088,12 @@ VIP_INTEREST_MESSAGE = (
     "💎 **QUER VIRAR MEU VIP?**\n\n"
     "Amor, como VIP você tem:\n\n"
     "🔓 **Conversas ILIMITADAS** - sem parar nunca\n"
-    "📸 **5-7 fotos exclusivas** minhas\n"
     "🔥 **Sem censura** - posso ser mais ousada\n"
     "⚡ **Respostas prioritárias**\n"
     "💕 **Atenção especial** só pra você\n\n"
-    "💰 **Só R$ 9,99** (válido por 7 dias)\n"
+    "💰 **Só R$ 6,99** (válido por 7 dias)\n"
     "⏳ Restam apenas **8 vagas VIP** esse mês!\n\n"
-    "**Escolhe como quer pagar:**"
+    "**Chave Pix: mayaoficialbr@outlook.com**"
 )
 
 # ================= [NOVO] MENSAGENS VARIADAS DE LIMITE (FALLBACK) =================
