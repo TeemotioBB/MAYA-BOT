@@ -2016,9 +2016,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Erro ao enviar foto teaser: {e}")
             
             # 2. Adiciona contexto na memória de que enviou a foto
-            add_to_memory(uid, "user", text)
-            add_to_memory(uid, "assistant", "[Maya enviou uma foto sensual de preview/teaser para o usuário]")
-            
+            add_to_memory(uid, "user", text)            
             # 3. Agora o Grok responde sabendo que acabou de enviar a foto
             try:
                 await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
