@@ -1731,7 +1731,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_photo(
             update.effective_chat.id,
             FOTO_ONBOARDING_TESAO,
-            caption="Gostou? 😏🔥 Me conta seu nome, amor?"
+            caption="Oi safado que veio do Insta, Gostou? 😏🔥 Me conta seu nome, amor?"
         )
         
     except Exception as e:
