@@ -2157,13 +2157,7 @@ Tom: Provocante, carente, sexy. Como namorada que quer mas não pode."""
                             reply = get_next_limit_message(uid)
                             logger.info(f"⚠️ Usando fallback fixo: '{reply[:50]}'")
                 
-                await update.message.reply_text(
-                    reply,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("💳 PAGAR COM PIX (R$ 9,99)", url=LINK_PIX_NORMAL)],
-                        [InlineKeyboardButton("💖 PAGAR COM CARTÃO ⭐", callback_data="buy_vip")]
-                    ])
-                )
+                await update.message.reply_text(reply)
                 save_message(uid, "sophia", f"[LIMITE] {reply}")
                 return
                 
