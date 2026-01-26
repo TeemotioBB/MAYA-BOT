@@ -64,7 +64,7 @@ except Exception as e:
     raise
 
 # ================= CONFIG =================
-LIMITE_DIARIO = 15
+LIMITE_DIARIO = 7
 DIAS_VIP = 7
 PRECO_VIP_STARS = 250
 PRECO_VIP_DESCONTO_STARS = 150
@@ -1685,6 +1685,13 @@ FOTO_ONBOARDING_START = "https://i.postimg.cc/qq4NtgYQ/E775DE63-5B33-4DBB-A65F-F
 # ================= START - MODIFICADO =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    
+    # Anti-duplicata: evita processar /start 2x em 5 segundos
+    start_lock_key = f"start_lock:{uid}"
+    if r.exists(start_lock_key):
+        logger.info(f"⚠️ /start duplicado ignorado: {uid}")
+        return
+    r.setex(start_lock_key, 5, "1")  # Lock por 5 segundos
     
     if is_blacklisted(uid):
         save_message(uid, "blocked", "❌ /start bloqueado - usuário na blacklist")
