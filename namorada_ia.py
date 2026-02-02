@@ -1042,7 +1042,7 @@ async def send_preview_followup(bot, uid, level):
             chat_id=uid,
             text=message,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                [InlineKeyboardButton("📢 VER CANAL DE PRÉVIAS", callback_data="goto_preview")],
             ])
         )
         set_preview_followup_level(uid, level)
@@ -1092,7 +1092,7 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
                 text=msg,
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
         except:
@@ -1167,7 +1167,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == "goto_preview":
             set_went_to_preview(uid)
             track_funnel(uid, "went_to_preview")
-            await query.answer("📢 Te levando pro canal de prévias! 💕", show_alert=True)
+            save_message(uid, "action", "📢 CLICOU NO BOTÃO DO CANAL")
+            
+            # Envia o link do canal
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"💕 Aqui está o link do meu canal de prévias, amor!\n\n"
+                     f"Entra lá e vê o que eu tenho pra você... 😏🔥\n\n"
+                     f"{CANAL_PREVIAS_LINK}\n\n"
+                     f"Depois volta aqui pra me contar o que achou! 💖"
+            )
+            await query.answer("📢 Link enviado! Olha aí em cima 👆", show_alert=False)
         
     except Exception as e:
         logger.error(f"Erro callback: {e}")
@@ -1213,7 +1223,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text(
                         CAME_BACK_FROM_PREVIEW_MESSAGE,
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("📢 VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                            [InlineKeyboardButton("📢 VER CANAL DE PRÉVIAS", callback_data="goto_preview")],
                         ])
                     )
                     return
@@ -1249,7 +1259,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption=PHOTO_TEASE_MESSAGE_CANAL,
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("📢 VER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
             return
@@ -1260,7 +1270,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 PREVIEW_INVITATION_MESSAGE,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
             return
@@ -1286,7 +1296,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         photo=FOTO_LIMITE_ATINGIDO,
                         caption=LIMIT_REACHED_CANAL_MESSAGE,
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                            [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                         ])
                     )
                     return
@@ -1298,7 +1308,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     photo=FOTO_LIMITE_ATINGIDO,
                     caption=LIMIT_REACHED_CANAL_MESSAGE,
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                        [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                     ])
                 )
                 return
@@ -1317,7 +1327,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Amor... suas mensagens grátis acabaram 😢\n\n"
                 "Mas se você quiser continuar, dá uma olhada no meu canal de prévias! 💕",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
             return
@@ -1357,7 +1367,7 @@ async def send_reengagement_message(bot, uid, level):
             chat_id=uid,
             text=message,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
             ])
         )
         set_last_reengagement(uid, level)
@@ -1411,7 +1421,7 @@ async def send_smart_scheduled_message(bot, uid, msg_type):
                 chat_id=uid,
                 text=message,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
         else:
