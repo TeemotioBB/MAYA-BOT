@@ -9,33 +9,6 @@ NOVIDADES v7:
 - Onboarding simplificado focado em levar pro canal
 - Removido sistema de pagamento direto (PIX/Stars)
 - Foco em conversão via canal de prévias
-
-═══════════════════════════════════════════════════════════════
-⚙️ CONFIGURAÇÃO RÁPIDA - EDITE AS LINHAS ABAIXO:
-═══════════════════════════════════════════════════════════════
-"""
-
-# 🔥 1. COLE AQUI O TOKEN DO SEU BOT DO TELEGRAM
-BOT_TOKEN = "8528168785:AAFfgtaB0vEagd1cdfZ3hWDyL9PKFZrmRjk"
-
-# 🔥 2. COLE AQUI SUA API KEY DO GROK (https://console.x.ai/)
-GROK_KEY = "COLE_SUA_KEY_GROK_AQUI"
-
-# 🔥 3. COLE AQUI O LINK DO SEU CANAL DE PRÉVIAS
-# Como pegar: Abra o canal → Compartilhar → Copiar link de convite
-LINK_CANAL_PREVIAS = "https://t.me/previasdamayaofc"
-
-# 🔥 4. COLE AQUI SEU TELEGRAM ID (pra ser admin)
-# Como pegar: Mande /start pro @userinfobot
-MEU_TELEGRAM_ID = "1293602874"
-
-# 🔥 5. URL DO SEU APP NO RAILWAY (opcional - só se usar webhook)
-WEBHOOK_URL = "maya-bot-production.up.railway.app"
-
-"""
-═══════════════════════════════════════════════════════════════
-✅ Pronto! Agora é só fazer deploy no Railway
-═══════════════════════════════════════════════════════════════
 """
 import os
 import asyncio
@@ -56,6 +29,35 @@ from telegram.ext import (
     CallbackQueryHandler, CommandHandler
 )
 
+"""
+═══════════════════════════════════════════════════════════════
+⚙️ CONFIGURAÇÃO RÁPIDA - EDITE AS LINHAS ABAIXO:
+═══════════════════════════════════════════════════════════════
+"""
+
+# 🔥 1. COLE AQUI O TOKEN DO SEU BOT DO TELEGRAM
+BOT_TOKEN = "COLE_SEU_TOKEN_BOT_AQUI"
+
+# 🔥 2. COLE AQUI SUA API KEY DO GROK (https://console.x.ai/)
+GROK_KEY = "COLE_SUA_KEY_GROK_AQUI"
+
+# 🔥 3. COLE AQUI O LINK DO SEU CANAL DE PRÉVIAS
+# Como pegar: Abra o canal → Compartilhar → Copiar link de convite
+LINK_CANAL_PREVIAS = "https://t.me/+COLE_SEU_LINK_AQUI"
+
+# 🔥 4. COLE AQUI SEU TELEGRAM ID (pra ser admin)
+# Como pegar: Mande /start pro @userinfobot
+MEU_TELEGRAM_ID = "1293602874"
+
+# 🔥 5. URL DO SEU APP NO RAILWAY (opcional - só se usar webhook)
+WEBHOOK_URL = "https://seu-app.railway.app"
+
+"""
+═══════════════════════════════════════════════════════════════
+✅ Pronto! Agora é só fazer deploy no Railway
+═══════════════════════════════════════════════════════════════
+"""
+
 # ================= LOG =================
 logging.basicConfig(
     level=logging.INFO,
@@ -69,7 +71,12 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN") or BOT_TOKEN
 GROK_API_KEY = os.getenv("GROK_API_KEY") or GROK_KEY
 REDIS_URL = os.getenv("REDIS_URL", "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241")
 PORT = int(os.getenv("PORT", 8080))
-WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL") or WEBHOOK_URL
+
+# Corrige URL do webhook (adiciona https:// se não tiver)
+webhook_url = os.getenv("WEBHOOK_BASE_URL") or WEBHOOK_URL
+if not webhook_url.startswith("http"):
+    webhook_url = f"https://{webhook_url}"
+WEBHOOK_BASE_URL = webhook_url
 WEBHOOK_PATH = "/telegram"
 
 # Validação
@@ -766,7 +773,7 @@ PREVIEW_INVITATION_MESSAGE = (
 
 LIMIT_REACHED_CANAL_MESSAGE = (
     "Eitaaa... acabaram suas mensagens de hoje 😢\n\n"
-    "Mas calma! Se você entrar no meu canal de prévias, "
+    "Mas calma! Se você **entrar no meu canal de prévias**, "
     "você vê como é lá dentro e pode decidir se quer me ter sem limite 💕\n\n"
     "Tá esperando o quê? 😏"
 )
@@ -1078,14 +1085,14 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
     await check_and_send_80_warning(uid, context, chat_id)
     
     if remaining == 1:
-        msg = "🚨 Última mensagem grátis!\n\nDepois disso... só no canal de prévias 😘"
+        msg = "🚨 **Última mensagem grátis!**\n\nDepois disso... só no canal de prévias 😘"
         try:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=msg,
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                 ])
             )
         except:
@@ -1253,7 +1260,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 PREVIEW_INVITATION_MESSAGE,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                 ])
             )
             return
@@ -1279,7 +1286,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         photo=FOTO_LIMITE_ATINGIDO,
                         caption=LIMIT_REACHED_CANAL_MESSAGE,
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                            [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                         ])
                     )
                     return
@@ -1291,7 +1298,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     photo=FOTO_LIMITE_ATINGIDO,
                     caption=LIMIT_REACHED_CANAL_MESSAGE,
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                        [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                     ])
                 )
                 return
@@ -1310,7 +1317,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Amor... suas mensagens grátis acabaram 😢\n\n"
                 "Mas se você quiser continuar, dá uma olhada no meu canal de prévias! 💕",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                 ])
             )
             return
@@ -1350,7 +1357,7 @@ async def send_reengagement_message(bot, uid, level):
             chat_id=uid,
             text=message,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
             ])
         )
         set_last_reengagement(uid, level)
@@ -1404,7 +1411,7 @@ async def send_smart_scheduled_message(bot, uid, msg_type):
                 chat_id=uid,
                 text=message,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                 ])
             )
         else:
@@ -1596,7 +1603,6 @@ async def cameback_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     set_came_back_from_preview(uid)
     await update.message.reply_text(f"✅ Marcado que {uid} voltou do canal sem comprar")
 
-# Comandos básicos
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
@@ -1605,6 +1611,90 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     reset_daily_count(int(context.args[0]))
     await update.message.reply_text(f"✅ Limite resetado")
+
+async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Reset completo de um usuário"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    if not context.args:
+        await update.message.reply_text("Uso: /resetall <user_id>")
+        return
+    
+    uid = int(context.args[0])
+    reset_daily_count(uid)
+    r.delete(vip_key(uid))
+    clear_memory(uid)
+    reset_ignored(uid)
+    clear_came_back_from_preview(uid)
+    
+    await update.message.reply_text(f"🔥 Reset completo: {uid}")
+
+# ================= [NOVO] COMANDOS SIMPLIFICADOS =================
+async def limpar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Reseta SEU próprio limite (sem precisar passar ID)"""
+    uid = update.effective_user.id
+    
+    # Admin pode resetar outros
+    if update.effective_user.id in ADMIN_IDS and context.args:
+        uid = int(context.args[0])
+    
+    reset_daily_count(uid)
+    await update.message.reply_text(f"✅ Limite resetado! Pode conversar de novo 💕")
+
+async def viparme_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Se transforma em VIP (só admin pode usar em si mesmo para testes)"""
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Comando apenas para admins")
+        return
+    
+    uid = update.effective_user.id
+    vip_until = datetime.now() + timedelta(days=365)  # 1 ano para admin
+    r.set(vip_key(uid), vip_until.isoformat())
+    
+    await update.message.reply_text(f"💎 Você virou VIP por 1 ano! (admin)")
+
+async def zerarme_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Zera tudo sobre você (só admin)"""
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    
+    uid = update.effective_user.id
+    reset_daily_count(uid)
+    r.delete(vip_key(uid))
+    clear_memory(uid)
+    reset_ignored(uid)
+    clear_came_back_from_preview(uid)
+    
+    await update.message.reply_text(f"🔥 Você foi resetado completamente!")
+
+async def clearmemory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    if not context.args:
+        await update.message.reply_text("Uso: /clearmemory <user_id>")
+        return
+    clear_memory(int(context.args[0]))
+    await update.message.reply_text(f"🗑️ Memória limpa")
+
+async def givebonus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("Uso: /givebonus <user_id> <quantidade>")
+        return
+    
+    uid = int(context.args[0])
+    amount = int(context.args[1])
+    
+    add_bonus_msgs(uid, amount)
+    await update.message.reply_text(f"✅ +{amount} msgs bônus para {uid}\n(Total: {get_bonus_msgs(uid)})")
+    
+    try:
+        await context.bot.send_message(
+            uid, f"🎁 Você ganhou +{amount} mensagens extras! Aproveite 💕"
+        )
+    except:
+        pass
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -1655,20 +1745,71 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"✅ Broadcast: {sent} enviados | {failed} falhas")
 
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Lista de comandos disponíveis"""
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text(
+            "💕 **COMANDOS DISPONÍVEIS**\n\n"
+            "/status - Ver seu status\n"
+            "/limpar - Resetar seu limite diário"
+        )
+        return
+    
+    await update.message.reply_text(
+        "🎮 **COMANDOS ADMIN**\n\n"
+        "**Gestão de Usuários:**\n"
+        "/setvip <id> - Ativar VIP\n"
+        "/reset <id> - Resetar limite\n"
+        "/resetall <id> - Reset completo\n"
+        "/givebonus <id> <qtd> - Dar bônus\n"
+        "/clearmemory <id> - Limpar memória\n\n"
+        "**Canal:**\n"
+        "/wenttopreview <id> - Marcar ida ao canal\n"
+        "/cameback <id> - Marcar volta\n\n"
+        "**Estatísticas:**\n"
+        "/stats - Estatísticas gerais\n"
+        "/funnel - Ver funil\n"
+        "/status [id] - Ver status\n\n"
+        "**Comunicação:**\n"
+        "/broadcast <msg> - Enviar pra todos\n\n"
+        "**Atalhos (pra você mesmo):**\n"
+        "/limpar - Resetar SEU limite\n"
+        "/viparme - Virar VIP\n"
+        "/zerarme - Reset completo",
+        parse_mode="Markdown"
+    )
+
 # ================= SETUP =================
 def setup_application():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
-    # Comandos
+    # Comandos usuário
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("status", status_cmd))
+    application.add_handler(CommandHandler("limpar", limpar_cmd))
+    application.add_handler(CommandHandler("help", help_cmd))
+    
+    # Comandos admin - Gestão de usuários
     application.add_handler(CommandHandler("setvip", setvip_cmd))
-    application.add_handler(CommandHandler("stats", stats_cmd))
-    application.add_handler(CommandHandler("funnel", funnel_cmd))
+    application.add_handler(CommandHandler("reset", reset_cmd))
+    application.add_handler(CommandHandler("resetall", resetall_cmd))
+    application.add_handler(CommandHandler("givebonus", givebonus_cmd))
+    application.add_handler(CommandHandler("clearmemory", clearmemory_cmd))
+    
+    # Comandos admin - Canal
     application.add_handler(CommandHandler("wenttopreview", wenttopreview_cmd))
     application.add_handler(CommandHandler("cameback", cameback_cmd))
-    application.add_handler(CommandHandler("reset", reset_cmd))
+    
+    # Comandos admin - Estatísticas
+    application.add_handler(CommandHandler("stats", stats_cmd))
+    application.add_handler(CommandHandler("funnel", funnel_cmd))
+    
+    # Comandos admin - Comunicação
     application.add_handler(CommandHandler("broadcast", broadcast_cmd))
+    
+    # Comandos admin - Atalhos
+    application.add_handler(CommandHandler("viparme", viparme_cmd))
+    application.add_handler(CommandHandler("zerarme", zerarme_cmd))
     
     # Handlers
     application.add_handler(CallbackQueryHandler(callback_handler))
