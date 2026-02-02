@@ -766,7 +766,7 @@ PREVIEW_INVITATION_MESSAGE = (
 
 LIMIT_REACHED_CANAL_MESSAGE = (
     "Eitaaa... acabaram suas mensagens de hoje 😢\n\n"
-    "Mas calma! Se você **entrar no meu canal de prévias**, "
+    "Mas calma! Se você entrar no meu canal de prévias, "
     "você vê como é lá dentro e pode decidir se quer me ter sem limite 💕\n\n"
     "Tá esperando o quê? 😏"
 )
@@ -1078,14 +1078,14 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
     await check_and_send_80_warning(uid, context, chat_id)
     
     if remaining == 1:
-        msg = "🚨 **Última mensagem grátis!**\n\nDepois disso... só no canal de prévias 😘"
+        msg = "🚨 Última mensagem grátis!\n\nDepois disso... só no canal de prévias 😘"
         try:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=msg,
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                 ])
             )
         except:
@@ -1253,7 +1253,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 PREVIEW_INVITATION_MESSAGE,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                 ])
             )
             return
@@ -1279,7 +1279,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         photo=FOTO_LIMITE_ATINGIDO,
                         caption=LIMIT_REACHED_CANAL_MESSAGE,
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                            [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                         ])
                     )
                     return
@@ -1291,7 +1291,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     photo=FOTO_LIMITE_ATINGIDO,
                     caption=LIMIT_REACHED_CANAL_MESSAGE,
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                        [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                     ])
                 )
                 return
@@ -1310,7 +1310,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Amor... suas mensagens grátis acabaram 😢\n\n"
                 "Mas se você quiser continuar, dá uma olhada no meu canal de prévias! 💕",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                 ])
             )
             return
@@ -1350,7 +1350,7 @@ async def send_reengagement_message(bot, uid, level):
             chat_id=uid,
             text=message,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
             ])
         )
         set_last_reengagement(uid, level)
@@ -1404,7 +1404,7 @@ async def send_smart_scheduled_message(bot, uid, msg_type):
                 chat_id=uid,
                 text=message,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
+                    [InlineKeyboardButton("CLIQUE AQUI: 📢 CONHECER PRÉVIAS", url=CANAL_PREVIAS_LINK)],
                 ])
             )
         else:
