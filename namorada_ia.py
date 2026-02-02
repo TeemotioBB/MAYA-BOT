@@ -19,7 +19,7 @@ NOVIDADES v7:
 BOT_TOKEN = "8528168785:AAFfgtaB0vEagd1cdfZ3hWDyL9PKFZrmRjk"
 
 # 🔥 2. COLE AQUI SUA API KEY DO GROK (https://console.x.ai/)
-GROK_KEY = "xai-oafqQLUA36Z1uDJzbEOt3wEEAOsG26WpXgjg5gmIAEEzz6wYSXy4ZqYngZTufsRBduKLXqG3MyiIOdXD"
+GROK_KEY = "COLE_SUA_KEY_GROK_AQUI"
 
 # 🔥 3. COLE AQUI O LINK DO SEU CANAL DE PRÉVIAS
 # Como pegar: Abra o canal → Compartilhar → Copiar link de convite
