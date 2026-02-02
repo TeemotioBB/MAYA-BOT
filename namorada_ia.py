@@ -9,6 +9,33 @@ NOVIDADES v7:
 - Onboarding simplificado focado em levar pro canal
 - Removido sistema de pagamento direto (PIX/Stars)
 - Foco em conversão via canal de prévias
+
+═══════════════════════════════════════════════════════════════
+⚙️ CONFIGURAÇÃO RÁPIDA - EDITE AS LINHAS ABAIXO:
+═══════════════════════════════════════════════════════════════
+"""
+
+# 🔥 1. COLE AQUI O TOKEN DO SEU BOT DO TELEGRAM
+BOT_TOKEN = "8528168785:AAFfgtaB0vEagd1cdfZ3hWDyL9PKFZrmRjk"
+
+# 🔥 2. COLE AQUI SUA API KEY DO GROK (https://console.x.ai/)
+GROK_API_KEY = os.getenv("GROK_API_KEY")
+
+# 🔥 3. COLE AQUI O LINK DO SEU CANAL DE PRÉVIAS
+# Como pegar: Abra o canal → Compartilhar → Copiar link de convite
+LINK_CANAL_PREVIAS = "https://t.me/previasdamayaofc"
+
+# 🔥 4. COLE AQUI SEU TELEGRAM ID (pra ser admin)
+# Como pegar: Mande /start pro @userinfobot
+MEU_TELEGRAM_ID = "1293602874"
+
+# 🔥 5. URL DO SEU APP NO RAILWAY (opcional - só se usar webhook)
+WEBHOOK_URL = "maya-bot-production.up.railway.app"
+
+"""
+═══════════════════════════════════════════════════════════════
+✅ Pronto! Agora é só fazer deploy no Railway
+═══════════════════════════════════════════════════════════════
 """
 import os
 import asyncio
@@ -37,20 +64,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ================= ENV =================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GROK_API_KEY = os.getenv("GROK_API_KEY")
+# Usa os valores configurados no topo OU variáveis de ambiente (Railway)
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN") or BOT_TOKEN
+GROK_API_KEY = os.getenv("GROK_API_KEY") or GROK_KEY
 REDIS_URL = os.getenv("REDIS_URL", "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241")
 PORT = int(os.getenv("PORT", 8080))
-
-if not TELEGRAM_TOKEN or not GROK_API_KEY:
-    raise RuntimeError("❌ Tokens não configurados")
-
-WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://maya-bot-production.up.railway.app")
+WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL") or WEBHOOK_URL
 WEBHOOK_PATH = "/telegram"
 
+# Validação
+if not TELEGRAM_TOKEN or "COLE_SEU" in TELEGRAM_TOKEN:
+    raise RuntimeError("❌ Configure BOT_TOKEN no topo do arquivo")
+if not GROK_API_KEY or "COLE_SUA" in GROK_API_KEY:
+    raise RuntimeError("❌ Configure GROK_KEY no topo do arquivo")
+
+# ================= ADMIN =================
+ADMIN_IDS = set(map(int, os.getenv("ADMIN_IDS", MEU_TELEGRAM_ID).split(",")))
+
 # ================= CANAIS =================
-CANAL_PREVIAS_LINK = os.getenv("CANAL_PREVIAS_LINK", "https://t.me/+COLE_SEU_LINK_AQUI")
-CANAL_PREVIAS_ID = os.getenv("CANAL_PREVIAS_ID", "@seu_canal_previas")  # Username do canal
+# Usa o valor configurado no topo OU variável de ambiente
+CANAL_PREVIAS_LINK = os.getenv("CANAL_PREVIAS_LINK") or LINK_CANAL_PREVIAS
+CANAL_PREVIAS_ID = os.getenv("CANAL_PREVIAS_ID", "@seu_canal_previas")  # Username do canal (opcional)
 
 logger.info(f"🚀 Iniciando bot v7 (Estratégia Canal)...")
 logger.info(f"📍 Webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
@@ -70,8 +104,6 @@ LIMITE_DIARIO = 7
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
-# ================= ADMIN =================
-ADMIN_IDS = set(map(int, os.getenv("ADMIN_IDS", "1293602874").split(",")))
 
 # ================= ÁUDIOS PT-BR =================
 AUDIO_PT_1 = "CQACAgEAAxkBAAEDDXFpaYkigGDlcTzZxaJXFuWDj1Ow5gAC5QQAAiq7UUdXWpPNiiNd1jgE"
