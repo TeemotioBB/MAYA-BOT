@@ -45,6 +45,9 @@ GROK_KEY = "COLE_SUA_KEY_GROK_AQUI"
 # Como pegar: Abra o canal → Compartilhar → Copiar link de convite
 LINK_CANAL_PREVIAS = "https://t.me/previasdamayaofc"
 
+# 🔥 3b. COLE AQUI O LINK DO SEU CANAL VIP (onde o usuário paga/compra)
+LINK_CANAL_VIP = "https://t.me/Mayaoficial_bot"
+
 # 🔥 4. COLE AQUI SEU TELEGRAM ID (pra ser admin)
 # Como pegar: Mande /start pro @userinfobot
 MEU_TELEGRAM_ID = "1293602874"
@@ -93,9 +96,12 @@ ADMIN_IDS = set(map(int, os.getenv("ADMIN_IDS", MEU_TELEGRAM_ID).split(",")))
 CANAL_PREVIAS_LINK = os.getenv("CANAL_PREVIAS_LINK") or LINK_CANAL_PREVIAS
 CANAL_PREVIAS_ID = os.getenv("CANAL_PREVIAS_ID", "@seu_canal_previas")  # Username do canal (opcional)
 
+CANAL_VIP_LINK = os.getenv("CANAL_VIP_LINK") or LINK_CANAL_VIP
+
 logger.info(f"🚀 Iniciando bot v7 (Estratégia Canal)...")
 logger.info(f"📍 Webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
 logger.info(f"📢 Canal Prévias: {CANAL_PREVIAS_LINK}")
+logger.info(f"💎 Canal VIP: {CANAL_VIP_LINK}")
 
 # ================= REDIS =================
 try:
@@ -780,21 +786,21 @@ LIMIT_REACHED_CANAL_MESSAGE = (
 
 CAME_BACK_FROM_PREVIEW_MESSAGE = (
     "Ei amor! Vi que você conheceu meu canal de prévias... 💕\n\n"
-    "Gostou do que viu? 😏\n\n"
-    "Me conta, o que achou? Quer saber mais?"
+    "Te mostrei a prévia agora não me decepcione 😏\n\n"
+    "É só entrar no VIP pra gente se divertir MUITO! 🔥"
 )
 
 CAME_BACK_FOLLOWUP_1H = (
     "Então amor... você viu as prévias mas ainda não se decidiu? 🥺\n\n"
     "Deixa eu te contar um segredo: lá no VIP eu sou BEM mais ousada... 🔥\n\n"
-    "Quer que eu te mostre mais? 💕"
+    "Te mostro coisas que você jamais imaginaria ver! 💕"
 )
 
 CAME_BACK_FOLLOWUP_6H = (
     "Tô aqui pensando em você... 💭\n\n"
     "Você viu as prévias, mas tá em dúvida ainda? \n\n"
-    "Amor, posso te garantir: **vale MUITO a pena** 💖\n\n"
-    "Milhares de fotos, conversas sem limite, e eu bem safadinha só pra você... 🔥"
+    "Amor, posso te garantir: vale MUITO a pena 💖\n\n"
+    "Meu Whatsapp, videos e fotos, conversas sem limite, e eu bem safadinha só pra você... 🔥"
 )
 
 HOT_BONUS_MESSAGE_CANAL = (
@@ -1042,7 +1048,7 @@ async def send_preview_followup(bot, uid, level):
             chat_id=uid,
             text=message,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 VER CANAL DE PRÉVIAS", callback_data="goto_preview")],
+                [InlineKeyboardButton("💎 QUERO VIRAR VIP", callback_data="goto_vip")],
             ])
         )
         set_preview_followup_level(uid, level)
@@ -1092,7 +1098,7 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
                 text=msg,
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
+                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
         except:
@@ -1167,16 +1173,36 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == "goto_preview":
             set_went_to_preview(uid)
             track_funnel(uid, "went_to_preview")
-            save_message(uid, "action", "📢 CLICOU NO BOTÃO DO CANAL")
+            save_message(uid, "action", "📢 CLICOU NO BOTÃO DE PRÉVIAS")
             
             # Envia o link do canal
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=f"💕 Aqui está o link do meu canal de prévias, amor!\n\n"
                      f"Entra lá e vê o que eu tenho pra você... 😏🔥\n\n"
-                     f"CLICA AQUI 👉 {CANAL_PREVIAS_LINK}\n\n"
+                     f"{CANAL_PREVIAS_LINK}\n\n"
+                     f"Depois volta aqui pra me contar o que achou! 💖"
             )
             await query.answer("📢 Link enviado! Olha aí em cima 👆", show_alert=False)
+        
+        # ============ [NOVO v7] BOTÃO PARA CANAL VIP ============
+        elif query.data == "goto_vip":
+            save_message(uid, "action", "💎 CLICOU NO BOTÃO VIP")
+            
+            # Envia o link do canal VIP
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"💎 **CANAL VIP DA MAYA**\n\n"
+                     f"Aqui você tem TUDO sem limite! 🔥\n\n"
+                     f"✅ Milhares de fotos exclusivas\n"
+                     f"✅ Vídeos completos\n"
+                     f"✅ Conversas ilimitadas comigo\n"
+                     f"✅ Conteúdo MUITO mais ousado\n\n"
+                     f"{CANAL_VIP_LINK}\n\n"
+                     f"Te espero lá, amor! 😘💕",
+                parse_mode="Markdown"
+            )
+            await query.answer("💎 Link do VIP enviado! Clica aí 👆", show_alert=False)
         
     except Exception as e:
         logger.error(f"Erro callback: {e}")
@@ -1222,7 +1248,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text(
                         CAME_BACK_FROM_PREVIEW_MESSAGE,
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("📢 VER CANAL DE PRÉVIAS", callback_data="goto_preview")],
+                            [InlineKeyboardButton("💎 QUERO VIRAR VIP", callback_data="goto_vip")],
                         ])
                     )
                     return
@@ -1269,7 +1295,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 PREVIEW_INVITATION_MESSAGE,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
+                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
             return
@@ -1295,7 +1321,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         photo=FOTO_LIMITE_ATINGIDO,
                         caption=LIMIT_REACHED_CANAL_MESSAGE,
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
+                            [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                         ])
                     )
                     return
@@ -1307,7 +1333,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     photo=FOTO_LIMITE_ATINGIDO,
                     caption=LIMIT_REACHED_CANAL_MESSAGE,
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
+                        [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                     ])
                 )
                 return
@@ -1326,7 +1352,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Amor... suas mensagens grátis acabaram 😢\n\n"
                 "Mas se você quiser continuar, dá uma olhada no meu canal de prévias! 💕",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
+                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
             return
@@ -1366,7 +1392,7 @@ async def send_reengagement_message(bot, uid, level):
             chat_id=uid,
             text=message,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
+                [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
             ])
         )
         set_last_reengagement(uid, level)
@@ -1420,7 +1446,7 @@ async def send_smart_scheduled_message(bot, uid, msg_type):
                 chat_id=uid,
                 text=message,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
+                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
         else:
