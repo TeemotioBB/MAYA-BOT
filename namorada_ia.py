@@ -113,7 +113,7 @@ except Exception as e:
     raise
 
 # ================= CONFIG =================
-LIMITE_DIARIO = 7
+LIMITE_DIARIO = 12
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
@@ -1174,6 +1174,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             set_went_to_preview(uid)
             track_funnel(uid, "went_to_preview")
             save_message(uid, "action", "📢 CLICOU NO BOTÃO DE PRÉVIAS")
+            add_bonus_msgs(uid, 5)  # ← ADICIONA ESTA LINHA
+            logger.info(f"🎁 Bonus +5 msgs para {uid} (clicou prévias)")
             
             # Envia o link do canal
             await context.bot.send_message(
