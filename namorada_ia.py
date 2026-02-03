@@ -53,7 +53,7 @@ LINK_CANAL_VIP = "https://t.me/Mayaoficial_bot"
 MEU_TELEGRAM_ID = "1293602874"
 
 # 🔥 5. URL DO SEU APP NO RAILWAY
-WEBHOOK_URL = "https://seu-app.railway.app"
+WEBHOOK_URL = "https://maya-bot-production.up.railway.app"
 
 """
 ═══════════════════════════════════════════════════════════════
