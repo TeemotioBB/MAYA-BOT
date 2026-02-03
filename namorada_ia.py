@@ -43,10 +43,10 @@ GROK_KEY = "COLE_SUA_KEY_GROK_AQUI"
 
 # 🔥 3. COLE AQUI O LINK DO SEU CANAL DE PRÉVIAS
 # Como pegar: Abra o canal → Compartilhar → Copiar link de convite
-LINK_CANAL_PREVIAS = "https://t.me/+COLE_SEU_LINK_AQUI"
+LINK_CANAL_PREVIAS = "https://t.me/previasdamayaofc"
 
 # 🔥 3b. COLE AQUI O LINK DO SEU CANAL VIP (onde o usuário paga/compra)
-LINK_CANAL_VIP = "https://t.me/+COLE_SEU_LINK_VIP_AQUI"
+LINK_CANAL_VIP = "https://t.me/Mayaoficial_bot"
 
 # 🔥 4. COLE AQUI SEU TELEGRAM ID (pra ser admin)
 # Como pegar: Mande /start pro @userinfobot
@@ -1105,7 +1105,7 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
                 text=msg,
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
+                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
         except:
@@ -1283,7 +1283,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 PREVIEW_INVITATION_MESSAGE,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
+                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
             return
@@ -1309,7 +1309,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         photo=FOTO_LIMITE_ATINGIDO,
                         caption=LIMIT_REACHED_CANAL_MESSAGE,
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
+                            [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
                         ])
                     )
                     return
@@ -1321,7 +1321,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     photo=FOTO_LIMITE_ATINGIDO,
                     caption=LIMIT_REACHED_CANAL_MESSAGE,
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
+                        [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
                     ])
                 )
                 return
@@ -1340,7 +1340,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Amor... suas mensagens grátis acabaram 😢\n\n"
                 "Mas se você quiser continuar, dá uma olhada no meu canal de prévias! 💕",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
+                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
             return
@@ -1380,7 +1380,7 @@ async def send_reengagement_message(bot, uid, level):
             chat_id=uid,
             text=message,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
+                [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
             ])
         )
         set_last_reengagement(uid, level)
@@ -1434,7 +1434,7 @@ async def send_smart_scheduled_message(bot, uid, msg_type):
                 chat_id=uid,
                 text=message,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📢 CONHECER PRÉVIAS", callback_data="goto_preview")],
+                    [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
         else:
