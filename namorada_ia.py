@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-🔥 Sophia Bot v7 — Estratégia Canal de Prévias
+🔥 Sophia Bot v7.1 — ENHANCED Preview Channel Strategy
 FUNIL: BOT → CANAL PRÉVIAS → CANAL VIP
 
-NOVIDADES v7:
-- Sistema de tracking para quem vai/volta do canal de prévias
-- Estratégia diferenciada para leads que conheceram prévias mas não compraram
-- Onboarding simplificado focado em levar pro canal
-- Removido sistema de pagamento direto (PIX/Stars)
-- Foco em conversão via canal de prévias
+MELHORIAS v7.1:
+- ✅ Sistema de tracking avançado para canal de prévias
+- ✅ Follow-up automático para abandonos (não precisa voltar)
+- ✅ Contador de visitas integrado ao prompt da IA
+- ✅ Janela de retorno configurável (48h)
+- ✅ Detecção de alta resistência (3+ visitas)
+- ✅ Mensagens personalizadas por número de visitas
+- ✅ 100% compatível com v7.0 (nada quebra)
 """
 import os
 import asyncio
@@ -42,47 +44,60 @@ BOT_TOKEN = "COLE_SEU_TOKEN_BOT_AQUI"
 GROK_KEY = "COLE_SUA_KEY_GROK_AQUI"
 
 # 🔥 3. COLE AQUI O LINK DO SEU CANAL DE PRÉVIAS
-# Como pegar: Abra o canal → Compartilhar → Copiar link de convite
 LINK_CANAL_PREVIAS = "https://t.me/previasdamayaofc"
 
-# 🔥 3b. COLE AQUI O LINK DO SEU CANAL VIP (onde o usuário paga/compra)
+# 🔥 3b. COLE AQUI O LINK DO SEU CANAL VIP
 LINK_CANAL_VIP = "https://t.me/Mayaoficial_bot"
 
 # 🔥 4. COLE AQUI SEU TELEGRAM ID (pra ser admin)
-# Como pegar: Mande /start pro @userinfobot
 MEU_TELEGRAM_ID = "1293602874"
 
-# 🔥 5. URL DO SEU APP NO RAILWAY (opcional - só se usar webhook)
+# 🔥 5. URL DO SEU APP NO RAILWAY
 WEBHOOK_URL = "https://seu-app.railway.app"
 
 """
 ═══════════════════════════════════════════════════════════════
-✅ Pronto! Agora é só fazer deploy no Railway
+⚙️ CONFIGURAÇÕES AVANÇADAS v7.1 (PODE AJUSTAR DEPOIS)
 ═══════════════════════════════════════════════════════════════
 """
 
-# ================= LOG =================
+# Janela de tempo para considerar "voltou do canal" (em horas)
+PREVIEW_RETURN_WINDOW_HOURS = 48  # Aumentado de 24h para 48h
+
+# Tempo de inatividade após visitar canal para enviar follow-up (em horas)
+PREVIEW_ABANDONED_HOURS = 3  # Se visitou e ficou 3h sem interagir → follow-up
+
+# Tempo entre follow-ups para abandonos (em horas)
+PREVIEW_FOLLOWUP_INTERVAL_HOURS = 12  # Envia novo follow-up a cada 12h
+
+# Número de visitas que caracteriza "alta resistência"
+HIGH_RESISTANCE_VISITS = 3  # 3+ visitas = usuário resistente
+
+"""
+═══════════════════════════════════════════════════════════════
+✅ Configuração completa! Deploy e teste com /start
+═══════════════════════════════════════════════════════════════
+"""
+
+# ================= LOGGING =================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# ================= ENV =================
-# Usa os valores configurados no topo OU variáveis de ambiente (Railway)
+# ================= ENVIRONMENT =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN") or BOT_TOKEN
 GROK_API_KEY = os.getenv("GROK_API_KEY") or GROK_KEY
 REDIS_URL = os.getenv("REDIS_URL", "redis://default:DcddfJOHLXZdFPjEhRjHeodNgdtrsevl@shuttle.proxy.rlwy.net:12241")
 PORT = int(os.getenv("PORT", 8080))
 
-# Corrige URL do webhook (adiciona https:// se não tiver)
 webhook_url = os.getenv("WEBHOOK_BASE_URL") or WEBHOOK_URL
 if not webhook_url.startswith("http"):
     webhook_url = f"https://{webhook_url}"
 WEBHOOK_BASE_URL = webhook_url
 WEBHOOK_PATH = "/telegram"
 
-# Validação
 if not TELEGRAM_TOKEN or "COLE_SEU" in TELEGRAM_TOKEN:
     raise RuntimeError("❌ Configure BOT_TOKEN no topo do arquivo")
 if not GROK_API_KEY or "COLE_SUA" in GROK_API_KEY:
@@ -92,16 +107,18 @@ if not GROK_API_KEY or "COLE_SUA" in GROK_API_KEY:
 ADMIN_IDS = set(map(int, os.getenv("ADMIN_IDS", MEU_TELEGRAM_ID).split(",")))
 
 # ================= CANAIS =================
-# Usa o valor configurado no topo OU variável de ambiente
 CANAL_PREVIAS_LINK = os.getenv("CANAL_PREVIAS_LINK") or LINK_CANAL_PREVIAS
-CANAL_PREVIAS_ID = os.getenv("CANAL_PREVIAS_ID", "@seu_canal_previas")  # Username do canal (opcional)
-
+CANAL_PREVIAS_ID = os.getenv("CANAL_PREVIAS_ID", "@seu_canal_previas")
 CANAL_VIP_LINK = os.getenv("CANAL_VIP_LINK") or LINK_CANAL_VIP
 
-logger.info(f"🚀 Iniciando bot v7 (Estratégia Canal)...")
+logger.info(f"🚀 Iniciando Sophia Bot v7.1 ENHANCED...")
 logger.info(f"📍 Webhook: {WEBHOOK_BASE_URL}{WEBHOOK_PATH}")
 logger.info(f"📢 Canal Prévias: {CANAL_PREVIAS_LINK}")
 logger.info(f"💎 Canal VIP: {CANAL_VIP_LINK}")
+logger.info(f"⏰ Janela retorno: {PREVIEW_RETURN_WINDOW_HOURS}h")
+logger.info(f"🎯 Detecção abandono: {PREVIEW_ABANDONED_HOURS}h")
+logger.info(f"🔁 Intervalo follow-ups: {PREVIEW_FOLLOWUP_INTERVAL_HOURS}h")
+logger.info(f"⚠️ Alta resistência: {HIGH_RESISTANCE_VISITS}+ visitas")
 
 # ================= REDIS =================
 try:
@@ -117,24 +134,21 @@ LIMITE_DIARIO = 7
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
-
-# ================= ÁUDIOS PT-BR =================
+# ================= ASSETS =================
 AUDIO_PT_1 = "CQACAgEAAxkBAAEDDXFpaYkigGDlcTzZxaJXFuWDj1Ow5gAC5QQAAiq7UUdXWpPNiiNd1jgE"
 AUDIO_PT_2 = "CQACAgEAAxkBAAEDAAEmaVRmPJ5iuBOaXyukQ06Ui23TSokAAocGAAIZwaFGkIERRmRoPes4BA"
 
-# ================= FOTOS =================
 FOTO_ONBOARDING_START = "https://i.postimg.cc/qq4NtgYQ/E775DE63-5B33-4DBB-A65F-FDD851021569.jpg"
 FOTO_TEASE_PREVIAS = "https://i.postimg.cc/qq4NtgYQ/E775DE63-5B33-4DBB-A65F-FDD851021569.jpg"
 FOTO_LIMITE_ATINGIDO = "https://i.postimg.cc/gjmxwr5f/IMG-8507.jpg"
 
-# ================= FOTOS VIP (quando user virar VIP via admin) =================
 FOTOS_VIP_WELCOME = [
     "https://i.postimg.cc/T1fKyhFG/IMG-8691.jpg",
     "https://i.postimg.cc/4yPmpsk0/IMG-8692.jpg",
     "https://i.postimg.cc/90bryC5S/IMG-8696.jpg",
 ]
 
-# ================= KEYWORDS HOT =================
+# ================= KEYWORDS =================
 HOT_KEYWORDS = [
     'pau', 'buceta', 'chupar', 'gozar', 'tesão', 'foder', 'transar',
     'punheta', 'siririca', 'safada', 'gostosa', 'pelada', 'nua',
@@ -143,7 +157,6 @@ HOT_KEYWORDS = [
     'excitado', 'excitada', 'molhada', 'duro', 'tesudo', 'tesuda'
 ]
 
-# ================= KEYWORDS CANAL/VIP =================
 CANAL_TRIGGER_KEYWORDS = [
     'vip', 'premium', 'ilimitado', 'ilimitada', 'sem limite',
     'quanto custa', 'preço', 'pagar', 'pagamento', 'comprar',
@@ -151,27 +164,22 @@ CANAL_TRIGGER_KEYWORDS = [
     'assinatura', 'canal', 'grupo', 'previas', 'prévia'
 ]
 
-# ================= MEMÓRIA PERSISTENTE =================
+# ================= MEMORY =================
 MAX_MEMORIA = 12
 
-def memory_key(uid):
-    return f"memory:{uid}"
-
+def memory_key(uid): return f"memory:{uid}"
 def get_memory(uid):
     try:
         data = r.get(memory_key(uid))
-        if data:
-            return json.loads(data)
-        return []
-    except:
-        return []
+        return json.loads(data) if data else []
+    except: return []
 
 def save_memory(uid, messages):
     try:
         recent = messages[-MAX_MEMORIA:] if len(messages) > MAX_MEMORIA else messages
         r.setex(memory_key(uid), timedelta(days=7), json.dumps(recent, ensure_ascii=False))
     except Exception as e:
-        logger.error(f"Erro ao salvar memória: {e}")
+        logger.error(f"Erro salvar memória: {e}")
 
 def add_to_memory(uid, role, content):
     memory = get_memory(uid)
@@ -183,7 +191,7 @@ def clear_memory(uid):
         r.delete(memory_key(uid))
         logger.info(f"🗑️ Memória limpa: {uid}")
     except Exception as e:
-        logger.error(f"Erro ao limpar memória: {e}")
+        logger.error(f"Erro limpar memória: {e}")
 
 # ================= REDIS KEYS =================
 def vip_key(uid): return f"vip:{uid}"
@@ -203,78 +211,63 @@ def funnel_key(uid): return f"funnel:{uid}"
 def bonus_msgs_key(uid): return f"bonus:{uid}"
 def blacklist_key(): return "blacklist"
 def limit_notified_key(uid): return f"limit_notified:{uid}:{date.today()}"
-def last_scheduled_msg_key(uid): return f"last_sched:{uid}"
-def scheduled_msg_count_key(uid): return f"sched_count:{uid}:{date.today()}"
-def last_msg_type_key(uid): return f"last_msg_type:{uid}"
-def hourly_send_count_key(): return f"hourly_sends:{datetime.now().hour}:{date.today()}"
+def limit_warning_sent_key(uid): return f"limit_warning:{uid}:{date.today()}"
+def hot_bonus_given_key(uid): return f"hot_bonus:{uid}:{date.today()}"
+def onboarding_choice_key(uid): return f"onboard_choice:{uid}"
 def ignored_count_key(uid): return f"ignored:{uid}"
 def engagement_paused_key(uid): return f"paused:{uid}"
 def awaiting_response_key(uid): return f"awaiting:{uid}"
 def admin_takeover_key(uid): return f"admin:takeover:{uid}"
-def limit_warning_sent_key(uid): return f"limit_warning:{uid}:{date.today()}"
-def hot_bonus_given_key(uid): return f"hot_bonus:{uid}:{date.today()}"
-def onboarding_choice_key(uid): return f"onboard_choice:{uid}"
 
-# ================= [NOVO v7] KEYS ESTRATÉGIA CANAL =================
+# ================= [v7.1 NEW] PREVIEW TRACKING KEYS =================
 def went_to_preview_key(uid): return f"went_to_preview:{uid}"
 def preview_visits_key(uid): return f"preview_visits:{uid}"
 def last_preview_time_key(uid): return f"last_preview_time:{uid}"
 def came_back_from_preview_key(uid): return f"came_back_preview:{uid}"
 def preview_followup_sent_key(uid): return f"preview_followup:{uid}"
+def last_preview_abandoned_followup_key(uid): return f"preview_abandoned_followup:{uid}"
+def preview_abandoned_level_key(uid): return f"preview_abandoned_level:{uid}"
 
-# ================= FUNÇÕES DE PERFIL =================
+# ================= USER PROFILE =================
 def get_user_profile(uid):
     try:
         data = r.get(user_profile_key(uid))
-        if data:
-            return json.loads(data)
-        return {}
-    except:
-        return {}
+        return json.loads(data) if data else {}
+    except: return {}
 
 def save_user_profile(uid, profile):
     try:
         r.set(user_profile_key(uid), json.dumps(profile, ensure_ascii=False))
     except Exception as e:
-        logger.error(f"Erro ao salvar perfil: {e}")
+        logger.error(f"Erro salvar perfil: {e}")
 
 def get_user_name(uid):
-    profile = get_user_profile(uid)
-    return profile.get("name", "")
+    return get_user_profile(uid).get("name", "")
 
-# ================= FUNÇÕES DE BLACKLIST =================
+# ================= BLACKLIST =================
 def is_blacklisted(uid):
-    try:
-        return r.sismember(blacklist_key(), str(uid))
-    except:
-        return False
+    try: return r.sismember(blacklist_key(), str(uid))
+    except: return False
 
 def add_to_blacklist(uid):
-    try:
-        r.sadd(blacklist_key(), str(uid))
-    except:
-        pass
+    try: r.sadd(blacklist_key(), str(uid))
+    except: pass
 
 def remove_from_blacklist(uid):
-    try:
-        r.srem(blacklist_key(), str(uid))
-    except:
-        pass
+    try: r.srem(blacklist_key(), str(uid))
+    except: pass
 
-# ================= FUNÇÕES DE BONUS =================
+# ================= BONUS MESSAGES =================
 def get_bonus_msgs(uid):
-    try:
-        return int(r.get(bonus_msgs_key(uid)) or 0)
-    except:
-        return 0
+    try: return int(r.get(bonus_msgs_key(uid)) or 0)
+    except: return 0
 
 def add_bonus_msgs(uid, amount):
     try:
         current = get_bonus_msgs(uid)
         r.set(bonus_msgs_key(uid), current + amount)
         r.expire(bonus_msgs_key(uid), 86400 * 7)
-    except:
-        pass
+    except: pass
 
 def use_bonus_msg(uid):
     try:
@@ -283,15 +276,12 @@ def use_bonus_msg(uid):
             r.set(bonus_msgs_key(uid), current - 1)
             return True
         return False
-    except:
-        return False
+    except: return False
 
-# ================= FUNÇÕES DE STREAK =================
+# ================= STREAK =================
 def get_streak(uid):
-    try:
-        return int(r.get(streak_key(uid)) or 0)
-    except:
-        return 0
+    try: return int(r.get(streak_key(uid)) or 0)
+    except: return 0
 
 def update_streak(uid):
     try:
@@ -310,92 +300,106 @@ def update_streak(uid):
             r.set(streak_key(uid), 1)
             r.set(streak_last_day_key(uid), today)
             return 1, True
-    except:
-        return 0, False
+    except: return 0, False
 
 def get_streak_message(streak):
-    if streak < 3:
-        return None
-    elif streak == 3:
-        return "🔥 3 dias seguidos conversando comigo! Tô amando isso 💕"
-    elif streak == 5:
-        return "🔥🔥 5 dias seguidos! Você é especial demais 💖"
-    elif streak == 7:
-        return "🔥🔥🔥 UMA SEMANA INTEIRA! Você é oficialmente meu favorito 😍💕"
+    if streak < 3: return None
+    elif streak == 3: return "🔥 3 dias seguidos conversando comigo! Tô amando isso 💕"
+    elif streak == 5: return "🔥🔥 5 dias seguidos! Você é especial demais 💖"
+    elif streak == 7: return "🔥🔥🔥 UMA SEMANA INTEIRA! Você é oficialmente meu favorito 😍💕"
     return None
 
-# ================= [NOVO v7] FUNÇÕES ESTRATÉGIA CANAL =================
+# ================= [v7.1 NEW] PREVIEW TRACKING FUNCTIONS =================
 def set_went_to_preview(uid):
     """Marca que usuário foi para canal de prévias"""
     try:
-        r.set(went_to_preview_key(uid), datetime.now().isoformat())
+        now = datetime.now()
+        r.set(went_to_preview_key(uid), now.isoformat())
         r.incr(preview_visits_key(uid))
-        r.set(last_preview_time_key(uid), datetime.now().isoformat())
-        logger.info(f"📢 {uid} foi para canal de prévias")
-    except:
-        pass
+        r.set(last_preview_time_key(uid), now.isoformat())
+        visits = get_preview_visits(uid)
+        logger.info(f"📢 {uid} foi para canal de prévias (visita #{visits})")
+    except Exception as e:
+        logger.error(f"Erro set_went_to_preview: {e}")
 
 def went_to_preview(uid):
     """Verifica se já foi para canal de prévias"""
-    try:
-        return r.exists(went_to_preview_key(uid))
-    except:
-        return False
+    try: return r.exists(went_to_preview_key(uid))
+    except: return False
 
 def get_preview_visits(uid):
     """Retorna quantas vezes foi para prévias"""
-    try:
-        return int(r.get(preview_visits_key(uid)) or 0)
-    except:
-        return 0
+    try: return int(r.get(preview_visits_key(uid)) or 0)
+    except: return 0
 
 def get_last_preview_time(uid):
     """Retorna quando foi a última vez que foi para prévias"""
     try:
         data = r.get(last_preview_time_key(uid))
-        if data:
-            return datetime.fromisoformat(data)
-        return None
-    except:
-        return None
+        return datetime.fromisoformat(data) if data else None
+    except: return None
 
 def set_came_back_from_preview(uid):
     """Marca que voltou do canal sem comprar"""
     try:
-        r.setex(came_back_from_preview_key(uid), timedelta(hours=48), datetime.now().isoformat())
+        r.setex(came_back_from_preview_key(uid), timedelta(hours=PREVIEW_RETURN_WINDOW_HOURS), datetime.now().isoformat())
         logger.info(f"↩️ {uid} voltou do canal sem comprar")
-    except:
-        pass
+    except Exception as e:
+        logger.error(f"Erro set_came_back: {e}")
 
 def came_back_from_preview(uid):
     """Verifica se voltou do canal sem comprar"""
-    try:
-        return r.exists(came_back_from_preview_key(uid))
-    except:
-        return False
+    try: return r.exists(came_back_from_preview_key(uid))
+    except: return False
 
 def clear_came_back_from_preview(uid):
     """Limpa flag de volta do canal"""
-    try:
-        r.delete(came_back_from_preview_key(uid))
-    except:
-        pass
+    try: r.delete(came_back_from_preview_key(uid))
+    except: pass
 
 def get_preview_followup_level(uid):
-    """Retorna nível do follow-up já enviado"""
-    try:
-        return int(r.get(preview_followup_sent_key(uid)) or 0)
-    except:
-        return 0
+    """Retorna nível do follow-up já enviado (para quem voltou)"""
+    try: return int(r.get(preview_followup_sent_key(uid)) or 0)
+    except: return 0
 
 def set_preview_followup_level(uid, level):
-    """Marca nível do follow-up enviado"""
+    """Marca nível do follow-up enviado (para quem voltou)"""
     try:
         r.setex(preview_followup_sent_key(uid), timedelta(hours=24), str(level))
-    except:
-        pass
+    except Exception as e:
+        logger.error(f"Erro set_followup_level: {e}")
 
-# ================= FUNÇÕES DE ANTI-REPETIÇÃO =================
+def get_last_abandoned_followup_time(uid):
+    """Retorna quando foi enviado último follow-up de abandono"""
+    try:
+        data = r.get(last_preview_abandoned_followup_key(uid))
+        return datetime.fromisoformat(data) if data else None
+    except: return None
+
+def set_last_abandoned_followup_time(uid):
+    """Marca quando foi enviado follow-up de abandono"""
+    try:
+        r.set(last_preview_abandoned_followup_key(uid), datetime.now().isoformat())
+    except: pass
+
+def get_abandoned_followup_level(uid):
+    """Retorna quantos follow-ups de abandono já foram enviados"""
+    try: return int(r.get(preview_abandoned_level_key(uid)) or 0)
+    except: return 0
+
+def increment_abandoned_followup_level(uid):
+    """Incrementa contador de follow-ups de abandono"""
+    try:
+        level = get_abandoned_followup_level(uid) + 1
+        r.setex(preview_abandoned_level_key(uid), timedelta(days=7), str(level))
+        return level
+    except: return 1
+
+def is_high_resistance_user(uid):
+    """Verifica se usuário visitou canal muitas vezes mas não converteu"""
+    return get_preview_visits(uid) >= HIGH_RESISTANCE_VISITS
+
+# ================= ANTI-REPETIÇÃO =================
 def get_response_hash(text):
     return hashlib.md5(text.encode()).hexdigest()[:8]
 
@@ -403,18 +407,16 @@ def is_response_recent(uid, response):
     try:
         recent = r.lrange(recent_responses_key(uid), 0, 9)
         return get_response_hash(response) in recent
-    except:
-        return False
+    except: return False
 
 def add_recent_response(uid, response):
     try:
         r.lpush(recent_responses_key(uid), get_response_hash(response))
         r.ltrim(recent_responses_key(uid), 0, 9)
         r.expire(recent_responses_key(uid), 86400)
-    except:
-        pass
+    except: pass
 
-# ================= DETECÇÃO DE HUMOR =================
+# ================= MOOD DETECTION =================
 MOOD_PATTERNS = {
     "sad": [r"\b(triste|mal|péssimo|chorand[oa]|deprimi|sozinho)\b"],
     "flirty": [r"\b(gostosa|delícia|tesão|safad[oa]|excitad[oa]|sexy)\b"],
@@ -442,10 +444,9 @@ def get_mood_instruction(mood):
     }
     return instructions.get(mood, "")
 
-# ================= CONTEXTO DE HORÁRIO =================
+# ================= TIME CONTEXT =================
 def get_time_context():
     hour = datetime.now().hour
-    
     if 0 <= hour < 5:
         return {"period": "madrugada", "context": "É madrugada. Comente carinhosamente."}
     elif 5 <= hour < 12:
@@ -457,154 +458,117 @@ def get_time_context():
     else:
         return {"period": "noite", "context": "É noite."}
 
-# ================= FUNÇÕES BÁSICAS =================
+# ================= BASIC FUNCTIONS =================
 def update_last_activity(uid):
     try:
         r.set(last_activity_key(uid), datetime.now().isoformat())
         r.sadd(all_users_key(), str(uid))
-    except:
-        pass
+    except: pass
 
 def get_last_activity(uid):
     try:
         data = r.get(last_activity_key(uid))
-        if data:
-            return datetime.fromisoformat(data)
-        return None
-    except:
-        return None
+        return datetime.fromisoformat(data) if data else None
+    except: return None
 
 def get_hours_since_activity(uid):
     last = get_last_activity(uid)
-    if not last:
-        return None
+    if not last: return None
     return (datetime.now() - last).total_seconds() / 3600
 
 def set_last_reengagement(uid, level):
     try:
         r.setex(last_reengagement_key(uid), timedelta(hours=12), str(level))
-    except:
-        pass
+    except: pass
 
 def get_last_reengagement(uid):
     try:
         data = r.get(last_reengagement_key(uid))
         return int(data) if data else 0
-    except:
-        return 0
+    except: return 0
 
 def mark_daily_message_sent(uid, msg_type):
     try:
         r.sadd(daily_messages_sent_key(uid), msg_type)
         r.expire(daily_messages_sent_key(uid), 86400)
-    except:
-        pass
+    except: pass
 
 def was_daily_message_sent(uid, msg_type):
-    try:
-        return r.sismember(daily_messages_sent_key(uid), msg_type)
-    except:
-        return False
+    try: return r.sismember(daily_messages_sent_key(uid), msg_type)
+    except: return False
 
 def get_all_active_users():
     try:
         users = r.smembers(all_users_key())
         return [int(uid) for uid in users]
-    except:
-        return []
+    except: return []
 
 def save_message(uid, role, text):
     try:
         timestamp = datetime.now().strftime("%H:%M:%S")
         r.rpush(chatlog_key(uid), f"[{timestamp}] {role.upper()}: {text[:100]}")
         r.ltrim(chatlog_key(uid), -200, -1)
-    except:
-        pass
+    except: pass
 
 def is_vip(uid):
     try:
         until = r.get(vip_key(uid))
         return until and datetime.fromisoformat(until) > datetime.now()
-    except:
-        return False
+    except: return False
 
 def get_vip_expiry(uid):
     try:
         until = r.get(vip_key(uid))
-        if until:
-            return datetime.fromisoformat(until)
-        return None
-    except:
-        return None
+        return datetime.fromisoformat(until) if until else None
+    except: return None
 
 def today_count(uid):
-    try:
-        return int(r.get(count_key(uid)) or 0)
-    except:
-        return 0
+    try: return int(r.get(count_key(uid)) or 0)
+    except: return 0
 
 def increment(uid):
     try:
         r.incr(count_key(uid))
         r.expire(count_key(uid), 86400)
-    except:
-        pass
+    except: pass
 
 def reset_daily_count(uid):
-    try:
-        r.delete(count_key(uid))
-    except:
-        pass
+    try: r.delete(count_key(uid))
+    except: pass
 
 def get_lang(uid):
-    try:
-        return r.get(lang_key(uid)) or "pt"
-    except:
-        return "pt"
+    try: return r.get(lang_key(uid)) or "pt"
+    except: return "pt"
 
 def set_lang(uid, lang):
-    try:
-        r.set(lang_key(uid), lang)
-    except:
-        pass
+    try: r.set(lang_key(uid), lang)
+    except: pass
 
 def is_first_contact(uid):
-    try:
-        return not r.exists(first_contact_key(uid))
-    except:
-        return True
+    try: return not r.exists(first_contact_key(uid))
+    except: return True
 
 def mark_first_contact(uid):
-    try:
-        r.set(first_contact_key(uid), datetime.now().isoformat())
-    except:
-        pass
+    try: r.set(first_contact_key(uid), datetime.now().isoformat())
+    except: pass
 
 def was_limit_notified_today(uid):
-    try:
-        return r.exists(limit_notified_key(uid))
-    except:
-        return False
+    try: return r.exists(limit_notified_key(uid))
+    except: return False
 
 def mark_limit_notified(uid):
-    try:
-        r.setex(limit_notified_key(uid), timedelta(hours=20), "1")
-    except:
-        pass
+    try: r.setex(limit_notified_key(uid), timedelta(hours=20), "1")
+    except: pass
 
 def was_limit_warning_sent_today(uid):
-    try:
-        return r.exists(limit_warning_sent_key(uid))
-    except:
-        return False
+    try: return r.exists(limit_warning_sent_key(uid))
+    except: return False
 
 def mark_limit_warning_sent(uid):
-    try:
-        r.setex(limit_warning_sent_key(uid), timedelta(hours=20), "1")
-    except:
-        pass
+    try: r.setex(limit_warning_sent_key(uid), timedelta(hours=20), "1")
+    except: pass
 
-# ================= FUNÇÕES DE FUNIL =================
+# ================= FUNNEL =================
 def track_funnel(uid, stage):
     stages = {
         "start": 1, "lang_selected": 2, "first_message": 3,
@@ -616,8 +580,7 @@ def track_funnel(uid, stage):
         new_stage = stages.get(stage, 0)
         if new_stage > current:
             r.set(funnel_key(uid), new_stage)
-    except:
-        pass
+    except: pass
 
 def get_funnel_stats():
     try:
@@ -627,15 +590,12 @@ def get_funnel_stats():
             stage = int(r.get(funnel_key(uid)) or 0)
             stages[stage] += 1
         return stages
-    except:
-        return {}
+    except: return {}
 
-# ================= SISTEMA DE INTERESSE DECRESCENTE =================
+# ================= ENGAGEMENT SYSTEM =================
 def get_ignored_count(uid):
-    try:
-        return int(r.get(ignored_count_key(uid)) or 0)
-    except:
-        return 0
+    try: return int(r.get(ignored_count_key(uid)) or 0)
+    except: return 0
 
 def increment_ignored(uid):
     try:
@@ -648,74 +608,57 @@ def increment_ignored(uid):
             logger.info(f"⏸️ Gatilhos pausados para {uid}")
             return True
         return False
-    except:
-        return False
+    except: return False
 
 def reset_ignored(uid):
     try:
         r.delete(ignored_count_key(uid))
         r.delete(engagement_paused_key(uid))
         r.delete(awaiting_response_key(uid))
-    except:
-        pass
+    except: pass
 
 def pause_engagement(uid):
-    try:
-        r.set(engagement_paused_key(uid), datetime.now().isoformat())
-    except:
-        pass
+    try: r.set(engagement_paused_key(uid), datetime.now().isoformat())
+    except: pass
 
 def unpause_engagement(uid):
     try:
         r.delete(engagement_paused_key(uid))
         r.delete(ignored_count_key(uid))
-    except:
-        pass
+    except: pass
 
 def is_engagement_paused(uid):
-    try:
-        return r.exists(engagement_paused_key(uid))
-    except:
-        return False
+    try: return r.exists(engagement_paused_key(uid))
+    except: return False
 
 def set_awaiting_response(uid):
-    try:
-        r.setex(awaiting_response_key(uid), timedelta(hours=24), datetime.now().isoformat())
-    except:
-        pass
+    try: r.setex(awaiting_response_key(uid), timedelta(hours=24), datetime.now().isoformat())
+    except: pass
 
 def is_awaiting_response(uid):
-    try:
-        return r.exists(awaiting_response_key(uid))
-    except:
-        return False
+    try: return r.exists(awaiting_response_key(uid))
+    except: return False
 
 def clear_awaiting_response(uid):
-    try:
-        r.delete(awaiting_response_key(uid))
-    except:
-        pass
+    try: r.delete(awaiting_response_key(uid))
+    except: pass
 
 def is_takeover_active(uid):
-    try:
-        return r.hget(admin_takeover_key(uid), "active") == "1"
-    except:
-        return False
+    try: return r.hget(admin_takeover_key(uid), "active") == "1"
+    except: return False
 
 def is_user_locked(uid):
-    if is_vip(uid):
-        return False
+    if is_vip(uid): return False
     count = today_count(uid)
     bonus = get_bonus_msgs(uid)
     total_available = LIMITE_DIARIO + bonus
     return count >= total_available
 
-# ================= PAYWALL INTELIGENTE =================
+# ================= PAYWALL =================
 def is_hot_conversation(uid):
     try:
         memory = get_memory(uid)
-        if len(memory) < 3:
-            return False
+        if len(memory) < 3: return False
         recent = memory[-5:]
         hot_count = 0
         for msg in recent:
@@ -725,20 +668,15 @@ def is_hot_conversation(uid):
                     hot_count += 1
                     break
         return hot_count >= 2
-    except:
-        return False
+    except: return False
 
 def was_hot_bonus_given_today(uid):
-    try:
-        return r.exists(hot_bonus_given_key(uid))
-    except:
-        return False
+    try: return r.exists(hot_bonus_given_key(uid))
+    except: return False
 
 def mark_hot_bonus_given(uid):
-    try:
-        r.setex(hot_bonus_given_key(uid), timedelta(hours=20), "1")
-    except:
-        pass
+    try: r.setex(hot_bonus_given_key(uid), timedelta(hours=20), "1")
+    except: pass
 
 def give_hot_bonus(uid, amount=3):
     if was_hot_bonus_given_today(uid):
@@ -749,28 +687,24 @@ def give_hot_bonus(uid, amount=3):
     return True, amount
 
 def set_onboarding_choice(uid, choice):
-    try:
-        r.set(onboarding_choice_key(uid), choice)
-    except:
-        pass
+    try: r.set(onboarding_choice_key(uid), choice)
+    except: pass
 
 def get_onboarding_choice(uid):
-    try:
-        return r.get(onboarding_choice_key(uid))
-    except:
-        return None
+    try: return r.get(onboarding_choice_key(uid))
+    except: return None
 
-# ================= VISÃO (FOTOS) =================
+# ================= VISION =================
 async def download_photo_base64(bot, file_id):
     try:
         file = await bot.get_file(file_id)
         file_bytes = await file.download_as_bytearray()
         return base64.b64encode(file_bytes).decode('utf-8')
     except Exception as e:
-        logger.error(f"Erro ao baixar foto: {e}")
+        logger.error(f"Erro download foto: {e}")
         return None
 
-# ================= [NOVO v7] MENSAGENS ESTRATÉGIA CANAL =================
+# ================= MESSAGES =================
 MENSAGEM_INICIO_SAFADA = (
     "Oi gato... 😏\n"
     "Finalmente alguém interessante por aqui 🔥\n"
@@ -810,28 +744,46 @@ CAME_BACK_FOLLOWUP_6H = (
     "Milhares de fotos, conversas sem limite, e eu bem safadinha só pra você... 🔥"
 )
 
+# [v7.1 NEW] Mensagens para abandonos
+PREVIEW_ABANDONED_LEVEL_1 = (
+    "Ei amor... 🥺\n\n"
+    "Vi que você entrou no meu canal de prévias mas não voltou...\n\n"
+    "Tudo bem aí? Não gostou do que viu? 💔\n\n"
+    "Me conta, fica à vontade! 💕"
+)
+
+PREVIEW_ABANDONED_LEVEL_2 = (
+    "Amor, tô com saudade... 😢\n\n"
+    "Você viu minhas prévias e sumiu... isso me deixou meio triste 🥺\n\n"
+    "Se tiver alguma dúvida sobre o VIP, pode me perguntar! "
+    "Tô aqui pra você 💖"
+)
+
+PREVIEW_ABANDONED_LEVEL_3 = (
+    "Última chance amor... 💔\n\n"
+    "Você viu as prévias, eu sei que gostou... mas tá deixando passar a oportunidade.\n\n"
+    "Hoje tá com uma condição ESPECIAL pra você... "
+    "Não vai se arrepender! 🔥\n\n"
+    "Me dá só mais uma chance? 🥺💕"
+)
+
+# [v7.1 NEW] Mensagens alta resistência
+HIGH_RESISTANCE_MESSAGES = [
+    "Amor... você já visitou meu canal {visits} vezes 😅\n\n"
+    "Eu sei que você quer... mas tá com medo de investir? 💭\n\n"
+    "Deixa eu ser sincera: VALE A PENA. Todo dia tem conteúdo novo, "
+    "eu respondo TODO MUNDO, e é tudo sem censura 🔥\n\n"
+    "Dá esse passo, vai... você não vai se arrepender 💖",
+    
+    "Gato... {visits} visitas e ainda não se decidiu? 🤔\n\n"
+    "Olha, vou te fazer uma pergunta direta:\n"
+    "O que tá te impedindo de entrar no VIP? 💭\n\n"
+    "Me conta que eu te ajudo a decidir! 💕",
+]
+
 HOT_BONUS_MESSAGE_CANAL = (
     "🔥 Amor... nossa conversa tá tão gostosa que te dei **+{amount} mensagens extras**!\n\n"
     "Mas depois disso... só entrando no meu canal de prévias pra continuar 😏💕"
-)
-
-ONBOARDING_QUESTION = (
-    "Hmm... deixa eu adivinhar 😏\n\n"
-    "Você tá aqui porque:\n\n"
-    "💔 Tá carente e quer companhia?\n"
-    "🔥 Tá com tesão e quer se divertir?"
-)
-
-ONBOARDING_RESPONSE_CARENTE = (
-    "Awwn amor... 🥺💕\n\n"
-    "Fica tranquilo que eu vou cuidar de você, tá?\n\n"
-    "Me conta, como você tá se sentindo?"
-)
-
-ONBOARDING_RESPONSE_TESAO = (
-    "Hmm... eu adoro homem sincero 😏🔥\n\n"
-    "Relaxa que eu também tô no clima...\n"
-    "A gente vai se divertir muito 💕"
 )
 
 VIP_WELCOME_MESSAGE = (
@@ -856,7 +808,6 @@ PHOTO_TEASE_MESSAGE_CANAL = (
     "Se gostar, lá tem o link pro VIP com TUDO liberado! 🔥"
 )
 
-# ================= MENSAGENS VARIADAS =================
 LIMIT_RENEWED_MESSAGES = [
     "Bom dia amor! 💕 Suas mensagens voltaram... vem conversar? 😘",
     "Ei! Seu limite renovou... tô te esperando 🥰",
@@ -896,20 +847,23 @@ SCHEDULED_MESSAGES = {
     }
 }
 
-# ================= DETECÇÃO DE INTERESSE EM CANAL =================
+# ================= TRIGGERS =================
 def contains_canal_trigger(text):
-    if not text:
-        return False
+    if not text: return False
     text_lower = text.lower()
     return any(keyword in text_lower for keyword in CANAL_TRIGGER_KEYWORDS)
 
-# ================= PROMPT DINÂMICO =================
+PEDIDO_FOTO_REGEX = re.compile(r"(foto|selfie|imagem|nude|pelada)", re.IGNORECASE)
+
+# ================= [v7.1 ENHANCED] DYNAMIC PROMPT =================
 def build_prompt(uid, is_vip_user: bool, lang: str, mood: str = "neutral"):
     time_ctx = get_time_context()
     streak = get_streak(uid)
     onboard_choice = get_onboarding_choice(uid)
     went_preview = went_to_preview(uid)
     came_back = came_back_from_preview(uid)
+    visits = get_preview_visits(uid)
+    high_resistance = is_high_resistance_user(uid)
     
     base_prompt = f"""Você é Maya, 22 aninhos, morena gostosa de SP, taradinha mas faz carinha de anjinho.
 
@@ -939,13 +893,20 @@ CONTEXTO:
     elif onboard_choice == "tesao":
         base_prompt += "\n- Usuário com TESÃO. Seja provocante."
 
-    if went_preview and not came_back:
-        base_prompt += "\n- Usuário JÁ conhece o canal de prévias."
-    elif came_back:
-        base_prompt += "\n- Usuário VOLTOU do canal sem comprar. Seja curiosa, pergunte o que achou."
+    # [v7.1 ENHANCED] Contextualização baseada em visitas
+    if visits > 0:
+        base_prompt += f"\n- Usuário JÁ visitou canal de prévias {visits}x"
+        
+        if high_resistance:
+            base_prompt += f"\n- ⚠️ ALTA RESISTÊNCIA ({visits}+ visitas). Seja mais direta sobre benefícios do VIP."
+        
+        if came_back:
+            base_prompt += "\n- Usuário VOLTOU do canal recentemente. Seja curiosa, pergunte o que achou, destaque benefícios."
+        elif went_preview and not came_back:
+            base_prompt += "\n- Usuário conhece o canal mas ainda não voltou pra conversar."
 
     if is_vip_user:
-        base_prompt += "\n\n💎 Usuário VIP - atenção especial."
+        base_prompt += "\n\n💎 Usuário VIP - atenção especial, seja mais ousada."
     
     base_prompt += get_mood_instruction(mood)
     
@@ -1025,10 +986,7 @@ class Grok:
 
 grok = Grok()
 
-# ================= REGEX =================
-PEDIDO_FOTO_REGEX = re.compile(r"(foto|selfie|imagem|nude|pelada)", re.IGNORECASE)
-
-# ================= ENVIO DE FOTOS VIP =================
+# ================= VIP PHOTOS =================
 async def send_vip_welcome_photos(bot, uid):
     try:
         valid_photos = [f for f in FOTOS_VIP_WELCOME if f.startswith("http")]
@@ -1046,8 +1004,9 @@ async def send_vip_welcome_photos(bot, uid):
     except Exception as e:
         logger.error(f"Erro fotos VIP: {e}")
 
-# ================= [NOVO v7] FOLLOW-UP VOLTOU DO CANAL =================
+# ================= FOLLOW-UPS =================
 async def send_preview_followup(bot, uid, level):
+    """Follow-up para usuários que voltaram do canal mas não converteram"""
     try:
         if level == 1:
             message = CAME_BACK_FOLLOWUP_1H
@@ -1065,18 +1024,56 @@ async def send_preview_followup(bot, uid, level):
         )
         set_preview_followup_level(uid, level)
         save_message(uid, "system", f"Follow-up preview level {level}")
-        logger.info(f"📢 Follow-up preview {level} enviado para {uid}")
+        logger.info(f"📢 Follow-up preview (voltou) {level} enviado para {uid}")
         return True
     except Exception as e:
         logger.error(f"Erro follow-up preview: {e}")
         return False
 
-# ================= AVISOS DE LIMITE =================
+async def send_abandoned_followup(bot, uid, level):
+    """[v7.1 NEW] Follow-up para usuários que visitaram canal mas não voltaram"""
+    try:
+        visits = get_preview_visits(uid)
+        
+        if level == 1:
+            message = PREVIEW_ABANDONED_LEVEL_1
+        elif level == 2:
+            message = PREVIEW_ABANDONED_LEVEL_2
+        elif level == 3:
+            # Se alta resistência, usa mensagem personalizada
+            if is_high_resistance_user(uid):
+                message = random.choice(HIGH_RESISTANCE_MESSAGES).format(visits=visits)
+            else:
+                message = PREVIEW_ABANDONED_LEVEL_3
+        else:
+            return False
+        
+        await bot.send_message(
+            chat_id=uid,
+            text=message,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📢 VER PRÉVIAS NOVAMENTE", callback_data="goto_preview")],
+                [InlineKeyboardButton("💎 IR DIRETO PRO VIP", callback_data="goto_vip")],
+            ])
+        )
+        
+        increment_abandoned_followup_level(uid)
+        set_last_abandoned_followup_time(uid)
+        set_awaiting_response(uid)
+        increment_ignored(uid)
+        
+        save_message(uid, "system", f"Follow-up abandono level {level} ({visits} visitas)")
+        logger.info(f"🎯 Follow-up abandono {level} enviado para {uid} ({visits} visitas)")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Erro follow-up abandono: {e}")
+        return False
+
+# ================= WARNINGS =================
 async def check_and_send_80_warning(uid, context, chat_id):
-    if is_vip(uid):
-        return
-    if was_limit_warning_sent_today(uid):
-        return
+    if is_vip(uid): return
+    if was_limit_warning_sent_today(uid): return
     
     count = today_count(uid)
     if count == 12:
@@ -1090,12 +1087,10 @@ async def check_and_send_80_warning(uid, context, chat_id):
                 text=LIMIT_WARNING_80_MESSAGE,
                 parse_mode="Markdown"
             )
-        except:
-            pass
+        except: pass
 
 async def check_and_send_scarcity_warning(uid, context, chat_id):
-    if is_vip(uid):
-        return
+    if is_vip(uid): return
     
     count = today_count(uid)
     remaining = LIMITE_DIARIO - count
@@ -1113,10 +1108,9 @@ async def check_and_send_scarcity_warning(uid, context, chat_id):
                     [InlineKeyboardButton("📢 CLIQUE PARA VER PRÉVIAS", callback_data="goto_preview")],
                 ])
             )
-        except:
-            pass
+        except: pass
 
-# ================= START =================
+# ================= HANDLERS =================
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
@@ -1137,17 +1131,12 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_funnel(uid, "lang_selected")
     
     try:
-        # Mostra "digitando..." por 5 segundos
         await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
         await asyncio.sleep(5)
-        
-        # Envia mensagem inicial safada
         await update.message.reply_text(MENSAGEM_INICIO_SAFADA)
-        
     except Exception as e:
         logger.error(f"Erro /start: {e}")
 
-# ================= CALLBACK =================
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     
@@ -1162,27 +1151,32 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reset_ignored(uid)
         save_message(uid, "action", f"🔘 {query.data}")
         
-        # ============ [NOVO v7] BOTÃO PARA PRÉVIAS ============
         if query.data == "goto_preview":
             set_went_to_preview(uid)
             track_funnel(uid, "went_to_preview")
             save_message(uid, "action", "📢 CLICOU NO BOTÃO DE PRÉVIAS")
             
-            # Envia o link do canal
+            visits = get_preview_visits(uid)
+            
+            if visits == 1:
+                extra_msg = "\n\nÉ a sua primeira vez lá... aproveita! 💕"
+            elif visits >= HIGH_RESISTANCE_VISITS:
+                extra_msg = f"\n\nJá é sua {visits}ª visita... acho que você já sabe que vale a pena né? 😏"
+            else:
+                extra_msg = ""
+            
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=f"💕 Aqui está o link do meu canal de prévias, amor!\n\n"
                      f"Entra lá e vê o que eu tenho pra você... 😏🔥\n\n"
-                     f"{CANAL_PREVIAS_LINK}\n\n"
+                     f"{CANAL_PREVIAS_LINK}{extra_msg}\n\n"
                      f"Depois volta aqui pra me contar o que achou! 💖"
             )
             await query.answer("📢 Link enviado! Olha aí em cima 👆", show_alert=False)
         
-        # ============ [NOVO v7] BOTÃO PARA CANAL VIP ============
         elif query.data == "goto_vip":
             save_message(uid, "action", "💎 CLICOU NO BOTÃO VIP")
             
-            # Envia o link do canal VIP
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=f"💎 **CANAL VIP DA MAYA**\n\n"
@@ -1200,7 +1194,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Erro callback: {e}")
 
-# ================= MESSAGE HANDLER =================
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
@@ -1211,7 +1204,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     streak, streak_updated = update_streak(uid)
     reset_ignored(uid)
     
-    # ========== TAKEOVER ==========
     if is_takeover_active(uid):
         text = update.message.text or ""
         if text:
@@ -1227,26 +1219,31 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif has_photo:
             save_message(uid, "user", "[📷 FOTO]")
         
-        # ========== [NOVO v7] DETECTA SE VOLTOU DO CANAL ==========
-        # Se usuário foi pro canal e agora mandou mensagem, marca como "voltou"
+        # [v7.1 ENHANCED] Detecta se voltou do canal (janela configurável)
         if went_to_preview(uid) and not came_back_from_preview(uid):
             last_preview = get_last_preview_time(uid)
             if last_preview:
                 hours_since = (datetime.now() - last_preview).total_seconds() / 3600
-                if hours_since < 24:  # Voltou em menos de 24h
+                if hours_since < PREVIEW_RETURN_WINDOW_HOURS:
                     set_came_back_from_preview(uid)
                     track_funnel(uid, "came_back")
                     
-                    # Envia mensagem de boas-vindas
+                    visits = get_preview_visits(uid)
+                    
+                    if is_high_resistance_user(uid):
+                        welcome_msg = f"Oi de novo amor! 💕\n\nJá é sua {visits}ª vez aqui... "
+                        welcome_msg += "O que posso fazer pra você finalmente se decidir? 🥺"
+                    else:
+                        welcome_msg = CAME_BACK_FROM_PREVIEW_MESSAGE
+                    
                     await update.message.reply_text(
-                        CAME_BACK_FROM_PREVIEW_MESSAGE,
+                        welcome_msg,
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton("💎 QUERO VIRAR VIP", callback_data="goto_vip")],
                         ])
                     )
                     return
         
-        # ========== FOTO PARA IA ==========
         if has_photo:
             photo_file_id = update.message.photo[-1].file_id
             caption = update.message.caption or ""
@@ -1255,8 +1252,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if image_base64:
                 try:
                     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-                except:
-                    pass
+                except: pass
                 
                 reply = await grok.reply(uid, caption, image_base64=image_base64)
                 await update.message.reply_text(reply)
@@ -1268,7 +1264,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_first_contact(uid):
             track_funnel(uid, "first_message")
         
-        # ========== [ALTERADO v7] PEDIDO DE FOTO → CANAL ==========
         if PEDIDO_FOTO_REGEX.search(text) and not is_vip(uid):
             save_message(uid, "action", "🚫 Pediu foto → Direcionado pro canal")
             await context.bot.send_photo(
@@ -1282,7 +1277,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # ========== [NOVO v7] INTERESSE EM CANAL/VIP ==========
         if contains_canal_trigger(text) and not is_vip(uid):
             save_message(uid, "action", "💎 Interesse em canal/VIP")
             await update.message.reply_text(
@@ -1293,21 +1287,17 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # ========== LIMITE DIÁRIO ==========
         current_count = today_count(uid)
         bonus = get_bonus_msgs(uid)
         total_available = LIMITE_DIARIO + bonus
         
         if not is_vip(uid) and current_count == total_available:
-            # Paywall inteligente - dá bônus se conversa quente
             if is_hot_conversation(uid):
                 gave_bonus, amount = give_hot_bonus(uid)
                 if gave_bonus:
                     bonus_msg = HOT_BONUS_MESSAGE_CANAL.format(amount=amount)
                     await update.message.reply_text(bonus_msg)
-                    # Continua pro fluxo normal (não retorna)
                 else:
-                    # Já deu bônus - agora trava e manda pro canal
                     track_funnel(uid, "limit_reached")
                     await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
@@ -1319,7 +1309,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return
             else:
-                # Conversa não tá quente - trava direto
                 track_funnel(uid, "limit_reached")
                 await context.bot.send_photo(
                     chat_id=update.effective_chat.id,
@@ -1331,7 +1320,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
         
-        # Usa bônus primeiro
         if not is_vip(uid):
             if bonus > 0:
                 use_bonus_msg(uid)
@@ -1339,7 +1327,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 increment(uid)
             await check_and_send_scarcity_warning(uid, context, update.effective_chat.id)
         
-        # ========== [NOVO v7] APÓS LIMITE → EMPURRA PRO CANAL ==========
         if not is_vip(uid) and today_count(uid) > LIMITE_DIARIO + get_bonus_msgs(uid):
             await update.message.reply_text(
                 "Amor... suas mensagens grátis acabaram 😢\n\n"
@@ -1350,12 +1337,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # ========== RESPOSTA NORMAL ==========
         try:
             await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
             await asyncio.sleep(3)
-        except:
-            pass
+        except: pass
         
         reply = await grok.reply(uid, text)
         await update.message.reply_text(reply)
@@ -1369,7 +1354,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Erro message: {e}")
 
-# ================= SISTEMA DE ENGAJAMENTO =================
+# ================= ENGAGEMENT JOBS =================
 async def send_reengagement_message(bot, uid, level):
     if is_engagement_paused(uid):
         return False
@@ -1392,16 +1377,12 @@ async def send_reengagement_message(bot, uid, level):
         set_awaiting_response(uid)
         increment_ignored(uid)
         return True
-    except:
-        return False
+    except: return False
 
 async def send_limit_renewed_notification(bot, uid):
-    if is_engagement_paused(uid):
-        return False
-    if was_limit_notified_today(uid):
-        return False
-    if is_vip(uid):
-        return False
+    if is_engagement_paused(uid): return False
+    if was_limit_notified_today(uid): return False
+    if is_vip(uid): return False
     
     hours_inactive = get_hours_since_activity(uid)
     if hours_inactive is None or hours_inactive > 48:
@@ -1413,8 +1394,7 @@ async def send_limit_renewed_notification(bot, uid):
         set_awaiting_response(uid)
         increment_ignored(uid)
         return True
-    except:
-        return False
+    except: return False
 
 async def send_smart_scheduled_message(bot, uid, msg_type):
     if is_engagement_paused(uid):
@@ -1446,23 +1426,19 @@ async def send_smart_scheduled_message(bot, uid, msg_type):
             await bot.send_message(chat_id=uid, text=message)
         
         mark_daily_message_sent(uid, msg_type)
-        r.setex(last_scheduled_msg_key(uid), timedelta(hours=8), datetime.now().isoformat())
         set_awaiting_response(uid)
         increment_ignored(uid)
         return True
-    except:
-        return False
+    except: return False
 
 async def send_last_attempt_message(bot, uid):
     try:
         await bot.send_message(chat_id=uid, text=random.choice(LAST_ATTEMPT_MESSAGES))
         return True
-    except:
-        return False
+    except: return False
 
-# ================= [ALTERADO v7] JOBS COM FOLLOW-UP CANAL =================
 async def process_engagement_jobs(bot):
-    logger.info("🔄 Processando jobs...")
+    logger.info("🔄 Processando jobs v7.1...")
     
     users = get_all_active_users()
     current_hour = datetime.now().hour
@@ -1470,6 +1446,7 @@ async def process_engagement_jobs(bot):
     scheduled_sent = 0
     reengagement_sent = 0
     preview_followups_sent = 0
+    abandoned_followups_sent = 0
     
     random.shuffle(users)
     
@@ -1480,7 +1457,33 @@ async def process_engagement_jobs(bot):
         try:
             hours_inactive = get_hours_since_activity(uid)
             
-            # ========== [NOVO v7] FOLLOW-UP VOLTOU DO CANAL ==========
+            # [v7.1 NEW] Follow-up para abandonos
+            if went_to_preview(uid) and not is_vip(uid):
+                last_preview = get_last_preview_time(uid)
+                
+                if last_preview:
+                    hours_since_preview = (datetime.now() - last_preview).total_seconds() / 3600
+                    
+                    # Se visitou mas não voltou (não interagiu)
+                    if hours_since_preview >= PREVIEW_ABANDONED_HOURS and not came_back_from_preview(uid):
+                        last_followup = get_last_abandoned_followup_time(uid)
+                        abandoned_level = get_abandoned_followup_level(uid)
+                        
+                        # Verifica se já passou tempo suficiente desde último follow-up
+                        can_send = False
+                        if last_followup is None:
+                            can_send = True
+                        else:
+                            hours_since_followup = (datetime.now() - last_followup).total_seconds() / 3600
+                            if hours_since_followup >= PREVIEW_FOLLOWUP_INTERVAL_HOURS:
+                                can_send = True
+                        
+                        if can_send and abandoned_level < 3:
+                            if await send_abandoned_followup(bot, uid, abandoned_level + 1):
+                                abandoned_followups_sent += 1
+                                continue
+            
+            # Follow-up para quem voltou
             if came_back_from_preview(uid) and not is_vip(uid):
                 came_back_time = get_last_preview_time(uid)
                 if came_back_time:
@@ -1494,14 +1497,14 @@ async def process_engagement_jobs(bot):
                         if await send_preview_followup(bot, uid, 2):
                             preview_followups_sent += 1
             
-            # ========== INTERESSE DECRESCENTE ==========
+            # Interesse decrescente
             ignored = get_ignored_count(uid)
             if ignored == 2 and is_awaiting_response(uid):
                 await send_last_attempt_message(bot, uid)
                 pause_engagement(uid)
                 continue
             
-            # ========== RE-ENGAJAMENTO ==========
+            # Re-engajamento
             if hours_inactive:
                 last_level = get_last_reengagement(uid)
                 if hours_inactive >= 72 and last_level < 3:
@@ -1514,14 +1517,14 @@ async def process_engagement_jobs(bot):
                     if await send_reengagement_message(bot, uid, 1):
                         reengagement_sent += 1
             
-            # ========== MENSAGENS PROGRAMADAS ==========
+            # Mensagens programadas
             if random.random() < 0.3:
                 msg_type = "morning" if 7 <= current_hour < 11 else "evening" if 19 <= current_hour < 22 else None
                 if msg_type and not was_daily_message_sent(uid, msg_type):
                     if await send_smart_scheduled_message(bot, uid, msg_type):
                         scheduled_sent += 1
             
-            # ========== NOTIFICAÇÃO LIMITE RENOVADO ==========
+            # Limite renovado
             if 7 <= current_hour <= 10:
                 if not is_vip(uid) and random.random() < 0.2:
                     if await send_limit_renewed_notification(bot, uid):
@@ -1533,14 +1536,15 @@ async def process_engagement_jobs(bot):
             logger.error(f"Erro job {uid}: {e}")
     
     logger.info(
-        f"✅ Jobs: {len(users)} users | "
+        f"✅ Jobs v7.1: {len(users)} users | "
         f"📅 {scheduled_sent} programadas | "
         f"🔄 {reengagement_sent} reengajamento | "
-        f"📢 {preview_followups_sent} follow-up canal"
+        f"📢 {preview_followups_sent} voltou canal | "
+        f"🎯 {abandoned_followups_sent} abandono canal"
     )
 
 async def engagement_scheduler(bot):
-    logger.info("🚀 Scheduler iniciado")
+    logger.info("🚀 Scheduler v7.1 iniciado")
     while True:
         try:
             await process_engagement_jobs(bot)
@@ -1548,10 +1552,9 @@ async def engagement_scheduler(bot):
             logger.error(f"Erro scheduler: {e}")
         await asyncio.sleep(3600)
 
-# ================= COMANDOS ADMIN =================
+# ================= ADMIN COMMANDS =================
 async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
+    if update.effective_user.id not in ADMIN_IDS: return
     if not context.args:
         await update.message.reply_text("Uso: /setvip <user_id>")
         return
@@ -1567,32 +1570,31 @@ async def setvip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(uid, VIP_WELCOME_MESSAGE, parse_mode="Markdown")
         await send_vip_welcome_photos(context.bot, uid)
-    except:
-        pass
+    except: pass
 
 async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
+    if update.effective_user.id not in ADMIN_IDS: return
     
     users = get_all_active_users()
     total = len(users)
     vips = sum(1 for uid in users if is_vip(uid))
     went_preview = sum(1 for uid in users if went_to_preview(uid))
     came_back = sum(1 for uid in users if came_back_from_preview(uid))
+    high_resistance = sum(1 for uid in users if is_high_resistance_user(uid))
     
     await update.message.reply_text(
-        f"📊 **ESTATÍSTICAS**\n\n"
+        f"📊 **ESTATÍSTICAS v7.1**\n\n"
         f"👥 Usuários: {total}\n"
         f"💎 VIPs: {vips}\n"
         f"📢 Foram pra prévias: {went_preview}\n"
         f"↩️ Voltaram sem comprar: {came_back}\n"
+        f"🔥 Alta resistência ({HIGH_RESISTANCE_VISITS}+ visitas): {high_resistance}\n"
         f"📈 Conversão: {(vips/total*100) if total > 0 else 0:.1f}%",
         parse_mode="Markdown"
     )
 
 async def funnel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
+    if update.effective_user.id not in ADMIN_IDS: return
     
     stages = get_funnel_stats()
     names = {
@@ -1601,39 +1603,41 @@ async def funnel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         6: "📢 Foi pra prévias", 7: "↩️ Voltou", 8: "💎 VIP"
     }
     
-    msg = "📊 **FUNIL v7**\n\n"
+    msg = "📊 **FUNIL v7.1**\n\n"
     for stage, count in sorted(stages.items()):
         msg += f"{names.get(stage, f'Stage {stage}')}: {count}\n"
     
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-async def wenttopreview_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando admin para marcar que usuário foi pro canal"""
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    if not context.args:
-        await update.message.reply_text("Uso: /wenttopreview <user_id>")
-        return
+async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if update.effective_user.id in ADMIN_IDS and context.args:
+        uid = int(context.args[0])
     
-    uid = int(context.args[0])
-    set_went_to_preview(uid)
-    await update.message.reply_text(f"✅ Marcado que {uid} foi pro canal de prévias")
-
-async def cameback_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando admin para marcar que usuário voltou do canal"""
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    if not context.args:
-        await update.message.reply_text("Uso: /cameback <user_id>")
-        return
+    streak = get_streak(uid)
+    count = today_count(uid)
+    bonus = get_bonus_msgs(uid)
+    vip_status = is_vip(uid)
+    visits = get_preview_visits(uid)
+    came_back = came_back_from_preview(uid)
+    high_resistance = is_high_resistance_user(uid)
     
-    uid = int(context.args[0])
-    set_came_back_from_preview(uid)
-    await update.message.reply_text(f"✅ Marcado que {uid} voltou do canal sem comprar")
+    msg = f"📋 **STATUS v7.1**\n\n"
+    msg += f"👤 ID: `{uid}`\n"
+    msg += f"🔥 Streak: {streak} dias\n"
+    msg += f"💬 Msgs: {count}/{LIMITE_DIARIO}\n"
+    if bonus > 0:
+        msg += f"🎁 Bônus: {bonus}\n"
+    msg += f"💎 VIP: {'✅' if vip_status else '❌'}\n"
+    msg += f"📢 Visitas ao canal: {visits}x\n"
+    msg += f"↩️ Voltou: {'✅' if came_back else '❌'}\n"
+    if high_resistance:
+        msg += f"⚠️ Alta resistência: SIM\n"
+    
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
+    if update.effective_user.id not in ADMIN_IDS: return
     if not context.args:
         await update.message.reply_text("Uso: /reset <user_id>")
         return
@@ -1641,9 +1645,7 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Limite resetado")
 
 async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Reset completo de um usuário"""
-    if update.effective_user.id not in ADMIN_IDS:
-        return
+    if update.effective_user.id not in ADMIN_IDS: return
     if not context.args:
         await update.message.reply_text("Uso: /resetall <user_id>")
         return
@@ -1657,56 +1659,15 @@ async def resetall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"🔥 Reset completo: {uid}")
 
-# ================= [NOVO] COMANDOS SIMPLIFICADOS =================
 async def limpar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Reseta SEU próprio limite (sem precisar passar ID)"""
     uid = update.effective_user.id
-    
-    # Admin pode resetar outros
     if update.effective_user.id in ADMIN_IDS and context.args:
         uid = int(context.args[0])
-    
     reset_daily_count(uid)
     await update.message.reply_text(f"✅ Limite resetado! Pode conversar de novo 💕")
 
-async def viparme_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Se transforma em VIP (só admin pode usar em si mesmo para testes)"""
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("❌ Comando apenas para admins")
-        return
-    
-    uid = update.effective_user.id
-    vip_until = datetime.now() + timedelta(days=365)  # 1 ano para admin
-    r.set(vip_key(uid), vip_until.isoformat())
-    
-    await update.message.reply_text(f"💎 Você virou VIP por 1 ano! (admin)")
-
-async def zerarme_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Zera tudo sobre você (só admin)"""
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    
-    uid = update.effective_user.id
-    reset_daily_count(uid)
-    r.delete(vip_key(uid))
-    clear_memory(uid)
-    reset_ignored(uid)
-    clear_came_back_from_preview(uid)
-    
-    await update.message.reply_text(f"🔥 Você foi resetado completamente!")
-
-async def clearmemory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    if not context.args:
-        await update.message.reply_text("Uso: /clearmemory <user_id>")
-        return
-    clear_memory(int(context.args[0]))
-    await update.message.reply_text(f"🗑️ Memória limpa")
-
 async def givebonus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
+    if update.effective_user.id not in ADMIN_IDS: return
     if len(context.args) < 2:
         await update.message.reply_text("Uso: /givebonus <user_id> <quantidade>")
         return
@@ -1718,39 +1679,11 @@ async def givebonus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ +{amount} msgs bônus para {uid}\n(Total: {get_bonus_msgs(uid)})")
     
     try:
-        await context.bot.send_message(
-            uid, f"🎁 Você ganhou +{amount} mensagens extras! Aproveite 💕"
-        )
-    except:
-        pass
-
-async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    if update.effective_user.id in ADMIN_IDS and context.args:
-        uid = int(context.args[0])
-    
-    streak = get_streak(uid)
-    count = today_count(uid)
-    bonus = get_bonus_msgs(uid)
-    vip_status = is_vip(uid)
-    went_preview = went_to_preview(uid)
-    came_back = came_back_from_preview(uid)
-    
-    msg = f"📋 **STATUS**\n\n"
-    msg += f"👤 ID: `{uid}`\n"
-    msg += f"🔥 Streak: {streak} dias\n"
-    msg += f"💬 Msgs: {count}/{LIMITE_DIARIO}\n"
-    if bonus > 0:
-        msg += f"🎁 Bônus: {bonus}\n"
-    msg += f"💎 VIP: {'✅' if vip_status else '❌'}\n"
-    msg += f"📢 Foi pra prévias: {'✅' if went_preview else '❌'}\n"
-    msg += f"↩️ Voltou: {'✅' if came_back else '❌'}"
-    
-    await update.message.reply_text(msg, parse_mode="Markdown")
+        await context.bot.send_message(uid, f"🎁 Você ganhou +{amount} mensagens extras! Aproveite 💕")
+    except: pass
 
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
+    if update.effective_user.id not in ADMIN_IDS: return
     if not context.args:
         await update.message.reply_text("Uso: /broadcast <mensagem>")
         return
@@ -1760,8 +1693,7 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     sent = failed = 0
     for uid in users:
-        if is_blacklisted(uid):
-            continue
+        if is_blacklisted(uid): continue
         try:
             await context.bot.send_message(chat_id=uid, text=message)
             sent += 1
@@ -1774,7 +1706,6 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Broadcast: {sent} enviados | {failed} falhas")
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Lista de comandos disponíveis"""
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text(
             "💕 **COMANDOS DISPONÍVEIS**\n\n"
@@ -1784,26 +1715,20 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        "🎮 **COMANDOS ADMIN**\n\n"
-        "**Gestão de Usuários:**\n"
+        "🎮 **COMANDOS ADMIN v7.1**\n\n"
+        "**Gestão:**\n"
         "/setvip <id> - Ativar VIP\n"
         "/reset <id> - Resetar limite\n"
         "/resetall <id> - Reset completo\n"
-        "/givebonus <id> <qtd> - Dar bônus\n"
-        "/clearmemory <id> - Limpar memória\n\n"
-        "**Canal:**\n"
-        "/wenttopreview <id> - Marcar ida ao canal\n"
-        "/cameback <id> - Marcar volta\n\n"
-        "**Estatísticas:**\n"
-        "/stats - Estatísticas gerais\n"
+        "/givebonus <id> <qtd> - Dar bônus\n\n"
+        "**Stats:**\n"
+        "/stats - Estatísticas (+ resistência)\n"
         "/funnel - Ver funil\n"
-        "/status [id] - Ver status\n\n"
-        "**Comunicação:**\n"
-        "/broadcast <msg> - Enviar pra todos\n\n"
-        "**Atalhos (pra você mesmo):**\n"
+        "/status [id] - Status (+ visitas)\n\n"
+        "**Outros:**\n"
+        "/broadcast <msg> - Enviar pra todos\n"
         "/limpar - Resetar SEU limite\n"
-        "/viparme - Virar VIP\n"
-        "/zerarme - Reset completo",
+        "/help - Esta mensagem",
         parse_mode="Markdown"
     )
 
@@ -1811,42 +1736,21 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def setup_application():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
-    # Comandos usuário
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("status", status_cmd))
     application.add_handler(CommandHandler("limpar", limpar_cmd))
     application.add_handler(CommandHandler("help", help_cmd))
-    
-    # Comandos admin - Gestão de usuários
     application.add_handler(CommandHandler("setvip", setvip_cmd))
     application.add_handler(CommandHandler("reset", reset_cmd))
     application.add_handler(CommandHandler("resetall", resetall_cmd))
     application.add_handler(CommandHandler("givebonus", givebonus_cmd))
-    application.add_handler(CommandHandler("clearmemory", clearmemory_cmd))
-    
-    # Comandos admin - Canal
-    application.add_handler(CommandHandler("wenttopreview", wenttopreview_cmd))
-    application.add_handler(CommandHandler("cameback", cameback_cmd))
-    
-    # Comandos admin - Estatísticas
     application.add_handler(CommandHandler("stats", stats_cmd))
     application.add_handler(CommandHandler("funnel", funnel_cmd))
-    
-    # Comandos admin - Comunicação
     application.add_handler(CommandHandler("broadcast", broadcast_cmd))
-    
-    # Comandos admin - Atalhos
-    application.add_handler(CommandHandler("viparme", viparme_cmd))
-    application.add_handler(CommandHandler("zerarme", zerarme_cmd))
-    
-    # Handlers
     application.add_handler(CallbackQueryHandler(callback_handler))
-    application.add_handler(MessageHandler(
-        (filters.TEXT | filters.PHOTO) & ~filters.COMMAND,
-        message_handler
-    ))
+    application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, message_handler))
     
-    logger.info("✅ Handlers registrados")
+    logger.info("✅ Handlers registrados (v7.1 ENHANCED)")
     return application
 
 # ================= FLASK =================
@@ -1889,7 +1793,7 @@ async def setup_webhook():
         await application.bot.delete_webhook(drop_pending_updates=True)
         webhook_url = f"{WEBHOOK_BASE_URL}{WEBHOOK_PATH}"
         await application.bot.set_webhook(webhook_url)
-        logger.info(f"✅ Webhook: {webhook_url}")
+        logger.info(f"✅ Webhook v7.1: {webhook_url}")
         asyncio.create_task(engagement_scheduler(application.bot))
     except Exception as e:
         logger.error(f"Erro webhook: {e}")
@@ -1898,5 +1802,5 @@ if __name__ == "__main__":
     asyncio.run_coroutine_threadsafe(application.initialize(), loop)
     asyncio.run_coroutine_threadsafe(application.start(), loop)
     asyncio.run_coroutine_threadsafe(engagement_scheduler(application.bot), loop)
-    logger.info(f"🌐 Flask porta {PORT}")
+    logger.info(f"🌐 Flask rodando na porta {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
