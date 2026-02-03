@@ -43,10 +43,10 @@ GROK_KEY = "COLE_SUA_KEY_GROK_AQUI"
 
 # 🔥 3. COLE AQUI O LINK DO SEU CANAL DE PRÉVIAS
 # Como pegar: Abra o canal → Compartilhar → Copiar link de convite
-LINK_CANAL_PREVIAS = "https://t.me/previasdamayaofc"
+LINK_CANAL_PREVIAS = "https://t.me/+COLE_SEU_LINK_AQUI"
 
 # 🔥 3b. COLE AQUI O LINK DO SEU CANAL VIP (onde o usuário paga/compra)
-LINK_CANAL_VIP = "https://t.me/Mayaoficial_bot"
+LINK_CANAL_VIP = "https://t.me/+COLE_SEU_LINK_VIP_AQUI"
 
 # 🔥 4. COLE AQUI SEU TELEGRAM ID (pra ser admin)
 # Como pegar: Mande /start pro @userinfobot
@@ -113,7 +113,7 @@ except Exception as e:
     raise
 
 # ================= CONFIG =================
-LIMITE_DIARIO = 12
+LIMITE_DIARIO = 7
 MODELO = "grok-4-fast-reasoning"
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"
 
@@ -771,6 +771,13 @@ async def download_photo_base64(bot, file_id):
         return None
 
 # ================= [NOVO v7] MENSAGENS ESTRATÉGIA CANAL =================
+MENSAGEM_INICIO_SAFADA = (
+    "Oi gato... 😏\n"
+    "Finalmente alguém interessante por aqui 🔥\n"
+    "Sou a Maya, e te garanto que não sou como as outras... 💋\n"
+    "Tô louca pra saber o que você quer comigo 😈"
+)
+
 PREVIEW_INVITATION_MESSAGE = (
     "Amor... quer ver um pouquinho do que eu tenho pra você? 😏💕\n\n"
     "Entra no meu canal de **PRÉVIAS** e vê umas fotinhas minhas... 🔥\n\n"
@@ -786,21 +793,21 @@ LIMIT_REACHED_CANAL_MESSAGE = (
 
 CAME_BACK_FROM_PREVIEW_MESSAGE = (
     "Ei amor! Vi que você conheceu meu canal de prévias... 💕\n\n"
-    "Te mostrei a prévia agora não me decepcione 😏\n\n"
-    "É só entrar no VIP pra gente se divertir MUITO! 🔥"
+    "Gostou do que viu? 😏\n\n"
+    "Se quiser ter TUDO sem limite, é só entrar no VIP! 🔥"
 )
 
 CAME_BACK_FOLLOWUP_1H = (
     "Então amor... você viu as prévias mas ainda não se decidiu? 🥺\n\n"
     "Deixa eu te contar um segredo: lá no VIP eu sou BEM mais ousada... 🔥\n\n"
-    "Te mostro coisas que você jamais imaginaria ver! 💕"
+    "Quer que eu te mostre mais? 💕"
 )
 
 CAME_BACK_FOLLOWUP_6H = (
     "Tô aqui pensando em você... 💭\n\n"
     "Você viu as prévias, mas tá em dúvida ainda? \n\n"
-    "Amor, posso te garantir: vale MUITO a pena 💖\n\n"
-    "Meu Whatsapp, videos e fotos, conversas sem limite, e eu bem safadinha só pra você... 🔥"
+    "Amor, posso te garantir: **vale MUITO a pena** 💖\n\n"
+    "Milhares de fotos, conversas sem limite, e eu bem safadinha só pra você... 🔥"
 )
 
 HOT_BONUS_MESSAGE_CANAL = (
@@ -1125,15 +1132,13 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_funnel(uid, "lang_selected")
     
     try:
-        await update.message.reply_photo(
-            photo=FOTO_ONBOARDING_START,
-            caption=ONBOARDING_QUESTION,
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💕 Carente", callback_data="onboard_carente")],
-                [InlineKeyboardButton("🔥 Com tesão", callback_data="onboard_tesao")]
-            ])
-        )
+        # Mostra "digitando..." por 5 segundos
+        await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+        await asyncio.sleep(5)
+        
+        # Envia mensagem inicial safada
+        await update.message.reply_text(MENSAGEM_INICIO_SAFADA)
+        
     except Exception as e:
         logger.error(f"Erro /start: {e}")
 
@@ -1152,30 +1157,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reset_ignored(uid)
         save_message(uid, "action", f"🔘 {query.data}")
         
-        # ============ ONBOARDING ============
-        if query.data == "onboard_carente":
-            set_onboarding_choice(uid, "carente")
-            await context.bot.send_message(query.message.chat_id, ONBOARDING_RESPONSE_CARENTE)
-            await asyncio.sleep(1.5)
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-            await asyncio.sleep(2.0)
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
-        
-        elif query.data == "onboard_tesao":
-            set_onboarding_choice(uid, "tesao")
-            await context.bot.send_message(query.message.chat_id, ONBOARDING_RESPONSE_TESAO)
-            await asyncio.sleep(1.5)
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_1)
-            await asyncio.sleep(2.0)
-            await context.bot.send_audio(query.message.chat_id, AUDIO_PT_2)
-        
         # ============ [NOVO v7] BOTÃO PARA PRÉVIAS ============
-        elif query.data == "goto_preview":
+        if query.data == "goto_preview":
             set_went_to_preview(uid)
             track_funnel(uid, "went_to_preview")
             save_message(uid, "action", "📢 CLICOU NO BOTÃO DE PRÉVIAS")
-            add_bonus_msgs(uid, 5)  # ← ADICIONA ESTA LINHA
-            logger.info(f"🎁 Bonus +5 msgs para {uid} (clicou prévias)")
             
             # Envia o link do canal
             await context.bot.send_message(
