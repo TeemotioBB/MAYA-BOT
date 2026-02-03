@@ -720,7 +720,7 @@ PREVIEW_INVITATION_MESSAGE = (
 
 LIMIT_REACHED_CANAL_MESSAGE = (
     "Eitaaa... acabaram suas mensagens de hoje 😢\n\n"
-    "Mas calma! Se você **entrar no meu canal de prévias**, "
+    "Mas calma! Se você entrar no meu canal de prévias, "
     "você vê como é lá dentro e pode decidir se quer me ter sem limite 💕\n\n"
     "Tá esperando o quê? 😏"
 )
@@ -1170,7 +1170,6 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=f"💕 Aqui está o link do meu canal de prévias, amor!\n\n"
                      f"Entra lá e vê o que eu tenho pra você... 😏🔥\n\n"
                      f"{CANAL_PREVIAS_LINK}{extra_msg}\n\n"
-                     f"Depois volta aqui pra me contar o que achou! 💖"
             )
             await query.answer("📢 Link enviado! Olha aí em cima 👆", show_alert=False)
         
