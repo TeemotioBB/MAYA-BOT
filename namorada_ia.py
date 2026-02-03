@@ -1174,8 +1174,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=query.message.chat_id,
                 text=f"💕 Aqui está o link do meu canal de prévias, amor!\n\n"
                      f"Entra lá e vê o que eu tenho pra você... 😏🔥\n\n"
-                     f"{CANAL_PREVIAS_LINK}\n\n"
-                     f"Depois volta aqui pra me contar o que achou! 💖"
+                     f"CLICA AQUI 👉 {CANAL_PREVIAS_LINK}\n\n"
             )
             await query.answer("📢 Link enviado! Olha aí em cima 👆", show_alert=False)
         
